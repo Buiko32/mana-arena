@@ -1,0 +1,1 @@
+"""Mana Arena application package."""
