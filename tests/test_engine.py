@@ -79,6 +79,19 @@ def test_validate_config_rejects_incompatible_settings(changes):
         validate_config(config(**changes))
 
 
+@pytest.mark.parametrize(
+    "points,allow_draws",
+    [
+        ({"win": 2, "draw": 0, "loss": 2, "bye": 1}, False),
+        ({"win": 2, "draw": 1, "loss": 2, "bye": 1}, True),
+        ({"win": 2, "draw": 3, "loss": 1, "bye": 1}, True),
+    ],
+)
+def test_validate_config_rejects_inconsistent_point_order(points, allow_draws):
+    with pytest.raises(ValueError):
+        validate_config(config(points=points, allow_draws=allow_draws))
+
+
 def test_validate_config_allows_draws_only_when_format_can_finish_tied():
     cfg = config(allow_draws=True)
     validate_config(cfg)
@@ -176,6 +189,50 @@ def test_adapted_players_at_loss_threshold_are_removed_from_next_pairing():
     assert "p3" not in ids
 
 
+def test_adapted_pairing_prefers_same_loss_count_over_closer_points():
+    cfg = config(structure="adapted", rounds=None, loss_threshold=3)
+    field = entrants(5)
+    field[4]["withdrawn"] = True
+    history = [
+        played(cfg, 1, 1, "p1", "p5", "p1_win"),
+        played(cfg, 2, 1, "p1", "p5", "p1_win"),
+        played(cfg, 3, 1, "p2", "p5", "p1_win"),
+        played(cfg, 4, 1, "p2", "p5", "p1_win"),
+        played(cfg, 5, 1, "p2", "p5", "p2_win", p1_games=0, p2_games=1),
+        played(cfg, 6, 1, "p2", "p5", "p1_win"),
+        played(cfg, 7, 1, "p3", "p5", "p1_win"),
+        played(cfg, 8, 1, "p4", "p5", "p2_win", p1_games=0, p2_games=1),
+    ]
+    result = make_round(cfg, field, history, 9)
+    assert {frozenset((m["p1"], m["p2"])) for m in result["matches"]} == {
+        frozenset(("p1", "p3")),
+        frozenset(("p2", "p4")),
+    }
+
+
+def test_pairing_keeps_results_against_eliminated_players_in_standings_and_pairing():
+    cfg = config(structure="adapted", rounds=None, loss_threshold=2)
+    field = entrants(6)
+    history = [
+        played(cfg, 1, 1, "p1", "p3", "p1_win"),
+        played(cfg, 1, 2, "p2", "p4", "p1_win"),
+        played(cfg, 2, 1, "p1", "p5", "p1_win"),
+        played(cfg, 2, 2, "p4", "p6", "p1_win"),
+        played(cfg, 3, 1, "p1", "p5", "p1_win"),
+        played(cfg, 3, 2, "p4", "p6", "p1_win"),
+        played(cfg, 4, 1, "p1", "p6", "p2_win", p1_games=0, p2_games=1),
+        played(cfg, 4, 2, "p2", "p5", "p2_win", p1_games=0, p2_games=1),
+    ]
+    standings = {row["player_id"]: row for row in calculate_standings(cfg, field, history)}
+    assert standings["p5"]["eliminated"] and standings["p5"]["losses"] == 2
+    assert standings["p6"]["eliminated"] and standings["p6"]["losses"] == 2
+    result = make_round(cfg, field, history, 5)
+    assert {frozenset((m["p1"], m["p2"])) for m in result["matches"]} == {
+        frozenset(("p1", "p4")),
+        frozenset(("p2", "p3")),
+    }
+
+
 def test_adapted_threshold_schedule_terminates_for_two_through_nine_entrants():
     for count in range(2, 10):
         for seed_variant in range(8):
@@ -231,11 +288,53 @@ def test_single_elimination_initial_byes_and_progression_do_not_reintroduce_lose
     assert len(initial["matches"]) == 4
     byes = [m for m in initial["matches"] if m["bye"]]
     assert len(byes) == 3
-    completed = [apply_result(cfg, m, {"result": "bye", "p1_games": 0, "p2_games": 0}) if m["bye"] else played(cfg, 1, m["table"], m["p1"], m["p2"]) for m in initial["matches"]]
+    completed = [apply_result(cfg, m, {"result": "bye", "p1_games": 0, "p2_games": 0}) if m["bye"] else apply_result(cfg, m, {"result": "p1_win", "p1_games": 1, "p2_games": 0}) for m in initial["matches"]]
     nxt = make_round(cfg, field, completed, 2)
     assert len(nxt["matches"]) == 2
     losers = {m["p2"] for m in completed if not m["bye"]}
     assert not any(loser in {m["p1"], m["p2"]} for loser in losers for m in nxt["matches"])
+
+
+def test_single_elimination_preserves_eight_player_bracket_slots():
+    cfg = config(structure="single_elim", rounds=None)
+    field = entrants(8)
+    initial = make_schedule(cfg, field)["matches"]
+    by_slot = {m["bracket_slot"]: m for m in initial}
+    assert [(by_slot[i]["p1"], by_slot[i]["p2"]) for i in range(4)] == [
+        ("p1", "p8"), ("p4", "p5"), ("p2", "p7"), ("p3", "p6")
+    ]
+    completed = [
+        apply_result(cfg, by_slot[i], {"result": "p1_win", "p1_games": 1, "p2_games": 0})
+        for i in range(4)
+    ]
+    following = make_round(cfg, field, completed, 2)["matches"]
+    assert [(m["p1"], m["p2"]) for m in following] == [("p1", "p4"), ("p2", "p3")]
+
+
+def test_single_elimination_withdrawals_forfeit_in_place_and_propagate_empty_slots():
+    cfg = config(structure="single_elim", rounds=None)
+    field = entrants(8)
+    field[0]["withdrawn"] = True  # p1 forfeits its slot to p8
+    field[3]["withdrawn"] = True  # p4 forfeits its slot to p5
+    field[1]["withdrawn"] = True  # p2 and p7 leave an empty branch
+    field[6]["withdrawn"] = True
+    initial = make_schedule(cfg, field)["matches"]
+    slot = {m["bracket_slot"]: m for m in initial}
+    assert (slot[0]["p1"], slot[0]["p2"], slot[0]["result"]) == ("p1", "p8", "p1_forfeit")
+    assert (slot[1]["p1"], slot[1]["p2"], slot[1]["result"]) == ("p4", "p5", "p1_forfeit")
+    assert slot[2]["p1"] is None and slot[2]["p2"] is None and slot[2]["result"] == "void"
+    completed = [slot[0], slot[1], slot[2], apply_result(cfg, slot[3], {"result": "p1_win", "p1_games": 1, "p2_games": 0})]
+    following = make_round(cfg, field, completed, 2)["matches"]
+    assert [(m["p1"], m["p2"], m.get("result")) for m in following] == [
+        ("p8", "p5", None), ("p3", None, "bye")
+    ]
+
+
+def test_single_elimination_empty_and_single_entrant_samples_have_no_phantom_matches():
+    cfg = config(structure="single_elim", rounds=None)
+    assert make_schedule(cfg, []) == {"matches": [], "warnings": []}
+    assert make_schedule(cfg, entrants(1)) == {"matches": [], "warnings": []}
+    assert make_round(cfg, [], [], 1) == {"matches": [], "warnings": []}
 
 
 def test_withdrawn_entrants_stay_in_standings_but_not_future_pairings():
@@ -259,18 +358,38 @@ def test_standings_points_game_difference_and_omw_are_computed():
     assert rows["p1"]["game_diff"] == 1
     assert rows["p3"]["wins"] == 0
     assert rows["p3"]["byes"] == 1
-    assert rows["p1"]["omw"] == 0.33
+    assert rows["p1"]["omw"] == 0
     assert rows["p3"]["omw"] == 0
 
 
-def test_omw_excludes_opponent_bye_points_and_applies_33_percent_floor():
+def test_omw_excludes_opponent_bye_points_and_has_no_minimum_floor():
     cfg = config()
     field = entrants(3)
     field[2]["withdrawn"] = True
     bye = apply_result(cfg, {"round": 1, "table": 1, "p1": "p2", "p2": None, "bye": True}, {"result": "bye", "p1_games": 0, "p2_games": 0})
     game = played(cfg, 2, 1, "p1", "p2", "p1_win", p1_games=1, p2_games=0)
     rows = {row["player_id"]: row for row in calculate_standings(cfg, field, [bye, game])}
-    assert rows["p1"]["omw"] == 0.33
+    assert rows["p1"]["omw"] == 0
+
+
+def test_omw_uses_custom_match_points_without_a_minimum_floor():
+    cfg = config(points={"win": 5, "draw": 2, "loss": 0, "bye": 10})
+    field = entrants(4)
+    history = [
+        played(cfg, 1, 1, "p1", "p2", "p1_win"),
+        played(cfg, 1, 2, "p3", "p4", "p1_win"),
+        played(cfg, 2, 1, "p1", "p3", "p1_win"),
+        played(cfg, 2, 2, "p2", "p4", "p1_win", p1_games=1, p2_games=0),
+    ]
+    rows = {row["player_id"]: row for row in calculate_standings(cfg, field, history)}
+    assert rows["p1"]["omw"] == 0.5
+
+
+@pytest.mark.parametrize("malformed", [[], {}, {"unexpected": "object"}])
+def test_apply_result_rejects_malformed_outcome_with_value_error(malformed):
+    match = {"round": 1, "table": 1, "p1": "p1", "p2": "p2", "bye": False}
+    with pytest.raises(ValueError):
+        apply_result(config(), match, {"result": malformed, "p1_games": 1, "p2_games": 0})
 
 
 @pytest.mark.parametrize("outcome", ["p1_forfeit", "p2_forfeit"])

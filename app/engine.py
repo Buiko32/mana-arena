@@ -68,6 +68,10 @@ def validate_config(config: dict) -> None:
     for key, value in points.items():
         if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= 10:
             raise ValueError("I punti devono essere numeri interi compresi tra 0 e 10.")
+    if points["win"] <= points["loss"]:
+        raise ValueError("I punti per la vittoria devono essere maggiori di quelli per la sconfitta.")
+    if allow_draws and not points["loss"] <= points["draw"] <= points["win"]:
+        raise ValueError("I punti per la patta devono essere compresi tra quelli per la sconfitta e la vittoria.")
     if not isinstance(config.get("tiebreakers"), list):
         raise ValueError("L'ordine degli spareggi non è valido.")
     tie = config["tiebreakers"]
@@ -171,12 +175,10 @@ def _standing_order(config: dict, entrants: list[dict], matches: list[dict]) -> 
 def _match_points_pct(points: int, played_count: int, config: dict) -> float:
     if played_count <= 0:
         return 0.0
-    maximum = max(config["points"]["win"], config["points"]["draw"])
+    maximum = max(config["points"]["win"], config["points"]["draw"] if config["allow_draws"] else 0)
     if maximum == 0:
         return 0.0
-    # Tournament point percentage floor convention, with byes excluded from
-    # denominator by callers' opponent lists; 33% is the minimum floor.
-    return max(0.33, min(1.0, points / (played_count * maximum)))
+    return min(1.0, points / (played_count * maximum))
 
 
 def _match_template(round_number: int, table: int, p1: str, p2: str | None, bye: bool = False) -> dict:
@@ -187,11 +189,12 @@ def _has_played_pair(matches: list[dict]) -> set[frozenset[str]]:
     return {frozenset((m["p1"], m["p2"])) for m in matches if m.get("p1") is not None and m.get("p2") is not None}
 
 
-def _pair_swiss(config: dict, field: list[dict], matches: list[dict]) -> tuple[list[tuple[str, str]], list[str]]:
+def _pair_swiss(config: dict, field: list[dict], matches: list[dict], pair_field: list[dict] | None = None) -> tuple[list[tuple[str, str]], list[str]]:
     order = _standing_order(config, field, matches)
     stats = {row["entrant"]["id"]: row for row in order}
     prior_pairs = _has_played_pair(matches)
-    remaining = [row["entrant"]["id"] for row in order]
+    pair_ids = {person["id"] for person in (pair_field if pair_field is not None else field)}
+    remaining = [row["entrant"]["id"] for row in order if row["entrant"]["id"] in pair_ids]
     max_nodes = 40000
     nodes = 0
 
@@ -199,8 +202,8 @@ def _pair_swiss(config: dict, field: list[dict], matches: list[dict]) -> tuple[l
         a = stats[pid]
         return sorted(pool, key=lambda other: (
             frozenset((pid, other)) in prior_pairs,
-            abs(a["points"] - stats[other]["points"]),
             abs(a["losses"] - stats[other]["losses"]) if config["structure"] == "adapted" else 0,
+            abs(a["points"] - stats[other]["points"]),
             -stats[other]["points"],
             stats[other]["entrant"].get("seed", 10**9),
             other,
@@ -237,8 +240,8 @@ def _pair_swiss(config: dict, field: list[dict], matches: list[dict]) -> tuple[l
             first = pool.pop(0)
             other = min(pool, key=lambda pid: (
                 frozenset((first, pid)) in prior_pairs,
-                abs(stats[first]["points"] - stats[pid]["points"]),
                 abs(stats[first]["losses"] - stats[pid]["losses"]) if config["structure"] == "adapted" else 0,
+                abs(stats[first]["points"] - stats[pid]["points"]),
                 stats[pid]["entrant"].get("seed", 10**9), pid,
             ))
             pool.remove(other)
@@ -313,24 +316,78 @@ def _make_elimination_round(config: dict, field: list[dict], prior: list[dict], 
     if not previous_rounds:
         return {"matches": [], "warnings": []}
     last_round = max(previous_rounds)
+    if last_round != round_number - 1:
+        return {"matches": [], "warnings": []}
     previous = [m for m in prior if m.get("round") == last_round]
     if any(not _is_finalized(match) for match in previous):
         return {"matches": [], "warnings": []}
-    winners = []
-    for match in previous:
-        winner = _winner(match)
-        if winner and not next((p for p in field if p["id"] == winner), {}).get("withdrawn"):
-            winners.append(winner)
-    if len(winners) <= 1:
+    slot_count = max((m.get("bracket_slot", -1) for m in previous), default=-1) + 1
+    if slot_count <= 0 or slot_count % 2:
         return {"matches": [], "warnings": []}
+    slots = [match.get("bracket_slot") for match in previous]
+    if len(slots) != slot_count or set(slots) != set(range(slot_count)):
+        return {"matches": [], "warnings": []}
+    winners: list[str | None] = [None] * slot_count
+    for match in previous:
+        slot = match.get("bracket_slot")
+        if not isinstance(slot, int) or not 0 <= slot < slot_count:
+            return {"matches": [], "warnings": []}
+        winner = _winner(match)
+        winners[slot] = winner
     by_id = {p["id"]: p for p in field}
-    winners.sort(key=lambda pid: (by_id[pid].get("seed") or 10**9, pid))
     result = []
-    for index in range(0, len(winners) - 1, 2):
-        result.append(_match_template(round_number, len(result) + 1, winners[index], winners[index + 1]))
-    if len(winners) % 2:
-        result.append(_match_template(round_number, len(result) + 1, winners[-1], None, True))
+    for slot in range(slot_count // 2):
+        left, right = winners[slot * 2], winners[slot * 2 + 1]
+        if left is None and right is None:
+            result.append(_void_match(round_number, slot, slot))
+            continue
+        if left is None or right is None:
+            survivor = left or right
+            if by_id[survivor].get("withdrawn"):
+                result.append(_void_match(round_number, slot, slot))
+            else:
+                result.append(_finalize_bye(config, round_number, slot, slot, survivor))
+            continue
+        left_withdrawn = bool(by_id[left].get("withdrawn"))
+        right_withdrawn = bool(by_id[right].get("withdrawn"))
+        if left_withdrawn and right_withdrawn:
+            result.append(_void_match(round_number, slot, slot))
+        elif left_withdrawn:
+            result.append(_finalize_forfeit(config, round_number, slot, slot, left, right, "p1_forfeit"))
+        elif right_withdrawn:
+            result.append(_finalize_forfeit(config, round_number, slot, slot, left, right, "p2_forfeit"))
+        else:
+            result.append({**_match_template(round_number, slot + 1, left, right), "bracket_slot": slot})
     return {"matches": result, "warnings": []}
+
+
+def _seed_order(size: int) -> list[int]:
+    bracket = [1, 2]
+    current = 2
+    while current < size:
+        bracket = [seed for position in bracket for seed in (position, current * 2 + 1 - position)]
+        current *= 2
+    return bracket
+
+
+def _void_match(round_number: int, table: int, bracket_slot: int) -> dict:
+    return {
+        "round": round_number, "table": table + 1, "p1": None, "p2": None,
+        "bye": False, "result": "void", "p1_games": 0, "p2_games": 0,
+        "p1_points": 0, "p2_points": 0, "p1_wins": 0, "p2_wins": 0,
+        "p1_draws": 0, "p2_draws": 0, "p1_losses": 0, "p2_losses": 0,
+        "bracket_slot": bracket_slot,
+    }
+
+
+def _finalize_bye(config: dict, round_number: int, table: int, bracket_slot: int, player_id: str) -> dict:
+    match = _match_template(round_number, table + 1, player_id, None, True)
+    return {**apply_result(config, match, {"result": "bye", "p1_games": 0, "p2_games": 0}), "bracket_slot": bracket_slot}
+
+
+def _finalize_forfeit(config: dict, round_number: int, table: int, bracket_slot: int, p1: str, p2: str, outcome: str) -> dict:
+    match = _match_template(round_number, table + 1, p1, p2)
+    return {**apply_result(config, match, {"result": outcome, "p1_games": 0, "p2_games": 0}), "bracket_slot": bracket_slot}
 
 
 def make_schedule(config: dict, entrants: list[dict]) -> dict:
@@ -384,26 +441,34 @@ def _league_schedule(config: dict, field: list[dict]) -> dict:
 def _elimination_schedule(config: dict, field: list[dict]) -> dict:
     if len(field) < 2:
         return {"matches": [], "warnings": []}
-    # Seed the preliminaries so the top seeds advance with byes and the lowest
-    # seeds play the required play-in matches. Unknown later opponents are not
-    # fabricated; each subsequent round is derived from reported winners.
+    # Fill a standard seed-ordered binary bracket. Later stages retain each
+    # match's slot, so winners stay on their original branch.
     size = 1 << (len(field) - 1).bit_length()
-    matches_needed = size // 2
-    play_in = len(field) - (size // 2)
-    ordered = [p["id"] for p in field]
+    by_seed = {rank: person for rank, person in enumerate(field, start=1)}
+    seed_order = _seed_order(size)
     result = []
-    table = 1
-    # Higher seeds occupy byes first; lowest seeds fill play-in slots.
-    for i in range(play_in):
-        p1, p2 = ordered[len(ordered) - 1 - 2 * i], ordered[len(ordered) - 2 - 2 * i]
-        result.append(_match_template(1, table, p1, p2))
-        table += 1
-    for i in range(matches_needed - play_in):
-        result.append(_match_template(1, table, ordered[i], None, True))
-        table += 1
-    result.sort(key=lambda m: (next(p["seed"] for p in field if p["id"] == m["p1"]), m["table"]))
-    for i, match in enumerate(result, 1):
-        match["table"] = i
+    for slot in range(size // 2):
+        p1 = by_seed.get(seed_order[slot * 2])
+        p2 = by_seed.get(seed_order[slot * 2 + 1])
+        p1_id = p1["id"] if p1 else None
+        p2_id = p2["id"] if p2 else None
+        if p1_id is None and p2_id is None:
+            match = _void_match(1, slot, slot)
+        elif p1_id is None or p2_id is None:
+            survivor = p1 or p2
+            if survivor.get("withdrawn"):
+                match = _void_match(1, slot, slot)
+            else:
+                match = _finalize_bye(config, 1, slot, slot, survivor["id"])
+        elif p1.get("withdrawn") and p2.get("withdrawn"):
+            match = _void_match(1, slot, slot)
+        elif p1.get("withdrawn"):
+            match = _finalize_forfeit(config, 1, slot, slot, p1_id, p2_id, "p1_forfeit")
+        elif p2.get("withdrawn"):
+            match = _finalize_forfeit(config, 1, slot, slot, p1_id, p2_id, "p2_forfeit")
+        else:
+            match = {**_match_template(1, slot + 1, p1_id, p2_id), "bracket_slot": slot}
+        result.append(match)
     return {"matches": result, "warnings": []}
 
 
@@ -426,7 +491,7 @@ def apply_result(config: dict, match: dict, result: dict) -> dict:
         return {**match, "result": "bye", "p1_games": 0, "p2_games": 0,
                 "p1_points": bye_points, "p2_points": 0, "p1_wins": 0, "p2_wins": 0,
                 "p1_draws": 0, "p2_draws": 0, "p1_losses": 0, "p2_losses": 0}
-    if outcome not in RESULTS - {"bye"}:
+    if not isinstance(outcome, str) or outcome not in RESULTS - {"bye"}:
         raise ValueError("Seleziona un risultato valido.")
     g1, g2 = result.get("p1_games"), result.get("p2_games")
     if not isinstance(g1, int) or isinstance(g1, bool) or not isinstance(g2, int) or isinstance(g2, bool) or g1 < 0 or g2 < 0:
@@ -471,7 +536,12 @@ def apply_result(config: dict, match: dict, result: dict) -> dict:
 
 
 def calculate_standings(config: dict, entrants: list[dict], matches: list[dict]) -> list[dict]:
-    """Calculate deterministic standings, including withdrawn/eliminated rows."""
+    """Calculate deterministic points standings, including inactive entrants.
+
+    In single elimination, the champion is the winner propagated through the
+    bracket's results and slots; rank 1 in this points-based table is not a
+    champion signal.
+    """
     validate_config(config)
     field = _ordered_entrants(entrants, config)
     stats = _history_stats(config, field, [m for m in matches if _is_finalized(m)])
