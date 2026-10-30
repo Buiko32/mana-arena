@@ -1,0 +1,27 @@
+services:
+  mana-arena:
+    image: ghcr.io/buiko32/mana-arena:latest
+    pull_policy: always
+    env_file:
+      - .env
+    ports:
+      - "3388:3388"
+    volumes:
+      - mana-arena-db:/data/db
+      - mana-arena-photos:/data/photos
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3388/healthz', timeout=3).read()"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  mana-arena-db:
+  mana-arena-photos:
