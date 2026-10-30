@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
 import http.cookiejar
 import json
 import subprocess
@@ -16,6 +18,9 @@ import uuid
 
 PASSWORD = "CI-only-admin-password-42"
 SESSION_SECRET = "ci-only-session-secret-with-more-than-32-bytes"
+PNG_FIXTURE = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+)
 
 
 def docker(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -38,6 +43,41 @@ def request(base: str, path: str, *, opener=None, method: str = "GET", body=None
         return error.code, error.read().decode("utf-8", errors="replace")
     except urllib.error.URLError as error:
         return 0, str(error.reason)
+
+
+def upload_photo(base: str, player_id: str, opener, csrf: str):
+    boundary = f"ManaArenaSmoke{uuid.uuid4().hex}"
+    body = (
+        f"--{boundary}\r\n"
+        'Content-Disposition: form-data; name="file"; filename="smoke.png"\r\n'
+        "Content-Type: image/png\r\n\r\n"
+    ).encode("ascii") + PNG_FIXTURE + f"\r\n--{boundary}--\r\n".encode("ascii")
+    req = urllib.request.Request(
+        base + f"/api/admin/players/{player_id}/photo",
+        data=body,
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}", "X-CSRF-Token": csrf},
+        method="POST",
+    )
+    try:
+        with opener.open(req, timeout=10) as response:
+            raw = response.read()
+            return response.status, json.loads(raw) if raw else None
+    except urllib.error.HTTPError as error:
+        return error.code, error.read().decode("utf-8", errors="replace")
+
+
+def read_public_photo(base: str, photo_url: str) -> bytes:
+    req = urllib.request.Request(base + photo_url, method="GET")
+    try:
+        with urllib.request.build_opener().open(req, timeout=10) as response:
+            photo = response.read()
+            if response.status != 200 or not photo.startswith(b"\xff\xd8") or not photo.endswith(b"\xff\xd9"):
+                raise RuntimeError("public player photo was not a complete JPEG")
+            return photo
+    except urllib.error.HTTPError as error:
+        raise RuntimeError(f"public photo request failed: HTTP {error.code}") from error
+    except urllib.error.URLError as error:
+        raise RuntimeError(f"public photo request failed: {error.reason}") from error
 
 
 def wait_for_health(base: str, container: str) -> None:
@@ -72,32 +112,58 @@ def login(base: str):
     return opener, payload["csrf_token"]
 
 
-def exercise_api(base: str, expected_player: str | None) -> str:
+def assert_anonymous_write_denied(base: str) -> None:
     # A request with no session must not mutate the player list.
     status, _ = request(base, "/api/admin/players", method="POST", body={"name": "Anonymous forbidden"})
     if status not in (401, 403):
         raise RuntimeError(f"anonymous player creation was not denied (HTTP {status})")
 
+
+def create_player_and_photo(base: str) -> tuple[str, str, str]:
+    assert_anonymous_write_denied(base)
     opener, csrf = login(base)
-    if expected_player is None:
-        status, player = request(
-            base,
-            "/api/admin/players",
-            opener=opener,
-            method="POST",
-            body={"name": "CI Persisted Player"},
-            headers={"X-CSRF-Token": csrf},
-        )
-        if status != 201 or not isinstance(player, dict) or not player.get("id"):
-            raise RuntimeError(f"authenticated player creation failed: HTTP {status}: {player}")
-        return str(player["id"])
+    status, player = request(
+        base,
+        "/api/admin/players",
+        opener=opener,
+        method="POST",
+        body={"name": "CI Persisted Player"},
+        headers={"X-CSRF-Token": csrf},
+    )
+    if status != 201 or not isinstance(player, dict) or not player.get("id"):
+        raise RuntimeError(f"authenticated player creation failed: HTTP {status}: {player}")
+    player_id = str(player["id"])
+
+    status, upload = upload_photo(base, player_id, opener, csrf)
+    if status != 200 or not isinstance(upload, dict) or not isinstance(upload.get("photo_url"), str):
+        raise RuntimeError(f"authenticated photo upload failed: HTTP {status}: {upload}")
+    photo_url = upload["photo_url"]
+    if not photo_url.startswith("/photos/"):
+        raise RuntimeError(f"photo upload returned an unexpected URL: {photo_url}")
 
     status, players = request(base, "/api/admin/players", opener=opener)
     if status != 200 or not isinstance(players, list):
         raise RuntimeError(f"admin player list failed: HTTP {status}: {players}")
-    if not any(player.get("id") == expected_player and player.get("name") == "CI Persisted Player" for player in players):
-        raise RuntimeError("created player was not present after container restart")
-    return expected_player
+    profile = next((row for row in players if row.get("id") == player_id), None)
+    if not profile or profile.get("name") != "CI Persisted Player" or profile.get("photo_url") != photo_url:
+        raise RuntimeError("created player profile did not retain the uploaded photo reference")
+    photo = read_public_photo(base, photo_url)
+    digest = hashlib.sha256(photo).hexdigest()
+    return player_id, photo_url, digest
+
+
+def verify_persisted_player_and_photo(base: str, player_id: str, photo_url: str, expected_digest: str) -> None:
+    assert_anonymous_write_denied(base)
+    opener, _ = login(base)
+    status, players = request(base, "/api/admin/players", opener=opener)
+    if status != 200 or not isinstance(players, list):
+        raise RuntimeError(f"admin player list failed after restart: HTTP {status}: {players}")
+    profile = next((row for row in players if row.get("id") == player_id), None)
+    if not profile or profile.get("name") != "CI Persisted Player" or profile.get("photo_url") != photo_url:
+        raise RuntimeError("player or photo reference did not persist across container restart")
+    photo = read_public_photo(base, photo_url)
+    if hashlib.sha256(photo).hexdigest() != expected_digest:
+        raise RuntimeError("stored player photo content changed across container restart")
 
 
 def main() -> int:
@@ -132,11 +198,11 @@ def main() -> int:
         base = f"http://127.0.0.1:{host_port}"
 
         wait_for_health(base, container)
-        player_id = exercise_api(base, None)
+        player_id, photo_url, photo_digest = create_player_and_photo(base)
         docker("restart", container)
         wait_for_health(base, container)
-        exercise_api(base, player_id)
-        print("Container smoke passed: health, anonymous write denied, and player persisted across restart.")
+        verify_persisted_player_and_photo(base, player_id, photo_url, photo_digest)
+        print("Container smoke passed: health, anonymous write denied, and player/photo persisted across restart.")
         return 0
     except Exception as error:
         print(f"Container smoke failed: {error}", file=sys.stderr)
