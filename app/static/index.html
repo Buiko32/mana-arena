@@ -25,22 +25,20 @@
   <main id="main-content" class="shell">
     <section id="public-view" class="view" aria-labelledby="public-title">
       <div class="hero">
-        <div><p class="eyebrow"><span class="eyebrow-rule"></span> LA TUA PROSSIMA PARTITA</p>
-          <h1 id="public-title">Il tavolo è <em>pronto.</em></h1>
-          <p class="lede">Segui i tornei, controlla i turni e scopri chi guida la classifica.</p></div>
+        <div><h1 id="public-title">Mana Arena</h1></div>
         <div class="hero-orb" aria-hidden="true"><span>✦</span></div>
       </div>
-      <div class="section-heading"><div><p class="eyebrow">IN DIRETTA E ARCHIVIO</p><h2>Tornei</h2></div><span id="tournament-count" class="count-pill">—</span></div>
+      <div class="section-heading"><h2>Tornei</h2><span id="tournament-count" class="count-pill">—</span></div>
       <div id="public-error" class="notice error" role="alert" hidden></div>
       <div id="tournament-list" class="tournament-grid" aria-live="polite"><div class="loading-card">Caricamento tornei…</div></div>
       <section id="public-detail" class="detail-panel" aria-live="polite" hidden></section>
     </section>
 
     <section id="admin-view" class="view" aria-labelledby="admin-title" hidden>
-      <div class="hero admin-hero"><div><p class="eyebrow"><span class="eyebrow-rule"></span> PANNELLO ORGANIZZATORE</p><h1 id="admin-title">La sala <em>comandi.</em></h1><p class="lede">Gestisci iscritti, tornei e risultati da un unico posto.</p></div><div class="hero-orb smaller" aria-hidden="true"><span>⚙</span></div></div>
+      <div class="hero admin-hero"><div><h1 id="admin-title">Gestione</h1></div><div class="hero-orb smaller" aria-hidden="true"><span>⚙</span></div></div>
       <div id="admin-error" class="notice error" role="alert" hidden></div>
       <div id="login-panel" class="login-card">
-        <div class="card-icon" aria-hidden="true">✦</div><div><p class="eyebrow">ACCESSO RISERVATO</p><h2>Entra come organizzatore</h2><p class="muted">Usa le credenziali configurate per questa Arena.</p></div>
+        <div class="card-icon" aria-hidden="true">✦</div><div><h2>Accesso organizzatore</h2></div>
         <form id="login-form" class="login-form"><label>Nome account<input name="username" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button class="button primary" type="submit">Accedi <span aria-hidden="true">→</span></button></form>
       </div>
       <div id="admin-workspace" hidden>
@@ -52,34 +50,35 @@
           <button type="button" role="tab" id="tab-backup" aria-selected="false" aria-controls="admin-backup" data-admin-tab="backup">Backup</button>
         </div>
         <section id="admin-events" class="admin-section" role="tabpanel" aria-labelledby="tab-events">
-          <div class="section-heading compact"><div><p class="eyebrow">STAGIONE</p><h2>I tuoi tornei</h2></div><button class="button primary" id="new-tournament">＋ Nuovo torneo</button></div>
+          <div class="section-heading compact"><h2>Tornei</h2><button class="button primary" id="new-tournament">＋ Nuovo torneo</button></div>
           <div id="admin-tournament-list" class="admin-tournament-list"><p class="muted">Caricamento…</p></div>
           <form id="tournament-form" class="form-card" hidden>
-            <div class="form-card-heading"><div><p class="eyebrow">IMPOSTAZIONI</p><h3 id="tournament-form-title">Nuovo torneo</h3></div><button type="button" class="icon-button" data-close-form="tournament-form" aria-label="Chiudi">×</button></div>
+            <div class="form-card-heading"><h3 id="tournament-form-title">Nuovo torneo</h3><button type="button" class="icon-button" data-close-form="tournament-form" aria-label="Chiudi">×</button></div>
             <div class="preset-row"><span class="muted">Parti da un preset:</span><button type="button" class="preset-button" data-preset="excel">Come Excel</button><button type="button" class="preset-button" data-preset="swiss">Swiss classico</button><button type="button" class="preset-button" data-preset="league">Girone</button></div>
             <fieldset><legend>Identità del torneo</legend><div class="form-grid two"><label>Nome<input name="name" maxlength="120" required placeholder="Es. Serata Mana #4"></label><label>Data<input name="date" type="date"></label><label>Formato Magic<input name="game_format" maxlength="80" list="format-options" required value="Modern"><datalist id="format-options"><option>Standard</option><option>Modern</option><option>Commander</option><option>Pauper</option></datalist></label><label>Descrizione<textarea name="description" rows="2" maxlength="4000" placeholder="Note per i partecipanti"></textarea></label></div></fieldset>
             <fieldset><legend>Struttura e regole</legend><div class="form-grid three"><label>Struttura<select name="structure"><option value="swiss">Swiss</option><option value="adapted">Swiss adattato</option><option value="league">Girone all'italiana</option><option value="single_elim">Eliminazione diretta</option></select></label><label>Durata match<select name="match_length"><option value="1">BO1 · una partita</option><option value="3">BO3 · al meglio di tre</option></select></label><label id="rounds-field">Numero turni Swiss<input name="rounds" type="number" min="1" max="32" value="3"></label><label id="threshold-field" hidden>Sconfitte per eliminazione<input name="loss_threshold" type="number" min="2" max="5" value="2"></label><label id="league-field" hidden>Calendario<select name="league_mode"><option value="single">Solo andata</option><option value="double">Andata e ritorno</option></select></label><label>Assegnazione seed<select name="seeding"><option value="manual">Manuale</option><option value="random">Casuale all'avvio</option></select></label></div>
             <div class="settings-row"><label class="check-label"><input name="allow_draws" type="checkbox"> Ammetti le patte</label><p class="hint" id="draw-hint">Le patte non sono compatibili con l'eliminazione diretta.</p></div>
             <div class="points-grid"><label>Vittoria<input name="points.win" type="number" min="0" max="10" value="3"></label><label>Patta<input name="points.draw" type="number" min="0" max="10" value="1"></label><label>Sconfitta<input name="points.loss" type="number" min="0" max="10" value="0"></label><label>Bye<input name="points.bye" type="number" min="0" max="10" value="3"></label></div>
-            <fieldset class="tiebreak-field"><legend>Spareggi · nell'ordine scelto</legend><p class="hint">Trascina o usa le frecce; il seed resta sempre l'ultimo criterio.</p><ol id="tiebreak-list" class="tie-list"><li data-tiebreak="omw"><span>OMW · percentuale vittorie avversari</span><button type="button" aria-label="Sposta OMW in alto">↑</button><button type="button" aria-label="Sposta OMW in basso">↓</button><label><input type="checkbox" checked> Attivo</label></li><li data-tiebreak="wins"><span>Vittorie</span><button type="button" aria-label="Sposta vittorie in alto">↑</button><button type="button" aria-label="Sposta vittorie in basso">↓</button><label><input type="checkbox" checked> Attivo</label></li><li data-tiebreak="game_diff"><span>Differenza game</span><button type="button" aria-label="Sposta differenza game in alto">↑</button><button type="button" aria-label="Sposta differenza game in basso">↓</button><label><input type="checkbox" checked> Attivo</label></li></ol></fieldset>
+            <fieldset class="tiebreak-field"><legend>Spareggi · ordine di priorità</legend><p class="hint">Usa le frecce per ordinare. Il seed è sempre l’ultimo criterio.</p><ol id="tiebreak-list" class="tie-list"><li data-tiebreak="omw"><span>OMW · percentuale punti avversari</span><button type="button" aria-label="Sposta OMW in alto">↑</button><button type="button" aria-label="Sposta OMW in basso">↓</button><label><input type="checkbox" checked> Attivo</label></li><li data-tiebreak="wins"><span>Vittorie</span><button type="button" aria-label="Sposta vittorie in alto">↑</button><button type="button" aria-label="Sposta vittorie in basso">↓</button><label><input type="checkbox" checked> Attivo</label></li><li data-tiebreak="game_diff"><span>Differenza game</span><button type="button" aria-label="Sposta differenza game in alto">↑</button><button type="button" aria-label="Sposta differenza game in basso">↓</button><label><input type="checkbox" checked> Attivo</label></li></ol></fieldset>
+            </fieldset>
             <div class="form-actions"><button class="button primary" type="submit">Salva impostazioni</button><button class="button quiet" type="button" data-close-form="tournament-form">Annulla</button></div>
           </form>
           <section id="tournament-manager" class="manager-panel" hidden></section>
         </section>
         <section id="admin-players" class="admin-section" role="tabpanel" aria-labelledby="tab-players" hidden>
-          <div class="section-heading compact"><div><p class="eyebrow">ALBO GIOCATORI</p><h2>Profili</h2><p class="muted">Le foto vengono ridimensionate e ripulite dal server.</p></div></div>
+          <div class="section-heading compact"><div><h2>Giocatori</h2></div></div>
           <form id="player-form" class="player-create"><label>Nome giocatore<input name="name" maxlength="100" required placeholder="Nome e cognome"></label><button class="button primary" type="submit">＋ Aggiungi</button></form>
           <div id="players-list" class="players-list" aria-live="polite"></div>
         </section>
         <section id="admin-backup" class="admin-section" role="tabpanel" aria-labelledby="tab-backup" hidden>
-          <div class="section-heading compact"><div><p class="eyebrow">CUSTODIA</p><h2>Backup e ripristino</h2><p class="muted">L'archivio contiene il database e le foto dei profili.</p></div></div>
-          <div class="backup-grid"><article class="backup-card"><span class="backup-icon">↓</span><h3>Scarica un backup</h3><p>Salva una copia completa dell'Arena in un archivio ZIP.</p><button id="backup-download" class="button secondary" type="button">Scarica backup ZIP</button></article><article class="backup-card danger-card"><span class="backup-icon">↥</span><h3>Ripristina backup</h3><p>Il ripristino sostituisce i dati attuali. Dopo il completamento dovrai accedere di nuovo.</p><form id="restore-form"><label>Archivio ZIP<input name="file" type="file" accept=".zip,application/zip" required></label><button class="button danger" type="submit">Ripristina archivio…</button></form></article></div>
+          <div class="section-heading compact"><div><h2>Backup e ripristino</h2></div></div>
+          <div class="backup-grid"><article class="backup-card"><span class="backup-icon">↓</span><h3>Backup</h3><button id="backup-download" class="button secondary" type="button">Scarica ZIP</button></article><article class="backup-card danger-card"><span class="backup-icon">↥</span><h3>Ripristino</h3><p>Sostituisce i dati correnti e richiede un nuovo accesso.</p><form id="restore-form"><label>Archivio ZIP<input name="file" type="file" accept=".zip,application/zip" required></label><button class="button danger" type="submit">Ripristina</button></form></article></div>
         </section>
       </div>
     </section>
   </main>
-  <footer><span class="brand-mini">✦ MANA ARENA</span><span>La strategia incontra il divertimento.</span><a href="#admin" data-view-link="admin">Area organizzatore</a></footer>
-  <dialog id="confirm-dialog" aria-labelledby="confirm-title"><form method="dialog"><button class="dialog-close" aria-label="Chiudi">×</button></form><p class="eyebrow">CONFERMA AZIONE</p><h2 id="confirm-title">Sei sicuro?</h2><p id="confirm-message" class="muted"></p><div id="confirm-impact" class="impact-list"></div><div class="dialog-actions"><button id="confirm-cancel" class="button quiet" type="button">Annulla</button><button id="confirm-ok" class="button danger" type="button">Conferma</button></div></dialog>
+  <footer><span class="brand-mini">✦ MANA ARENA</span><a href="#admin" data-view-link="admin">Area organizzatore</a></footer>
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title"><button type="button" class="dialog-close" data-dialog-close aria-label="Chiudi">×</button><h2 id="confirm-title">Conferma</h2><p id="confirm-message" class="muted"></p><div id="confirm-impact" class="impact-list"></div><div class="dialog-actions"><button id="confirm-cancel" class="button quiet" type="button">Annulla</button><button id="confirm-ok" class="button danger" type="button">Conferma</button></div></dialog>
   <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
 </body>
 </html>
