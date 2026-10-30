@@ -18,7 +18,7 @@
 - Magic labels are independent from structure: Standard, Modern, Commander, Pauper, or custom text; Commander multiplayer is out of scope.
 - Match length is BO1 or BO3. Adapted Swiss defaults to BO1 and permits BO3.
 - A tournament has 2–64 entrants; Swiss rounds are configurable from 1–32; adapted elimination threshold is configurable from 2–5.
-- Win, draw, loss, and bye points are independently configurable from 0–10 where compatible; preset “Come Excel” is adapted, BO1, threshold 2, win 1, draw disabled, loss 0, bye 1.
+- Win, draw, loss, and bye points are configurable from 0–10; win must exceed loss and an enabled draw score must lie between them. Preset “Come Excel” is adapted, BO1, threshold 2, win 1, draw disabled, loss 0, bye 1.
 - Tiebreak order is points, selected order of OMW/wins/game_diff, and seed as the final criterion in every configuration.
 - Seeding is manual or random; a tournament’s rule configuration is frozen at start and changes after start require an explicit full rollback.
 - One admin is bootstrapped from environment credentials; no public registration. Admin changes require authentication, CSRF protection, and rate limiting.
@@ -45,7 +45,7 @@
 - `app/main.py`: FastAPI app, public/admin routes, static serving and request validation.
 - `app/static/index.html`, `style.css`, `app.js`: Italian responsive single-page interface.
 - `tests/test_engine.py`, `tests/test_api.py`, `tests/test_ui.py`, `tests/test_packaging.py`: unit, API, UI smoke and deployment contract tests.
-- `Dockerfile`, `compose.yaml`, `.env.example`, `.github/workflows/release.yml`, `README.md`: amd64 container, NAS deployment, secrets template, GHCR publishing and operations guide.
+- `Dockerfile`, `docker-compose.yaml`, `.env.example`, `.github/workflows/release.yml`, `README.md`: amd64 container, NAS deployment, secrets template, GHCR publishing and operations guide.
 
 ## Shared Engine Interfaces
 
@@ -65,6 +65,7 @@ Use plain JSON-compatible dictionaries at the engine boundary. Keep IDs as strin
     "loss_threshold": int | None,       # adapted: 2..5
     "league_mode": "single" | "double" | None,
     "seeding": "manual" | "random",
+    "random_seed": int | None,           # internal: generated/stored by server for random seeding
     "allow_draws": bool,
     "points": {"win": int, "draw": int, "loss": int, "bye": int},
     "tiebreakers": list[str],           # ordered subset of omw/wins/game_diff
@@ -80,6 +81,8 @@ Seed is always appended as final tie-break. Entrants are `[{"id": str, "seed": i
 - `make_schedule(config: dict, entrants: list[dict]) -> dict`: creates the initial round-robin or single-elimination schedule; Swiss structures use `make_round` after each completed round.
 
 Admin API uses JSON for configs/results and multipart form data for photos. Public/admin route names and response shapes are kept stable for the frontend task.
+
+Before Task 1, initialize Git in this current project directory if it is not already a repository, use `main` as the default branch, and commit the approved spec and this plan. This avoids a new worktree and keeps subsequent task commits reviewable.
 
 ## Task 1: Tournament Engine
 
@@ -100,6 +103,7 @@ Admin API uses JSON for configs/results and multipart form data for photos. Publ
 - [ ] **Step 6: Run those tests and confirm failure.** Run `pytest tests/test_engine.py -q`; expected: failures for missing schedule, pairing, and standings functions.
 - [ ] **Step 7: Implement `make_round`, `make_schedule`, `apply_result`, and `calculate_standings` in `app/engine.py`.** Use deterministic tie resolution from the supplied seed/order; report relaxed pairing constraints in `warnings`; account for configurable points, forfeits, byes, selected tiebreakers and final seed ordering.
 - [ ] **Step 8: Run engine tests and confirm pass.** Run `pytest tests/test_engine.py -q`; expected: all engine tests pass, including all five engine edge groups in Review Focus.
+- [ ] **Step 9: Commit the engine task.** Commit only `app/__init__.py`, `app/engine.py`, and `tests/test_engine.py` after the full engine suite passes.
 
 ## Task 2: SQLite, Authentication, and API
 
@@ -112,7 +116,7 @@ Admin API uses JSON for configs/results and multipart form data for photos. Publ
 
 **Interfaces:**
 - Consumes: `validate_config`, `make_round`, `make_schedule`, `apply_result`, and `calculate_standings` from Task 1.
-- Produces: same-origin public API `GET /api/public/tournaments`, `GET /api/public/tournaments/{id}`, `GET /api/public/tournaments/{id}/standings`, `GET /api/public/tournaments/{id}/rounds`; authenticated admin API rooted at `/api/admin/` for login/logout, players/photos, tournament CRUD/config, start, round generation, match results, withdrawals, rollback, CSV export, backup, and restore.
+- Produces: `GET /healthz`; same-origin public API `GET /api/public/tournaments`, `GET /api/public/tournaments/{id}`, `GET /api/public/tournaments/{id}/standings`, `GET /api/public/tournaments/{id}/rounds`; authenticated admin API rooted at `/api/admin/` for login/logout, players/photos, tournament CRUD/config, start, round generation, match results, withdrawals, rollback, CSV export, backup, and restore.
 
 - [ ] **Step 1: Write failing SQLite/API tests.** Add named tests for initialization/reopen persistence, public list/detail/standings/rounds, admin bootstrap/login/logout, unauthenticated write rejection, CSRF enforcement, login throttling, player/photo validation, draft tournament create/edit, start freezes config, result and round persistence, withdrawal/audit, confirmed rollback invalidation, CSV export, and consistent database-plus-photo backup/restore.
 - [ ] **Step 2: Run focused tests and confirm failure.** Run `pytest tests/test_api.py -q`; expected: import or assertion failures before the app exists.
@@ -120,6 +124,7 @@ Admin API uses JSON for configs/results and multipart form data for photos. Publ
 - [ ] **Step 4: Implement `app/auth.py`.** Bootstrap exactly one admin from required environment values; hash passwords with PBKDF2-HMAC-SHA256 and random salt; issue signed `HttpOnly`/`SameSite` session cookies; enforce CSRF for mutating routes and progressive login throttling. Do not provide a default password or registration endpoint.
 - [ ] **Step 5: Implement API routes in `app/main.py`.** Public routes are GET-only. Admin routes verify session and CSRF, validate input, call the pure engine, commit each logical operation transactionally, and append audit events. Config updates after start fail unless the caller explicitly confirms full rollback; return the affected-round summary before confirmation.
 - [ ] **Step 6: Run API tests and confirm pass.** Run `pytest tests/test_api.py -q`; expected: all persistence, security, rules, rollback, export, and backup tests pass.
+- [ ] **Step 7: Commit the API task.** Commit only API/auth/database source and API tests after the focused suite passes.
 
 ## Task 3: Responsive Italian Web Interface
 
@@ -138,12 +143,13 @@ Admin API uses JSON for configs/results and multipart form data for photos. Publ
 - [ ] **Step 3: Implement the public views in `index.html`, `style.css`, and `app.js`.** Show active/completed tournaments, format/config summary, participant photos, rounds, match results, byes and selected tiebreak standings; refresh public data every 5 seconds only when visible.
 - [ ] **Step 4: Implement admin screens and flows.** Build custom tournament settings with “Come Excel” preset and validation; make configuration, draw compatibility, Swiss rounds, threshold, point values, league mode, seeding, and tiebreak order visible before start. Require a clear impact review and explicit confirmation for full rollback. Add accessible photo, CSV, backup and restore controls.
 - [ ] **Step 5: Run UI tests and confirm pass.** Run `pytest tests/test_ui.py -q`; expected: all smoke/accessibility contract tests pass and UI uses only the documented API.
+- [ ] **Step 6: Commit the UI task.** Commit only the static UI assets and UI tests after the smoke suite passes.
 
 ## Task 4: Docker, GHCR Publishing, and Operations Docs
 
 **Files:**
 - Create: `Dockerfile`
-- Create: `compose.yaml`
+- Create: `docker-compose.yaml`
 - Create: `.env.example`
 - Create: `.github/workflows/release.yml`
 - Create: `README.md`
@@ -160,3 +166,5 @@ Admin API uses JSON for configs/results and multipart form data for photos. Publ
 - [ ] **Step 5: Add GitHub Actions workflow.** On pushes to `main` and version tags, run `pytest`, build `linux/amd64`, and publish `ghcr.io/buiko32/mana-arena:latest` (plus immutable commit/version tags) using `GITHUB_TOKEN` with `contents: read` and `packages: write`. Document the one-time GHCR package visibility setting as public.
 - [ ] **Step 6: Document deployment and recovery.** README covers initial admin setup, public read-only behavior, Compose pull/start/update, NAS path permissions, local-network access, externally managed HTTPS, health status, CSV, and coherent backup/restore of both database and photos. State that installation on the NAS is not verified until performed there.
 - [ ] **Step 7: Run final checks.** Run `pytest -q` and `docker buildx build --platform linux/amd64 --load -t mana-arena:check .` when Docker is available; then run the container health check and `docker compose config`. Expected: tests pass, image reports healthy, Compose resolves the public image and persistent mounts. If Docker is unavailable, record the skipped runtime check without claiming it passed.
+- [ ] **Step 8: Commit the deployment/docs task.** Commit packaging, workflow, README and deployment tests after all available checks pass.
+- [ ] **Step 9: Create and publish the approved public GitHub repository.** Create `Buiko32/mana-arena` as public, push the source and workflow, and confirm GHCR package visibility is public. Then verify the published `latest` tag can be pulled by Compose without registry login.

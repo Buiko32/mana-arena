@@ -8,7 +8,7 @@
 
 Realizzare un’applicazione web privata, in italiano e adatta a telefono e desktop, per organizzare tornei di Magic: The Gathering in casa o in un gruppo. Un amministratore gestisce giocatori e tornei; chiunque abbia accesso alla pagina può consultare i dati senza creare un account. Il servizio dovrà funzionare sul NAS con manutenzione semplice e dati persistenti.
 
-Il workbook `Torneo_Magic_6_Giocatori_BO1_Doppia_Sconfitta.xlsx` è un riferimento di dominio: descrive sei giocatori, BO1, svizzera adattata e uscita dopo due sconfitte. Questa proposta include quel formato fra le opzioni, ma non presume che l’app debba riprodurre integralmente il workbook o che i dati di esempio siano requisiti.
+Il workbook `Torneo_Magic_6_Giocatori_BO1_Doppia_Sconfitta.xlsx` è un riferimento di dominio: descrive sei giocatori, BO1, svizzera adattata e uscita dopo due sconfitte. Il preset “Come Excel” include quel formato, senza importare i dati dimostrativi né promettere di riprodurre integralmente il workbook.
 
 ## Obiettivi
 
@@ -57,12 +57,14 @@ Per ogni torneo l’amministratore può configurare in bozza:
 - formato Magic (Standard, Modern, Commander, Pauper o etichetta libera) e incontro BO1/BO3;
 - numero di turni svizzeri da 1 a 32; la proposta precompila `ceil(log2(numero di partecipanti))`;
 - soglia di sconfitte della svizzera adattata da 2 a 5; il preset **“Come Excel”** preimposta 2;
-- punti per vittoria, patta, sconfitta e bye, ciascuno da 0 a 10, con validazione di compatibilità e patte abilitate solo nei formati che le ammettono; il preset **“Come Excel”** usa BO1, vittoria 1, patta non ammessa, sconfitta 0, bye 1;
+- punti per vittoria, patta, sconfitta e bye, ciascuno da 0 a 10; vittoria deve valere più della sconfitta e, se la patta è ammessa, il relativo punteggio deve stare fra sconfitta e vittoria. Le patte sono abilitate solo nei formati che le ammettono; il preset **“Come Excel”** usa BO1, vittoria 1, patta non ammessa, sconfitta 0, bye 1;
 - sola andata o andata e ritorno per il campionato;
 - seeding manuale o casuale;
 - ordine degli spareggi, scelto fra OMW (percentuale punti avversari), vittorie, differenza game vinti/persi e seed; il seed è sempre il criterio finale di ordinamento.
 
 La svizzera adattata accetta BO1 o BO3; il preset “Come Excel” seleziona BO1. Qualunque sia la durata, il risultato di incontro per questo formato deve determinare un vincitore e aumentare le sconfitte del perdente. Le opzioni incompatibili vengono disabilitate o rifiutate prima dell’avvio, con spiegazione visibile. La configurazione effettiva, inclusi valori e ordine degli spareggi, viene salvata con il torneo e non può essere modificata silenziosamente dopo l’avvio.
+
+Per il seeding casuale, il server genera e registra un seed casuale al momento della preparazione; l’ordine sorteggiato è così riproducibile e verificabile nel riepilogo e nell’audit log.
 
 ### Regole proposte per struttura
 
@@ -112,7 +114,7 @@ L’export CSV è disponibile per iscritti, turni/abbinamenti, risultati e class
 
 Il repository pubblico è `Buiko32/mana-arena`. Include sorgenti, test automatici, documentazione, Dockerfile, Compose, health check e `.env.example`; non include credenziali, database reali o foto dei giocatori. GitHub Actions esegue test e build multipiattaforma limitata a Linux amd64, poi pubblica l’immagine pubblica `ghcr.io/buiko32/mana-arena:latest` su GitHub Container Registry. Compose usa direttamente l’immagine pubblicata (`image:`) e non contiene una build locale (`build:`), così il NAS la scarica da GHCR.
 
-La configurazione Compose espone la porta host 3388 verso la porta container 3388 e monta i due volumi persistenti. Il health check verifica che il processo risponda e che il database sia apribile, senza esporre segreti. Il NAS non è accessibile nell’ambiente di sviluppo: l’installazione effettiva sul DXP2800 resta una verifica successiva, dopo che l’immagine è pubblicata.
+La configurazione Compose espone la porta host 3388 verso la porta container 3388 e monta i due volumi persistenti. L’endpoint `/healthz` verifica che il processo risponda e che il database sia apribile, senza esporre segreti. Il NAS non è accessibile nell’ambiente di sviluppo: l’installazione effettiva sul DXP2800 resta una verifica successiva, dopo che l’immagine è pubblicata.
 
 ## Verifica proposta
 
