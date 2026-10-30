@@ -290,7 +290,7 @@ def make_round(config: dict, entrants: list[dict], matches: list[dict], round_nu
     if len(active) % 2:
         bye_person = _select_bye(config, field, prior, active)
         active = [p for p in active if p["id"] != bye_person["id"]]
-    pairs, pairing_warnings = _pair_swiss(config, active, prior)
+    pairs, pairing_warnings = _pair_swiss(config, field, prior, pair_field=active)
     warnings.extend(pairing_warnings)
     round_matches = [_match_template(round_number, i + 1, a, b) for i, (a, b) in enumerate(pairs)]
     if bye_person:
