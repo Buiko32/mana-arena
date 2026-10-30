@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import io
 import json
+import hashlib
+import sqlite3
 import zipfile
 
 import pytest
@@ -326,4 +328,150 @@ def test_restore_rejects_traversal_and_requires_explicit_confirmation(client):
     assert no_confirmation.status_code == 422
     confirmed = client.post("/api/admin/restore?confirm=true", files={"file": ("bad.zip", archive_bytes.getvalue(), "application/zip")}, headers=headers)
     assert confirmed.status_code == 422
+
+
+def test_league_rollback_preserves_round_robin_schedule(client):
+    headers = admin_headers(client)
+    cfg = config(structure="league", rounds=None, league_mode="single")
+    tid, _ = tournament_with_players(client, headers, 4, cfg)
+    started = start(client, tid, headers)
+    calendar = started.json()["matches"]
+    assert len(calendar) == 6
+    for match in [row for row in calendar if row["round"] == 1]:
+        assert client.put(f"/api/admin/tournaments/{tid}/matches/{match['id']}/result", json={"result":"p1_win","p1_games":1,"p2_games":0}, headers=headers).status_code == 200
+    player_id = started.json()["entrants"][0]["id"]
+    withdrawn = client.post(f"/api/admin/tournaments/{tid}/withdrawals", json={"player_id":player_id}, headers=headers)
+    assert withdrawn.status_code == 200 and withdrawn.json()["effective_round"] == 2
+    dependent = next(row for row in calendar if row["round"] == 2)
+    preview = client.post(f"/api/admin/tournaments/{tid}/rollback", json={"match_id":dependent["id"]}, headers=headers)
+    assert preview.status_code == 409
+    assert client.post(f"/api/admin/tournaments/{tid}/rollback", json={"match_id":dependent["id"],"confirm":True}, headers=headers).status_code == 200
+    after = client.get(f"/api/admin/tournaments/{tid}", headers=headers).json()["matches"]
+    assert len(after) == len(calendar)
+    assert all(row["result"] == "p1_win" for row in after if row["round"] == 1)
+    assert all(row.get("result") is None for row in after if row["round"] >= 2)
+    state = client.get(f"/api/admin/tournaments/{tid}", headers=headers).json()
+    assert next(row for row in state["entrants"] if row["id"] == player_id)["withdrawn"] is False
+
+
+def test_rollback_restores_withdrawal_state_and_swiss_regeneration(client):
+    headers = admin_headers(client)
+    tid, people = tournament_with_players(client, headers, 4, config(rounds=3))
+    start(client, tid, headers)
+    first = client.post(f"/api/admin/tournaments/{tid}/rounds/next", json={}, headers=headers).json()
+    for match in first["matches"]:
+        assert client.put(f"/api/admin/tournaments/{tid}/matches/{match['id']}/result", json={"result":"p1_win","p1_games":1,"p2_games":0}, headers=headers).status_code == 200
+    second = client.post(f"/api/admin/tournaments/{tid}/rounds/next", json={}, headers=headers).json()
+    withdrawn_id = second["matches"][0]["p1"]
+    outcome = client.post(f"/api/admin/tournaments/{tid}/withdrawals", json={"player_id":withdrawn_id}, headers=headers)
+    assert outcome.status_code == 200
+    assert outcome.json()["effective_round"] == 2
+    target = first["matches"][0]
+    assert client.post(f"/api/admin/tournaments/{tid}/rollback", json={"match_id":target["id"],"confirm":True}, headers=headers).status_code == 200
+    entrants = client.get(f"/api/admin/tournaments/{tid}", headers=headers).json()["entrants"]
+    assert next(row for row in entrants if row["id"] == withdrawn_id)["withdrawn"] is False
+    regenerated = client.post(f"/api/admin/tournaments/{tid}/rounds/next", json={}, headers=headers)
+    assert regenerated.status_code == 200 and regenerated.json()["round"] == 1
+    assert any(withdrawn_id in (match["p1"],match["p2"]) for match in regenerated.json()["matches"])
+
+
+def test_swiss_withdrawal_uses_next_round_when_no_round_is_open(client):
+    headers = admin_headers(client)
+    tid, people = tournament_with_players(client, headers, 4, config(rounds=3))
+    start(client, tid, headers)
+    first = client.post(f"/api/admin/tournaments/{tid}/rounds/next", json={}, headers=headers).json()
+    for match in first["matches"]:
+        assert client.put(f"/api/admin/tournaments/{tid}/matches/{match['id']}/result", json={"result":"p1_win","p1_games":1,"p2_games":0}, headers=headers).status_code == 200
+    response = client.post(f"/api/admin/tournaments/{tid}/withdrawals", json={"player_id":people[0]["id"]}, headers=headers)
+    assert response.status_code == 200 and response.json()["effective_round"] == 2
+    next_round = client.post(f"/api/admin/tournaments/{tid}/rounds/next", json={}, headers=headers).json()
+    assert all(people[0]["id"] not in (match["p1"],match["p2"]) for match in next_round["matches"])
+
+
+def _zip_with_database(database_bytes):
+    members = {"db/mana-arena.sqlite3": database_bytes}
+    manifest = {"version":1,"database":"db/mana-arena.sqlite3","files":[{"path":name,"size":len(data),"sha256":hashlib.sha256(data).hexdigest()} for name,data in members.items()]}
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer,"w",compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("manifest.json",json.dumps(manifest))
+        for name,data in members.items(): archive.writestr(name,data)
+    return buffer.getvalue()
+
+
+def _incomplete_schema_backup(tmp_path):
+    db_path = tmp_path / "incomplete.sqlite3"
+    conn = sqlite3.connect(db_path)
+    try:
+        for table in ("admin","players","tournaments","entrants","matches","audit"):
+            conn.execute(f"CREATE TABLE {table}(placeholder TEXT)")
+        conn.execute("PRAGMA user_version=2")
+        conn.commit()
+    finally:
+        conn.close()
+    return _zip_with_database(db_path.read_bytes())
+
+
+def test_restore_rejects_integral_but_incomplete_schema_and_preserves_session(client, tmp_path):
+    headers = admin_headers(client)
+    player(client, headers, "Dato da preservare")
+    bad_archive = _incomplete_schema_backup(tmp_path)
+    response = client.post("/api/admin/restore?confirm=true", files={"file":("invalid-schema.zip",bad_archive,"application/zip")}, headers=headers)
+    assert response.status_code == 422
+    assert client.get("/api/admin/session").status_code == 200
+    assert any(row["name"] == "Dato da preservare" for row in client.get("/api/admin/players",headers=headers).json())
+
+
+def test_restore_rolls_back_files_if_post_validation_activation_fails(client, monkeypatch):
+    import app.main as main_module
+    headers = admin_headers(client)
+    player(client, headers, "Dati precedenti")
+    snapshot = client.get("/api/admin/backup").content
+    player(client, headers, "Solo nel DB attuale")
+    def fail_initialize():
+        raise RuntimeError("errore attivazione staging simulato")
+    monkeypatch.setattr(client.app.state.db, "initialize", fail_initialize)
+    response = client.post("/api/admin/restore?confirm=true", files={"file":("restore.zip",snapshot,"application/zip")}, headers=headers)
+    assert response.status_code == 422
+    assert client.get("/api/admin/session").status_code == 200
+    names = {row["name"] for row in client.get("/api/admin/players",headers=headers).json()}
+    assert {"Dati precedenti","Solo nel DB attuale"}.issubset(names)
+
+
+def test_archive_reopen_restores_completed_state_without_champion(client):
+    headers = admin_headers(client)
+    cfg = config(structure="single_elim", rounds=None, loss_threshold=None)
+    tid, people = tournament_with_players(client, headers, 4, cfg)
+    start(client, tid, headers)
+    first = client.get(f"/api/admin/tournaments/{tid}", headers=headers).json()["matches"]
+    assert len(first) == 2
+    for person in people:
+        assert client.post(f"/api/admin/tournaments/{tid}/withdrawals",json={"player_id":person["id"]},headers=headers).status_code == 200
+    second = client.post(f"/api/admin/tournaments/{tid}/rounds/next", json={}, headers=headers)
+    assert second.status_code == 200
+    completed = client.get(f"/api/admin/tournaments/{tid}",headers=headers).json()
+    assert completed["status"] == "completed" and completed["champion_id"] is None
+    archived = client.post(f"/api/admin/tournaments/{tid}/archive",headers=headers)
+    assert archived.status_code == 200 and archived.json()["status"] == "archived"
+    reopened = client.post(f"/api/admin/tournaments/{tid}/reopen",headers=headers)
+    assert reopened.status_code == 200 and reopened.json()["status"] == "completed"
+
+
+def test_completed_and_archived_config_requires_explicit_reopen_then_rollback(client):
+    headers = admin_headers(client)
+    tid, _ = tournament_with_players(client, headers, 2, config(rounds=1))
+    start(client, tid, headers)
+    round1 = client.post(f"/api/admin/tournaments/{tid}/rounds/next",json={},headers=headers).json()
+    match=round1["matches"][0]
+    assert client.put(f"/api/admin/tournaments/{tid}/matches/{match['id']}/result",json={"result":"p1_win","p1_games":1,"p2_games":0},headers=headers).status_code == 200
+    assert client.get(f"/api/admin/tournaments/{tid}",headers=headers).json()["status"] == "completed"
+    changed = {"config":config("Modificato",rounds=1)}
+    assert client.post(f"/api/admin/tournaments/{tid}/archive",headers=headers).json()["status"] == "archived"
+    direct = client.put(f"/api/admin/tournaments/{tid}/config?confirm_rollback=true",json=changed,headers=headers)
+    assert direct.status_code == 409 and direct.json()["detail"]["requires_reopen"] is True
+    assert client.post(f"/api/admin/tournaments/{tid}/reopen",headers=headers).json()["status"] == "completed"
+    archived_confirm = client.put(f"/api/admin/tournaments/{tid}/config?confirm_rollback=true",json=changed,headers=headers)
+    assert archived_confirm.status_code == 409 and archived_confirm.json()["detail"]["requires_reopen"] is True
+    assert client.post(f"/api/admin/tournaments/{tid}/reopen",headers=headers).json()["status"] == "active"
+    assert client.put(f"/api/admin/tournaments/{tid}/config",json=changed,headers=headers).status_code == 409
+    assert client.put(f"/api/admin/tournaments/{tid}/config?confirm_rollback=true",json=changed,headers=headers).status_code == 200
 

@@ -51,6 +51,7 @@ class Database:
                     id TEXT PRIMARY KEY, config_json TEXT NOT NULL, frozen_config_json TEXT,
                     status TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1,
                     warnings_json TEXT NOT NULL DEFAULT '[]', champion_id TEXT,
+                    archived_from TEXT,
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
                 CREATE TABLE IF NOT EXISTS entrants (
@@ -63,11 +64,21 @@ class Database:
                     round_no INTEGER NOT NULL, table_no INTEGER NOT NULL, data_json TEXT NOT NULL,
                     UNIQUE(tournament_id, round_no, table_no)
                 );
+                CREATE TABLE IF NOT EXISTS withdrawals (
+                    tournament_id TEXT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+                    player_id TEXT NOT NULL REFERENCES players(id), effective_round INTEGER NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY(tournament_id,player_id)
+                );
                 CREATE TABLE IF NOT EXISTS audit (
                     id INTEGER PRIMARY KEY AUTOINCREMENT, tournament_id TEXT REFERENCES tournaments(id) ON DELETE CASCADE,
                     action TEXT NOT NULL, detail_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
             """)
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(tournaments)")}
+            if "archived_from" not in columns:
+                conn.execute("ALTER TABLE tournaments ADD COLUMN archived_from TEXT")
+            conn.execute("PRAGMA user_version=2")
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
@@ -113,7 +124,8 @@ class Database:
     @staticmethod
     def tournament(row):
         return {"id": row["id"], "config": _load(row["config_json"]), "frozen_config": _load(row["frozen_config_json"]) if row["frozen_config_json"] else None,
-                "status": row["status"], "revision": row["revision"], "warnings": _load(row["warnings_json"], []), "champion_id": row["champion_id"]}
+                "status": row["status"], "revision": row["revision"], "warnings": _load(row["warnings_json"], []), "champion_id": row["champion_id"],
+                "archived_from": row["archived_from"]}
 
     @staticmethod
     def get_tournament(conn, tid):
@@ -129,6 +141,11 @@ class Database:
     def get_matches(conn, tid):
         rows = conn.execute("SELECT id,data_json FROM matches WHERE tournament_id=? ORDER BY round_no,table_no", (tid,)).fetchall()
         return [{"id": r["id"], **_load(r["data_json"])} for r in rows]
+
+    @staticmethod
+    def get_withdrawals(conn, tid):
+        rows = conn.execute("SELECT player_id,effective_round,created_at FROM withdrawals WHERE tournament_id=? ORDER BY effective_round,created_at", (tid,)).fetchall()
+        return [dict(row) for row in rows]
 
     @staticmethod
     def save_matches(conn, tid, matches):

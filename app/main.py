@@ -248,6 +248,10 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
         response.delete_cookie(CSRF_COOKIE, path="/")
         return response
 
+    @application.get("/api/admin/session")
+    def session_status(session=Depends(admin_session)):
+        return {"username": session["sub"], "csrf_token": session["csrf"], "expires_at": session["exp"]}
+
     @application.post("/api/admin/password")
     async def change_password(request: Request, session=Depends(admin_write)):
         body = await _json(request)
@@ -371,11 +375,10 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
         body = await _json(request); cfg = _cfg(body.get("config"))
         with MUTATION_LOCK, db.transaction() as conn:
             tournament = _row_tournament(conn, tid)
-            if tournament["status"] in ("completed", "archived") and not confirm_rollback:
+            if tournament["status"] in ("completed", "archived"):
                 matches = Database.get_matches(conn, tid)
-                affected_rounds = sorted({m["round"] for m in matches})
-                _detail(409, "La modifica richiede la riapertura e il rollback completo.", requires_confirmation=True,
-                        affected_rounds=affected_rounds, affected_results=sum(bool(m.get("result")) for m in matches))
+                _detail(409, "Riapri esplicitamente il torneo prima di confermare il rollback.", requires_reopen=True, requires_confirmation=bool(confirm_rollback),
+                        affected_rounds=sorted({m["round"] for m in matches}), affected_results=sum(bool(m.get("result")) for m in matches))
             matches = Database.get_matches(conn, tid)
             if tournament["status"] != "draft" and not confirm_rollback:
                 _detail(409, "La configurazione è congelata; conferma il rollback completo.", requires_confirmation=True,
@@ -383,6 +386,7 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             if confirm_rollback and tournament["status"] != "draft":
                 conn.execute("DELETE FROM matches WHERE tournament_id=?", (tid,))
                 conn.execute("UPDATE entrants SET withdrawn=0 WHERE tournament_id=?", (tid,))
+                conn.execute("DELETE FROM withdrawals WHERE tournament_id=?", (tid,))
                 Database.audit(conn, tid, "full_rollback_for_config", {"rounds": sorted({m["round"] for m in matches}), "results": sum(bool(m.get("result")) for m in matches)})
             _bump(conn, tid, status="draft", config=cfg, frozen={})
             conn.execute("UPDATE tournaments SET frozen_config_json=NULL,champion_id=NULL WHERE id=?", (tid,))
@@ -551,10 +555,18 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             entrant = next((p for p in entrants if p["id"] == pid), None)
             if not entrant: _detail(404, "Partecipante non trovato.")
             if entrant["withdrawn"]: _detail(409, "Il partecipante risulta già ritirato.")
-            conn.execute("UPDATE entrants SET withdrawn=1 WHERE tournament_id=? AND player_id=?", (tid, pid))
             matches = Database.get_matches(conn, tid)
+            open_for_player = [m for m in matches if m.get("result") is None and pid in (m.get("p1"), m.get("p2"))]
+            if cfg["structure"] == "league":
+                effective_round = min((m["round"] for m in open_for_player), default=max((m["round"] for m in matches), default=0) + 1)
+            else:
+                latest_round = max((m["round"] for m in matches), default=0)
+                latest_open = any(m.get("round") == latest_round and m.get("result") is None for m in matches)
+                effective_round = latest_round if latest_round and latest_open else latest_round + 1
+            conn.execute("INSERT INTO withdrawals(tournament_id,player_id,effective_round) VALUES(?,?,?)", (tid, pid, effective_round))
+            conn.execute("UPDATE entrants SET withdrawn=1 WHERE tournament_id=? AND player_id=?", (tid, pid))
             for index, match in enumerate(matches):
-                if match.get("result") is not None or pid not in (match.get("p1"), match.get("p2")) or not match.get("p2"):
+                if match.get("round", 0) < effective_round or match.get("result") is not None or pid not in (match.get("p1"), match.get("p2")) or not match.get("p2"):
                     continue
                 other = match["p2"] if match["p1"] == pid else match["p1"]
                 outcome = "p1_forfeit" if match["p1"] == pid else "p2_forfeit"
@@ -566,15 +578,15 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
                     break
             if cfg["structure"] == "league":
                 for index, match in enumerate(matches):
-                    if match.get("result") is None and pid in (match.get("p1"), match.get("p2")) and match.get("p2"):
+                    if match.get("round", 0) >= effective_round and match.get("result") is None and pid in (match.get("p1"), match.get("p2")) and match.get("p2"):
                         outcome = "p1_forfeit" if match["p1"] == pid else "p2_forfeit"
                         matches[index] = engine.apply_result(cfg, match, {"result": outcome, "p1_games": 0, "p2_games": 0})
             _persist_match_rows(conn, tid, matches)
             _bump(conn, tid)
-            Database.audit(conn, tid, "player_withdrew", {"player_id": pid})
+            Database.audit(conn, tid, "player_withdrew", {"player_id": pid, "effective_round": effective_round})
             refreshed = Database.get_entrants(conn, tid)
             _finalize_if_done(conn, tournament, refreshed, matches)
-            return {"entrant": next(p for p in refreshed if p["id"] == pid), "matches": matches}
+            return {"entrant": next(p for p in refreshed if p["id"] == pid), "effective_round": effective_round, "matches": matches}
 
     @application.post("/api/admin/tournaments/{tid}/rollback")
     async def rollback(tid: str, request: Request, session=Depends(admin_write)):
@@ -591,7 +603,33 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             if not confirm:
                 _detail(409, "Conferma il rollback dei risultati e degli abbinamenti dipendenti.", requires_confirmation=True, **summary)
             cfg = tournament["frozen_config"] or tournament["config"]
-            kept = [m for m in matches if m["round"] < target["round"]]
+            withdrawals = Database.get_withdrawals(conn, tid)
+            conn.execute("DELETE FROM withdrawals WHERE tournament_id=? AND effective_round>=?", (tid, target["round"]))
+            withdrawals = [row for row in withdrawals if row["effective_round"] < target["round"]]
+            active_withdrawals = {row["player_id"]: row["effective_round"] for row in withdrawals}
+            conn.execute("UPDATE entrants SET withdrawn=0 WHERE tournament_id=?", (tid,))
+            for player_id in active_withdrawals:
+                conn.execute("UPDATE entrants SET withdrawn=1 WHERE tournament_id=? AND player_id=?", (tid, player_id))
+            if cfg["structure"] == "league":
+                kept = []
+                for match in matches:
+                    if match["round"] >= target["round"] and match.get("result") is not None and match.get("result") != "bye":
+                        match = {**match, "result": None, "p1_games": 0, "p2_games": 0,
+                                 "p1_points": 0, "p2_points": 0, "p1_wins": 0, "p2_wins": 0,
+                                 "p1_draws": 0, "p2_draws": 0, "p1_losses": 0, "p2_losses": 0}
+                    if match["round"] >= target["round"] and match.get("result") is None and match.get("p2"):
+                        left_out = active_withdrawals.get(match["p1"], 10**9) <= match["round"]
+                        right_out = active_withdrawals.get(match["p2"], 10**9) <= match["round"]
+                        if left_out ^ right_out:
+                            result = "p1_forfeit" if left_out else "p2_forfeit"
+                            match = engine.apply_result(cfg, match, {"result": result, "p1_games": 0, "p2_games": 0})
+                        elif left_out and right_out:
+                            match = {**match, "result": "void", "p1_games": 0, "p2_games": 0,
+                                     "p1_points": 0, "p2_points": 0, "p1_wins": 0, "p2_wins": 0,
+                                     "p1_draws": 0, "p2_draws": 0, "p1_losses": 0, "p2_losses": 0}
+                    kept.append(match)
+            else:
+                kept = [m for m in matches if m["round"] < target["round"]]
             _persist_match_rows(conn, tid, kept)
             conn.execute("UPDATE tournaments SET status='active',champion_id=NULL WHERE id=?", (tid,))
             Database.audit(conn, tid, "match_rollback", summary); _bump(conn, tid)
@@ -606,6 +644,7 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             matches = Database.get_matches(conn, tid)
             conn.execute("DELETE FROM matches WHERE tournament_id=?", (tid,))
             conn.execute("UPDATE entrants SET withdrawn=0 WHERE tournament_id=?", (tid,))
+            conn.execute("DELETE FROM withdrawals WHERE tournament_id=?", (tid,))
             conn.execute("UPDATE tournaments SET status='draft',frozen_config_json=NULL,champion_id=NULL WHERE id=?", (tid,))
             Database.audit(conn, tid, "tournament_reset", {"rounds": sorted({m["round"] for m in matches}), "results": sum(bool(m.get("result")) for m in matches)})
             _bump(conn, tid)
@@ -616,18 +655,24 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
         with MUTATION_LOCK, db.transaction() as conn:
             tournament = _row_tournament(conn, tid)
             if tournament["status"] == "archived": _detail(409, "Il torneo è già archiviato.")
-            conn.execute("UPDATE tournaments SET status='archived',revision=revision+1 WHERE id=?", (tid,))
-            Database.audit(conn, tid, "tournament_archived", {})
+            conn.execute("UPDATE tournaments SET archived_from=status,status='archived',revision=revision+1 WHERE id=?", (tid,))
+            Database.audit(conn, tid, "tournament_archived", {"previous_status": tournament["status"]})
             return Database.get_tournament(conn, tid)
 
     @application.post("/api/admin/tournaments/{tid}/reopen")
     def reopen_tournament(tid: str, session=Depends(admin_write)):
         with MUTATION_LOCK, db.transaction() as conn:
             tournament = _row_tournament(conn, tid)
-            if tournament["status"] != "archived": _detail(409, "Solo un torneo archiviato può essere riaperto.")
-            status = "completed" if tournament["champion_id"] or (tournament["frozen_config"] and tournament["frozen_config"]["structure"] == "league" and all(m.get("result") for m in Database.get_matches(conn, tid))) else "active" if tournament["frozen_config"] else "draft"
-            conn.execute("UPDATE tournaments SET status=?,revision=revision+1 WHERE id=?", (status, tid))
-            Database.audit(conn, tid, "tournament_reopened", {"status": status})
+            if tournament["status"] == "archived":
+                status = tournament["archived_from"] or ("active" if tournament["frozen_config"] else "draft")
+                conn.execute("UPDATE tournaments SET status=?,archived_from=NULL,revision=revision+1 WHERE id=?", (status, tid))
+                Database.audit(conn, tid, "tournament_reopened", {"status": status})
+            elif tournament["status"] == "completed":
+                status = "active"
+                conn.execute("UPDATE tournaments SET status='active',revision=revision+1 WHERE id=?", (tid,))
+                Database.audit(conn, tid, "completed_tournament_reopened_for_edit", {"previous_champion_id": tournament["champion_id"]})
+            else:
+                _detail(409, "Riapri un torneo archiviato o concluso.")
             return Database.get_tournament(conn, tid)
 
     @application.get("/api/admin/tournaments/{tid}/audit")
@@ -676,14 +721,15 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
         if len(blob) > MAX_RESTORE: _detail(413, "Il backup non può superare 100 MiB.")
         with MUTATION_LOCK:
             try:
-                restored_photos = restore_backup(db, blob)
+                def activate_restored_database():
+                    db.initialize()
+                    with db.transaction() as conn:
+                        conn.execute("DELETE FROM sessions")
+                restored_photos = restore_backup(db, blob, after_install=activate_restored_database)
             except ValueError as exc:
                 _detail(422, str(exc))
             except Exception:
                 _detail(422, "Non è stato possibile ripristinare il backup.")
-            db.initialize()
-            with db.transaction() as conn:
-                conn.execute("DELETE FROM sessions")
             request.app.state.auth.revoke_all()
         response = Response(content=json.dumps({"ok": True, "restored_photos": len(restored_photos)}), media_type="application/json")
         response.delete_cookie(SESSION_COOKIE, path="/"); response.delete_cookie(CSRF_COOKIE, path="/")

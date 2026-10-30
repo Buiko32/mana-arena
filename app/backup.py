@@ -15,6 +15,17 @@ MAX_ARCHIVE = 100 * 1024 * 1024
 MAX_UNPACKED = 200 * 1024 * 1024
 MAX_FILES = 5000
 DB_MEMBER = "db/mana-arena.sqlite3"
+SCHEMA_VERSION = 2
+SCHEMA_COLUMNS = {
+    "admin": {"id", "username", "salt", "password_hash", "revision"},
+    "sessions": {"nonce", "username", "expires_at"},
+    "players": {"id", "name", "photo", "active", "created_at", "updated_at"},
+    "tournaments": {"id", "config_json", "frozen_config_json", "status", "revision", "warnings_json", "champion_id", "archived_from", "created_at", "updated_at"},
+    "entrants": {"tournament_id", "player_id", "seed", "withdrawn"},
+    "matches": {"id", "tournament_id", "round_no", "table_no", "data_json"},
+    "withdrawals": {"tournament_id", "player_id", "effective_round", "created_at"},
+    "audit": {"id", "tournament_id", "action", "detail_json", "created_at"},
+}
 
 
 def create_backup(database) -> bytes:
@@ -105,11 +116,37 @@ def _read_verified(blob: bytes) -> tuple[dict, dict[str, bytes]]:
         return manifest, contents
 
 
-def restore_backup(database, blob: bytes) -> list[str]:
+def _validate_database(path: Path) -> None:
+    check = sqlite3.connect(path)
+    try:
+        if check.execute("PRAGMA user_version").fetchone()[0] != SCHEMA_VERSION:
+            raise ValueError("Versione schema del backup non supportata.")
+        integrity = check.execute("PRAGMA integrity_check").fetchone()[0]
+        tables = {row[0] for row in check.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        if integrity != "ok" or not set(SCHEMA_COLUMNS).issubset(tables):
+            raise ValueError("Il database del backup non supera la verifica schema/integrità.")
+        for table, expected in SCHEMA_COLUMNS.items():
+            columns = {row[1] for row in check.execute(f"PRAGMA table_info({table})")}
+            if columns != expected:
+                raise ValueError(f"Schema del backup non compatibile: tabella {table}.")
+        if check.execute("PRAGMA foreign_key_check").fetchone():
+            raise ValueError("Il database del backup contiene riferimenti non validi.")
+        admin_rows = check.execute("SELECT COUNT(*) FROM admin").fetchone()[0]
+        admin = check.execute("SELECT username,salt,password_hash FROM admin WHERE id=1").fetchone()
+        if admin_rows != 1 or admin is None or not admin[0] or len(admin[1] or b"") < 16 or len(admin[2] or b"") != 32:
+            raise ValueError("Il backup non contiene un amministratore valido.")
+    finally:
+        check.close()
+
+
+def restore_backup(database, blob: bytes, after_install=None) -> list[str]:
     _, files = _read_verified(blob)
     stage = Path(tempfile.mkdtemp(prefix=".restore-", dir=database.data_dir))
-    staged_db = stage / "mana-arena.sqlite3"
-    staged_photos = stage / "photos"
+    stage_data = stage / "data"
+    stage_db_dir = stage_data / "db"
+    staged_db = stage_db_dir / "mana-arena.sqlite3"
+    staged_photos = stage_data / "photos"
+    stage_db_dir.mkdir(parents=True)
     staged_photos.mkdir()
     old_db = stage / "previous.sqlite3"
     old_photos = stage / "previous-photos"
@@ -127,21 +164,20 @@ def restore_backup(database, blob: bytes) -> list[str]:
                 raise ValueError("Nome foto nel backup non valido.")
             (staged_photos / filename).write_bytes(data)
             photo_names.append(filename)
+        _validate_database(staged_db)
+        staged_database = type(database)(stage_data)
+        staged_database.initialize()
+        with staged_database.transaction() as conn:
+            conn.execute("DELETE FROM sessions")
+        _validate_database(staged_db)
         check = sqlite3.connect(staged_db)
         try:
-            integrity = check.execute("PRAGMA integrity_check").fetchone()[0]
-            tables = {row[0] for row in check.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-            required = {"admin", "players", "tournaments", "entrants", "matches", "audit"}
-            if integrity != "ok" or not required.issubset(tables):
-                raise ValueError("Il database del backup non supera la verifica.")
-            if check.execute("PRAGMA foreign_key_check").fetchone():
-                raise ValueError("Il database del backup contiene riferimenti non validi.")
             referenced = {row[0] for row in check.execute("SELECT photo FROM players WHERE photo IS NOT NULL")}
-            archived = {PurePosixPath(name).name for name in files if name.startswith("photos/")}
-            if any(not __import__("re").fullmatch(r"[0-9a-f]{32}\.jpg", filename) for filename in referenced) or referenced != archived:
-                raise ValueError("Le foto del backup non corrispondono ai profili.")
         finally:
             check.close()
+        archived = {PurePosixPath(name).name for name in files if name.startswith("photos/")}
+        if any(not __import__("re").fullmatch(r"[0-9a-f]{32}\.jpg", filename) for filename in referenced) or referenced != archived:
+            raise ValueError("Le foto del backup non corrispondono ai profili.")
         database.db_dir.mkdir(parents=True, exist_ok=True)
         if db_target.exists():
             os.replace(db_target, old_db)
@@ -153,6 +189,8 @@ def restore_backup(database, blob: bytes) -> list[str]:
             moved_old_photos = True
         os.replace(staged_photos, photos_target)
         installed_photos = True
+        if after_install is not None:
+            after_install()
         shutil.rmtree(old_photos, ignore_errors=True)
         old_db.unlink(missing_ok=True)
         return photo_names
@@ -163,6 +201,8 @@ def restore_backup(database, blob: bytes) -> list[str]:
             os.replace(old_photos, photos_target)
         if installed_db:
             db_target.unlink(missing_ok=True)
+        Path(str(db_target) + "-wal").unlink(missing_ok=True)
+        Path(str(db_target) + "-shm").unlink(missing_ok=True)
         if moved_old_db and old_db.exists():
             os.replace(old_db, db_target)
         raise
