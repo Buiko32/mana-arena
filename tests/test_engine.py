@@ -6,6 +6,7 @@ from app.engine import (
     make_round,
     make_schedule,
     validate_config,
+    _match_points_pct,
 )
 
 
@@ -383,6 +384,23 @@ def test_omw_uses_custom_match_points_without_a_minimum_floor():
     ]
     rows = {row["player_id"]: row for row in calculate_standings(cfg, field, history)}
     assert rows["p1"]["omw"] == 0.5
+
+
+def test_disabled_draw_points_do_not_reduce_attainable_match_point_percentage():
+    cfg = config(allow_draws=False, points={"win": 1, "draw": 10, "loss": 0, "bye": 1})
+    assert _match_points_pct(1, 1, cfg) == 1.0
+
+
+def test_void_record_with_populated_players_is_not_a_played_match_or_omw_opponent():
+    cfg = config()
+    history = [
+        played(cfg, 1, 1, "p1", "p4", "p2_win", p1_games=0, p2_games=1),
+        played(cfg, 1, 2, "p2", "p3", "p2_win", p1_games=0, p2_games=1),
+        {"round":3,"table":1,"p1":"p1","p2":"p2","bye":False,"result":"void","p1_games":0,"p2_games":0},
+    ]
+    rows = {row["player_id"]: row for row in calculate_standings(cfg, entrants(4), history)}
+    assert rows["p1"]["omw"] == 1.0
+    assert rows["p2"]["omw"] == 1.0
 
 
 @pytest.mark.parametrize("malformed", [[], {}, {"unexpected": "object"}])

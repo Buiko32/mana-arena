@@ -368,7 +368,12 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
     def admin_tournament(tid: str, session=Depends(admin_session)):
         with db.transaction() as conn:
             tournament = _row_tournament(conn, tid)
-            return {**tournament, "entrants": Database.get_entrants(conn, tid), "matches": Database.get_matches(conn, tid)}
+            entrants = Database.get_entrants(conn, tid)
+            matches = Database.get_matches(conn, tid)
+            cfg = tournament["frozen_config"] or tournament["config"]
+            return {**tournament, "entrants": entrants, "matches": matches,
+                    "rounds": public_rounds(matches),
+                    "standings": engine.calculate_standings(cfg, entrants, matches)}
 
     @application.put("/api/admin/tournaments/{tid}/config")
     async def update_config(tid: str, request: Request, confirm_rollback: bool = False, session=Depends(admin_write)):

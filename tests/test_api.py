@@ -135,6 +135,30 @@ def test_health_public_list_detail_standings_and_rounds(client):
     assert "audit" not in json.dumps(detail).lower()
 
 
+def test_admin_tournament_detail_contains_ui_ready_standings_and_rounds_in_every_state(client):
+    headers = admin_headers(client)
+    tid, _ = tournament_with_players(client, headers, 2, config(rounds=1))
+    path = "/api/admin/tournaments/" + tid
+    draft = client.get(path, headers=headers).json()
+    assert draft["status"] == "draft" and draft["rounds"] == []
+    assert len(draft["standings"]) == 2
+    assert all("name" in person and "photo_url" in person for person in draft["entrants"])
+    assert start(client, tid, headers).status_code == 200
+    round1 = client.post(path + "/rounds/next", json={}, headers=headers).json()
+    active = client.get(path, headers=headers).json()
+    assert active["status"] == "active" and active["rounds"][0]["round"] == 1
+    assert len(active["standings"]) == 2
+    match = round1["matches"][0]
+    assert client.put(path + "/matches/" + match["id"] + "/result", json={"result":"p1_win","p1_games":1,"p2_games":0}, headers=headers).status_code == 200
+    detail = client.get(path, headers=headers).json()
+    assert detail["status"] == "completed"
+    assert len(detail["standings"]) == 2 and detail["rounds"][0]["round"] == 1
+    assert client.post(path + "/archive", headers=headers).status_code == 200
+    archived = client.get(path, headers=headers).json()
+    assert archived["status"] == "archived"
+    assert len(archived["standings"]) == 2 and archived["rounds"][0]["round"] == 1
+
+
 def test_admin_bootstrap_login_logout_and_password_change(client):
     assert client.get("/api/admin/players").status_code == 401
     logged_in = login(client)
@@ -352,6 +376,33 @@ def test_league_rollback_preserves_round_robin_schedule(client):
     assert all(row.get("result") is None for row in after if row["round"] >= 2)
     state = client.get(f"/api/admin/tournaments/{tid}", headers=headers).json()
     assert next(row for row in state["entrants"] if row["id"] == player_id)["withdrawn"] is False
+
+
+def test_double_withdrawal_void_after_league_rollback_does_not_change_omw(client):
+    headers = admin_headers(client)
+    cfg = config(structure="league", rounds=None, league_mode="single")
+    tid, people = tournament_with_players(client, headers, 4, cfg)
+    started = start(client, tid, headers).json()
+    ids = [person["id"] for person in people]
+    calendar = started["matches"]
+    for player_id in ids[:2]:
+        match = next(row for row in calendar if row["round"] == 1 and player_id in (row["p1"], row["p2"]))
+        player_is_p1 = match["p1"] == player_id
+        winner = "p2_win" if player_is_p1 else "p1_win"
+        score = {"result":winner,"p1_games":1 if winner == "p1_win" else 0,"p2_games":1 if winner == "p2_win" else 0}
+        assert client.put("/api/admin/tournaments/" + tid + "/matches/" + match["id"] + "/result", json=score, headers=headers).status_code == 200
+    for player_id in ids[:2]:
+        response = client.post("/api/admin/tournaments/" + tid + "/withdrawals", json={"player_id":player_id}, headers=headers)
+        assert response.status_code == 200 and response.json()["effective_round"] == 2
+    future = next(row for row in calendar if row["round"] == 3 and {row["p1"],row["p2"]} == set(ids[:2]))
+    rollback = client.post("/api/admin/tournaments/" + tid + "/rollback", json={"match_id":future["id"],"confirm":True}, headers=headers)
+    assert rollback.status_code == 200
+    detail = client.get("/api/admin/tournaments/" + tid, headers=headers).json()
+    void = next(row for row in detail["matches"] if row["id"] == future["id"])
+    assert void["result"] == "void"
+    standings = {row["player_id"]:row for row in detail["standings"]}
+    assert standings[ids[0]]["omw"] == 1.0
+    assert standings[ids[1]]["omw"] == 1.0
 
 
 def test_rollback_restores_withdrawal_state_and_swiss_regeneration(client):

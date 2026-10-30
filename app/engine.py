@@ -100,6 +100,8 @@ def _is_finalized(match: dict) -> bool:
 def _history_stats(config: dict, entrants: list[dict], matches: list[dict]) -> dict[str, dict]:
     stats = {p["id"]: {"points": 0, "played_points": 0, "played_count": 0, "wins": 0, "draws": 0, "losses": 0, "byes": 0, "game_diff": 0, "opponents": [], "bye_count": 0} for p in entrants}
     for match in matches:
+        if match.get("result") == "void":
+            continue
         p1, p2 = match.get("p1"), match.get("p2")
         if p1 not in stats:
             continue
@@ -175,7 +177,9 @@ def _standing_order(config: dict, entrants: list[dict], matches: list[dict]) -> 
 def _match_points_pct(points: int, played_count: int, config: dict) -> float:
     if played_count <= 0:
         return 0.0
-    maximum = max(config["points"]["win"], config["points"]["draw"] if config["allow_draws"] else 0)
+    # The draw value is attainable only when draws are enabled; when enabled,
+    # validation already constrains it to be no greater than the win value.
+    maximum = config["points"]["win"]
     if maximum == 0:
         return 0.0
     return min(1.0, points / (played_count * maximum))

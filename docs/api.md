@@ -59,7 +59,7 @@ La foto è rielaborata in JPEG per eliminare metadati. Tipo/dimensioni non suppo
 | --- | --- |
 | GET /api/admin/tournaments | Elenco di tutti gli stati. |
 | POST /api/admin/tournaments | {"config":{...}}; crea bozza, 201. |
-| GET /api/admin/tournaments/{id} | Oggetto admin con entrants e matches. |
+| GET /api/admin/tournaments/{id} | Oggetto con id, config, frozen_config, status, revision, warnings, champion_id, archived_from, entrants, matches, rounds e standings. Ogni entrant conserva i campi amministrativi (id, seed, withdrawn) e include name e photo_url. Rounds è raggruppato come {round,matches}; standings usa le righe del motore. Disponibile in draft, active, completed e archived; non richiede che il torneo sia pubblico. |
 | PUT /api/admin/tournaments/{id}/config | {"config":{...}}; modifica una bozza. In active restituisce 409 con dettaglio affected_rounds/affected_results e requires_confirmation. Confermare con ?confirm_rollback=true: elimina risultati e turni, resetta ritiri, mantiene iscritti e audit e torna a bozza. Completed e archived richiedono prima POST reopen esplicito, anche se viene presentato confirm_rollback=true; il rollback resta una seconda conferma separata. |
 | DELETE /api/admin/tournaments/{id} | Elimina solo una bozza. |
 | POST /api/admin/tournaments/{id}/entrants | {"player_ids":["uuid",...]}; iscrive profili attivi univoci, massimo 64; restituisce array iscritti ordinati per seed. |
