@@ -159,6 +159,54 @@ def test_admin_tournament_detail_contains_ui_ready_standings_and_rounds_in_every
     assert len(archived["standings"]) == 2 and archived["rounds"][0]["round"] == 1
 
 
+@pytest.mark.parametrize("structure", ["swiss", "adapted", "league", "single_elim"])
+def test_withdrawing_every_player_completes_without_champion(structure, client):
+    headers = admin_headers(client)
+    changes = {"structure":structure}
+    if structure == "adapted":
+        changes.update(rounds=None, loss_threshold=2)
+    elif structure == "league":
+        changes.update(rounds=None, league_mode="single")
+    elif structure == "single_elim":
+        changes.update(rounds=None, loss_threshold=None)
+    cfg = config(**changes)
+    tid, people = tournament_with_players(client, headers, 2, cfg)
+    start(client, tid, headers)
+    first = client.post("/api/admin/tournaments/" + tid + "/withdrawals", json={"player_id":people[0]["id"]}, headers=headers)
+    assert first.status_code == 200
+    state = client.get("/api/admin/tournaments/" + tid, headers=headers).json()
+    if structure in ("league", "single_elim"):
+        assert state["status"] == "completed"
+        assert state["champion_id"] == people[1]["id"]
+        reopened = client.post("/api/admin/tournaments/" + tid + "/reopen", headers=headers)
+        assert reopened.status_code == 200 and reopened.json()["status"] == "active"
+    else:
+        assert state["status"] == "active"
+    second = client.post("/api/admin/tournaments/" + tid + "/withdrawals", json={"player_id":people[1]["id"]}, headers=headers)
+    assert second.status_code == 200
+    completed = client.get("/api/admin/tournaments/" + tid, headers=headers).json()
+    assert completed["status"] == "completed" and completed["champion_id"] is None
+    completion_events = [event for event in client.get("/api/admin/tournaments/" + tid + "/audit", headers=headers).json() if event["action"] == "tournament_completed"]
+    assert completion_events[-1]["detail"]["reason"] == "no_active_players"
+    if structure == "swiss":
+        no_next = client.post("/api/admin/tournaments/" + tid + "/rounds/next", json={}, headers=headers)
+        assert no_next.status_code == 409
+
+
+def test_public_active_entrants_include_seed_and_withdrawal_only(client):
+    headers = admin_headers(client)
+    tid, people = tournament_with_players(client, headers, 2)
+    draft = client.get("/api/public/tournaments/" + tid)
+    assert draft.status_code == 404
+    start(client, tid, headers)
+    assert client.post("/api/admin/tournaments/" + tid + "/withdrawals", json={"player_id":people[0]["id"]}, headers=headers).status_code == 200
+    public = client.get("/api/public/tournaments/" + tid).json()
+    assert all(set(person) == {"id", "name", "photo_url", "seed", "withdrawn"} for person in public["entrants"])
+    by_id = {person["id"]:person for person in public["entrants"]}
+    assert by_id[people[0]["id"]]["seed"] == 1 and by_id[people[0]["id"]]["withdrawn"] is True
+    assert by_id[people[1]["id"]]["seed"] == 2 and by_id[people[1]["id"]]["withdrawn"] is False
+
+
 def test_admin_bootstrap_login_logout_and_password_change(client):
     assert client.get("/api/admin/players").status_code == 401
     logged_in = login(client)
@@ -497,8 +545,6 @@ def test_archive_reopen_restores_completed_state_without_champion(client):
     assert len(first) == 2
     for person in people:
         assert client.post(f"/api/admin/tournaments/{tid}/withdrawals",json={"player_id":person["id"]},headers=headers).status_code == 200
-    second = client.post(f"/api/admin/tournaments/{tid}/rounds/next", json={}, headers=headers)
-    assert second.status_code == 200
     completed = client.get(f"/api/admin/tournaments/{tid}",headers=headers).json()
     assert completed["status"] == "completed" and completed["champion_id"] is None
     archived = client.post(f"/api/admin/tournaments/{tid}/archive",headers=headers)

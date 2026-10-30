@@ -6,6 +6,9 @@ from .engine import calculate_standings
 
 def champion_id(config: dict, entrants: list[dict], matches: list[dict]) -> str | None:
     structure = config["structure"]
+    active_ids = {person["id"] for person in entrants if not person.get("withdrawn")}
+    if not active_ids:
+        return None
     finalized = [m for m in matches if m.get("result") is not None]
     if structure == "single_elim":
         if not finalized:
@@ -20,7 +23,7 @@ def champion_id(config: dict, entrants: list[dict], matches: list[dict]) -> str 
                 winners.append(match.get("p1"))
             elif match.get("result") in ("p2_win", "p1_forfeit"):
                 winners.append(match.get("p2"))
-        winners = [winner for winner in winners if winner]
+        winners = [winner for winner in winners if winner in active_ids]
         return winners[0] if len(winners) == 1 else None
     if structure == "adapted":
         rows = calculate_standings(config, entrants, finalized)
@@ -28,7 +31,7 @@ def champion_id(config: dict, entrants: list[dict], matches: list[dict]) -> str 
         return remaining[0]["player_id"] if len(remaining) == 1 else None
     if structure == "swiss":
         rows = calculate_standings(config, entrants, finalized)
-        return rows[0]["player_id"] if rows else None
+        return next((row["player_id"] for row in rows if row["player_id"] in active_ids), None)
     return None
 
 

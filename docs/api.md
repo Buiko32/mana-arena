@@ -35,7 +35,7 @@ structure: swiss, adapted, league, single_elim. match_length: 1 (BO1) o 3 (BO3).
 ## Lettura pubblica
 
 - GET /api/public/tournaments: tornei active e completed; ogni elemento ha id, config, status, champion_id.
-- GET /api/public/tournaments/{id}: id, configurazione effettiva, status, entrants, matches, rounds, standings, champion_id, warnings. L'iscritto pubblico contiene solo id, name, photo_url, seed e withdrawn.
+- GET /api/public/tournaments/{id}: id, configurazione effettiva, status, entrants, matches, rounds, standings, champion_id, warnings. L'iscritto pubblico contiene esattamente id, name, photo_url, seed (intero) e withdrawn (booleano), senza campi amministrativi.
 - GET /api/public/tournaments/{id}/standings: righe player_id, seed, points, wins, draws, losses, byes, game_diff, omw, rank, eliminated.
 - GET /api/public/tournaments/{id}/rounds: array di {round, matches}; conserva i campi prodotti dal motore, compresi bracket_slot e i risultati bye/void.
 

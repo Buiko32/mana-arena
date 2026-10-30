@@ -99,13 +99,22 @@ def _finalize_if_done(conn, tournament, entrants, matches):
     latest = [m for m in matches if m["round"] == final_round]
     completed = False
     champ = None
-    if cfg["structure"] == "swiss":
+    reason = "rules_complete"
+    if cfg["structure"] == "adapted":
+        standings = engine.calculate_standings(cfg, entrants, matches)
+        eligible = [row for row in standings if not row["eliminated"]]
+    else:
+        active_ids = {person["id"] for person in entrants if not person.get("withdrawn")}
+        eligible = [person for person in entrants if person["id"] in active_ids]
+    if not eligible:
+        completed = True
+        reason = "no_active_players"
+    elif cfg["structure"] == "swiss":
         completed = final_round >= cfg["rounds"] and bool(latest) and all(m.get("result") for m in latest)
         if completed:
             champ = champion_id(cfg, entrants, matches)
     elif cfg["structure"] == "adapted":
-        standings = engine.calculate_standings(cfg, entrants, matches)
-        survivors = [row for row in standings if not row["eliminated"]]
+        survivors = eligible
         completed = len(survivors) <= 1 and bool(latest) and all(m.get("result") for m in latest)
         champ = survivors[0]["player_id"] if len(survivors) == 1 else None
     elif cfg["structure"] == "single_elim":
@@ -116,10 +125,10 @@ def _finalize_if_done(conn, tournament, entrants, matches):
         completed = bool(matches) and all(m.get("result") for m in matches)
         if completed:
             rows = engine.calculate_standings(cfg, entrants, matches)
-            champ = rows[0]["player_id"] if rows else None
+            champ = next((row["player_id"] for row in rows if row["player_id"] in {person["id"] for person in eligible}), None)
     if completed:
         conn.execute("UPDATE tournaments SET status='completed',champion_id=? WHERE id=?", (champ, tournament["id"]))
-        Database.audit(conn, tournament["id"], "tournament_completed", {"champion_id": champ})
+        Database.audit(conn, tournament["id"], "tournament_completed", {"champion_id": champ, "reason": reason})
         tournament["status"] = "completed"
         tournament["champion_id"] = champ
     return tournament
@@ -754,7 +763,8 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             entrants = Database.get_entrants(conn, tid)
             matches = Database.get_matches(conn, tid)
             cfg = tournament["frozen_config"] or tournament["config"]
-            return {"id": tid, "config": cfg, "status": tournament["status"], "entrants": [Database.public_player({"id": p["id"], "name": p["name"], "photo": p["photo_url"].rsplit("/",1)[-1] if p["photo_url"] else None}) for p in entrants],
+            public_entrants = [{"id": p["id"], "name": p["name"], "photo_url": p["photo_url"], "seed": p["seed"], "withdrawn": p["withdrawn"]} for p in entrants]
+            return {"id": tid, "config": cfg, "status": tournament["status"], "entrants": public_entrants,
                     "matches": matches, "rounds": public_rounds(matches), "standings": engine.calculate_standings(cfg, entrants, matches),
                     "champion_id": tournament["champion_id"], "warnings": tournament["warnings"]}
 
