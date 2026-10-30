@@ -55,10 +55,12 @@ def test_root_and_static_assets_are_served_as_local_web_assets(tmp_path):
         assert page.headers["content-type"].startswith("text/html")
         assert 'lang="it"' in page.text
         assert 'name="viewport"' in page.text
-        for path, mime in (("/static/style.css", "text/css"), ("/static/app.js", "javascript")):
+        for path, mime in (("/static/style.css", "text/css"), ("/static/brackets.js", "javascript"), ("/static/app.js", "javascript")):
             asset = client.get(path)
             assert asset.status_code == 200
             assert mime in asset.headers["content-type"]
+        assert page.text.index('/static/brackets.js') < page.text.index('/static/app.js')
+        assert "buildEliminationBracket" in client.get("/static/brackets.js").text
 
 
 def test_public_and_admin_entry_points_are_labeled_and_keyboard_friendly(tmp_path):
