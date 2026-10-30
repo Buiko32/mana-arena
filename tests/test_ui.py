@@ -2,6 +2,9 @@
 
 from fastapi.testclient import TestClient
 from html.parser import HTMLParser
+from io import BytesIO
+
+from PIL import Image
 
 from app.main import create_app
 
@@ -18,6 +21,7 @@ class StructureParser(HTMLParser):
         self.form_closed_before_fieldset = False
         self.dialog_forms = []
         self.dialog_close_buttons = []
+        self.hero_mascots = []
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
@@ -25,6 +29,8 @@ class StructureParser(HTMLParser):
             self.dialog_forms.append(attrs)
         if "data-dialog-close" in attrs:
             self.dialog_close_buttons.append((tag, attrs))
+        if "mascot--" in attrs.get("class", ""):
+            self.hero_mascots.append(attrs)
         element = (tag, attrs)
         element_id = attrs.get("id")
         if element_id:
@@ -92,6 +98,23 @@ def test_confirmation_dialog_close_control_is_not_a_form_submit(tmp_path):
         parser.feed(client.get("/").text)
     assert parser.dialog_forms == []
     assert parser.dialog_close_buttons == [("button", {"type": "button", "class": "dialog-close", "data-dialog-close": None, "aria-label": "Chiudi"})]
+
+
+def test_hero_mascots_are_five_local_decorative_wubrg_assets(tmp_path):
+    app = create_app(data_dir=tmp_path, admin_username="admin", admin_password="Valid-admin-passphrase-42", session_secret="ui-test-session-secret-at-least-32-bytes")
+    names = ("white", "blue", "black", "red", "green")
+    with TestClient(app) as client:
+        parser = StructureParser()
+        parser.feed(client.get("/").text)
+        assets = [client.get(f"/static/mascots/{name}.png") for name in names]
+    assert [image.get("src") for image in parser.hero_mascots] == [f"/static/mascots/{name}.png" for name in names]
+    assert all(image.get("alt") == "" and image.get("aria-hidden") == "true" for image in parser.hero_mascots)
+    assert all(response.status_code == 200 and response.headers.get("content-type", "").startswith("image/png") for response in assets)
+    assert all(response.content.startswith(b"\x89PNG\r\n\x1a\n") for response in assets)
+    for response in assets:
+        with Image.open(BytesIO(response.content)) as image:
+            assert image.mode == "RGBA"
+            assert image.getextrema()[3][0] == 0
 
 
 def test_static_interface_uses_only_local_assets_and_has_admin_workflow_controls(tmp_path):

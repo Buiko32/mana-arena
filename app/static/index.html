@@ -26,7 +26,13 @@
     <section id="public-view" class="view" aria-labelledby="public-title">
       <div class="hero">
         <div><h1 id="public-title">Mana Arena</h1></div>
-        <div class="hero-orb" aria-hidden="true"><span>✦</span></div>
+        <div class="hero-mascots" aria-hidden="true">
+          <img class="mascot mascot--white mascot-idle" src="/static/mascots/white.png" alt="" aria-hidden="true" width="1199" height="1312" decoding="async">
+          <img class="mascot mascot--blue mascot-idle" src="/static/mascots/blue.png" alt="" aria-hidden="true" width="1145" height="1374" decoding="async">
+          <img class="mascot mascot--black mascot-idle" src="/static/mascots/black.png" alt="" aria-hidden="true" width="1312" height="1199" decoding="async">
+          <img class="mascot mascot--red mascot-idle" src="/static/mascots/red.png" alt="" aria-hidden="true" width="1295" height="1214" decoding="async">
+          <img class="mascot mascot--green mascot-idle" src="/static/mascots/green.png" alt="" aria-hidden="true" width="1312" height="1199" decoding="async">
+        </div>
       </div>
       <div class="section-heading"><h2>Tornei</h2><span id="tournament-count" class="count-pill">—</span></div>
       <div id="public-error" class="notice error" role="alert" hidden></div>
@@ -35,7 +41,7 @@
     </section>
 
     <section id="admin-view" class="view" aria-labelledby="admin-title" hidden>
-      <div class="hero admin-hero"><div><h1 id="admin-title">Gestione</h1></div><div class="hero-orb smaller" aria-hidden="true"><span>⚙</span></div></div>
+      <div class="hero admin-hero"><div><h1 id="admin-title">Gestione</h1></div></div>
       <div id="admin-error" class="notice error" role="alert" hidden></div>
       <div id="login-panel" class="login-card">
         <div class="card-icon" aria-hidden="true">✦</div><div><h2>Accesso organizzatore</h2></div>
@@ -54,9 +60,9 @@
           <div id="admin-tournament-list" class="admin-tournament-list"><p class="muted">Caricamento…</p></div>
           <form id="tournament-form" class="form-card" hidden>
             <div class="form-card-heading"><h3 id="tournament-form-title">Nuovo torneo</h3><button type="button" class="icon-button" data-close-form="tournament-form" aria-label="Chiudi">×</button></div>
-            <div class="preset-row"><span class="muted">Parti da un preset:</span><button type="button" class="preset-button" data-preset="excel">Come Excel</button><button type="button" class="preset-button" data-preset="swiss">Swiss classico</button><button type="button" class="preset-button" data-preset="league">Girone</button></div>
+            <div class="preset-row"><span class="muted">Preset:</span><button type="button" class="preset-button" data-preset="excel">Come Excel</button><button type="button" class="preset-button" data-preset="swiss">Svizzera</button><button type="button" class="preset-button" data-preset="league">Girone</button></div>
             <fieldset><legend>Identità del torneo</legend><div class="form-grid two"><label>Nome<input name="name" maxlength="120" required placeholder="Es. Serata Mana #4"></label><label>Data<input name="date" type="date"></label><label>Formato Magic<input name="game_format" maxlength="80" list="format-options" required value="Modern"><datalist id="format-options"><option>Standard</option><option>Modern</option><option>Commander</option><option>Pauper</option></datalist></label><label>Descrizione<textarea name="description" rows="2" maxlength="4000" placeholder="Note per i partecipanti"></textarea></label></div></fieldset>
-            <fieldset><legend>Struttura e regole</legend><div class="form-grid three"><label>Struttura<select name="structure"><option value="swiss">Swiss</option><option value="adapted">Swiss adattato</option><option value="league">Girone all'italiana</option><option value="single_elim">Eliminazione diretta</option></select></label><label>Durata match<select name="match_length"><option value="1">BO1 · una partita</option><option value="3">BO3 · al meglio di tre</option></select></label><label id="rounds-field">Numero turni Swiss<input name="rounds" type="number" min="1" max="32" value="3"></label><label id="threshold-field" hidden>Sconfitte per eliminazione<input name="loss_threshold" type="number" min="2" max="5" value="2"></label><label id="league-field" hidden>Calendario<select name="league_mode"><option value="single">Solo andata</option><option value="double">Andata e ritorno</option></select></label><label>Assegnazione seed<select name="seeding"><option value="manual">Manuale</option><option value="random">Casuale all'avvio</option></select></label></div>
+            <fieldset><legend>Struttura e regole</legend><div class="form-grid three"><label>Struttura<select name="structure"><option value="swiss">Svizzera</option><option value="adapted">Svizzera adattata</option><option value="league">Girone all'italiana</option><option value="single_elim">Eliminazione diretta</option></select></label><label>Durata match<select name="match_length"><option value="1">BO1</option><option value="3">BO3</option></select></label><label id="rounds-field">Turni Svizzera<input name="rounds" type="number" min="1" max="32" value="3"></label><label id="threshold-field" hidden>Sconfitte per eliminazione<input name="loss_threshold" type="number" min="2" max="5" value="2"></label><label id="league-field" hidden>Calendario<select name="league_mode"><option value="single">Solo andata</option><option value="double">Andata e ritorno</option></select></label><label>Seed<select name="seeding"><option value="manual">Manuale</option><option value="random">Casuale all'avvio</option></select></label></div>
             <div class="settings-row"><label class="check-label"><input name="allow_draws" type="checkbox"> Ammetti le patte</label><p class="hint" id="draw-hint">Le patte non sono compatibili con l'eliminazione diretta.</p></div>
             <div class="points-grid"><label>Vittoria<input name="points.win" type="number" min="0" max="10" value="3"></label><label>Patta<input name="points.draw" type="number" min="0" max="10" value="1"></label><label>Sconfitta<input name="points.loss" type="number" min="0" max="10" value="0"></label><label>Bye<input name="points.bye" type="number" min="0" max="10" value="3"></label></div>
             <fieldset class="tiebreak-field"><legend>Spareggi · ordine di priorità</legend><p class="hint">Usa le frecce per ordinare. Il seed è sempre l’ultimo criterio.</p><ol id="tiebreak-list" class="tie-list"><li data-tiebreak="omw"><span>OMW · percentuale punti avversari</span><button type="button" aria-label="Sposta OMW in alto">↑</button><button type="button" aria-label="Sposta OMW in basso">↓</button><label><input type="checkbox" checked> Attivo</label></li><li data-tiebreak="wins"><span>Vittorie</span><button type="button" aria-label="Sposta vittorie in alto">↑</button><button type="button" aria-label="Sposta vittorie in basso">↓</button><label><input type="checkbox" checked> Attivo</label></li><li data-tiebreak="game_diff"><span>Differenza game</span><button type="button" aria-label="Sposta differenza game in alto">↑</button><button type="button" aria-label="Sposta differenza game in basso">↓</button><label><input type="checkbox" checked> Attivo</label></li></ol></fieldset>
@@ -66,12 +72,12 @@
           <section id="tournament-manager" class="manager-panel" hidden></section>
         </section>
         <section id="admin-players" class="admin-section" role="tabpanel" aria-labelledby="tab-players" hidden>
-          <div class="section-heading compact"><div><h2>Giocatori</h2></div></div>
+          <div class="section-heading compact mascot-section-heading"><h2>Giocatori</h2><img class="section-mascot" src="/static/mascots/green.png" alt="" aria-hidden="true" width="1312" height="1199" loading="lazy" decoding="async"></div>
           <form id="player-form" class="player-create"><label>Nome giocatore<input name="name" maxlength="100" required placeholder="Nome e cognome"></label><button class="button primary" type="submit">＋ Aggiungi</button></form>
           <div id="players-list" class="players-list" aria-live="polite"></div>
         </section>
         <section id="admin-backup" class="admin-section" role="tabpanel" aria-labelledby="tab-backup" hidden>
-          <div class="section-heading compact"><div><h2>Backup e ripristino</h2></div></div>
+          <div class="section-heading compact mascot-section-heading"><h2>Backup e ripristino</h2><img class="section-mascot" src="/static/mascots/black.png" alt="" aria-hidden="true" width="1312" height="1199" loading="lazy" decoding="async"></div>
           <div class="backup-grid"><article class="backup-card"><span class="backup-icon">↓</span><h3>Backup</h3><button id="backup-download" class="button secondary" type="button">Scarica ZIP</button></article><article class="backup-card danger-card"><span class="backup-icon">↥</span><h3>Ripristino</h3><p>Sostituisce i dati correnti e richiede un nuovo accesso.</p><form id="restore-form"><label>Archivio ZIP<input name="file" type="file" accept=".zip,application/zip" required></label><button class="button danger" type="submit">Ripristina</button></form></article></div>
         </section>
       </div>
