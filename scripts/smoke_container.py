@@ -175,6 +175,33 @@ def verify_persisted_player_and_photo(base: str, player_id: str, photo_url: str,
         raise RuntimeError("stored player photo content changed across container restart")
 
 
+def start_container(image: str, container: str, db_volume: str, photos_volume: str) -> str:
+    """Start a container and return the freshly published local HTTP endpoint."""
+    run = docker(
+        "run", "--detach", "--name", container,
+        "--publish", "127.0.0.1::3388",
+        "--env", "DATA_DIR=/data",
+        "--env", "ADMIN_USERNAME=ci-organizer",
+        "--env", f"ADMIN_PASSWORD={PASSWORD}",
+        "--env", f"SESSION_SECRET={SESSION_SECRET}",
+        "--env", "COOKIE_SECURE=false",
+        "--volume", f"{db_volume}:/data/db",
+        "--volume", f"{photos_volume}:/data/photos",
+        image,
+    )
+    if not run.stdout.strip():
+        raise RuntimeError("docker run did not return a container id")
+
+    port_result = docker("port", container, "3388/tcp")
+    mapping = port_result.stdout.strip().splitlines()
+    if not mapping:
+        raise RuntimeError(f"Docker did not publish container port 3388/tcp: {port_result.stderr}")
+    host_port = mapping[0].rsplit(":", 1)[-1]
+    if not host_port.isdigit():
+        raise RuntimeError(f"Docker returned an invalid published port: {mapping[0]}")
+    return f"http://127.0.0.1:{host_port}"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--image", required=True)
@@ -184,31 +211,19 @@ def main() -> int:
     container = f"mana-arena-smoke-{suffix}"
     db_volume = f"mana-arena-smoke-db-{suffix}"
     photos_volume = f"mana-arena-smoke-photos-{suffix}"
-    host_port = ""
     try:
         docker("volume", "create", db_volume)
         docker("volume", "create", photos_volume)
-        run = docker(
-            "run", "--detach", "--name", container,
-            "--publish", "127.0.0.1::3388",
-            "--env", "DATA_DIR=/data",
-            "--env", "ADMIN_USERNAME=ci-organizer",
-            "--env", f"ADMIN_PASSWORD={PASSWORD}",
-            "--env", f"SESSION_SECRET={SESSION_SECRET}",
-            "--env", "COOKIE_SECURE=false",
-            "--volume", f"{db_volume}:/data/db",
-            "--volume", f"{photos_volume}:/data/photos",
-            args.image,
-        )
-        if not run.stdout.strip():
-            raise RuntimeError("docker run did not return a container id")
-        port_result = docker("port", container, "3388/tcp")
-        host_port = port_result.stdout.strip().rsplit(":", 1)[-1]
-        base = f"http://127.0.0.1:{host_port}"
 
+        base = start_container(args.image, container, db_volume, photos_volume)
         wait_for_health(base, container)
         player_id, photo_url, photo_digest = create_player_and_photo(base)
-        docker("restart", container)
+
+        # Recreate the container instead of restarting it in place. The named
+        # volumes preserve the database and photos, while Docker allocates a
+        # fresh ephemeral host port that must be queried again.
+        docker("rm", "--force", container)
+        base = start_container(args.image, container, db_volume, photos_volume)
         wait_for_health(base, container)
         verify_persisted_player_and_photo(base, player_id, photo_url, photo_digest)
         print("Container smoke passed: health, anonymous write denied, and player/photo persisted across restart.")
