@@ -43,6 +43,10 @@ def request(base: str, path: str, *, opener=None, method: str = "GET", body=None
         return error.code, error.read().decode("utf-8", errors="replace")
     except urllib.error.URLError as error:
         return 0, str(error.reason)
+    except OSError as error:
+        # urllib can expose socket resets/timeouts directly while reading the response.
+        # Return a retryable connection failure so wait_for_health can poll again.
+        return 0, str(error)
 
 
 def upload_photo(base: str, player_id: str, opener, csrf: str):
@@ -64,6 +68,9 @@ def upload_photo(base: str, player_id: str, opener, csrf: str):
             return response.status, json.loads(raw) if raw else None
     except urllib.error.HTTPError as error:
         return error.code, error.read().decode("utf-8", errors="replace")
+    except (urllib.error.URLError, OSError) as error:
+        reason = getattr(error, "reason", error)
+        return 0, str(reason)
 
 
 def read_public_photo(base: str, photo_url: str) -> bytes:
@@ -78,6 +85,8 @@ def read_public_photo(base: str, photo_url: str) -> bytes:
         raise RuntimeError(f"public photo request failed: HTTP {error.code}") from error
     except urllib.error.URLError as error:
         raise RuntimeError(f"public photo request failed: {error.reason}") from error
+    except OSError as error:
+        raise RuntimeError(f"public photo request failed: {error}") from error
 
 
 def wait_for_health(base: str, container: str) -> None:
