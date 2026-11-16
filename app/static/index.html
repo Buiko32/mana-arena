@@ -29,7 +29,7 @@
       <a href="#global-ranking" data-ranking-link aria-current="false">Classifica globale</a>
       <a href="#admin-view" data-view-link="admin">Organizza</a>
     </nav>
-    <button type="button" id="confirmations-open" class="button quiet" aria-label="Risultati da confermare">✓</button><div class="session-area" id="session-area"><label class="visually-hidden" for="player-identity">Il tuo nome</label><select id="player-identity"><option value="">Scegli il tuo nome</option></select></div>
+    <button type="button" id="profile-open" class="button quiet" aria-label="Modifica il tuo profilo" title="Modifica il tuo profilo">👤</button><button type="button" id="confirmations-open" class="button quiet" aria-label="Risultati da confermare">✓</button><div class="session-area" id="session-area"><label class="visually-hidden" for="player-identity">Il tuo nome</label><select id="player-identity"><option value="">Scegli il tuo nome</option></select></div>
   </header>
   <main id="main-content" class="shell">
     <div id="public-view" class="view" aria-labelledby="public-title">
@@ -101,6 +101,7 @@
   <dialog id="confirm-dialog" aria-labelledby="confirm-title"><button type="button" class="dialog-close" data-dialog-close aria-label="Chiudi">×</button><h2 id="confirm-title">Conferma</h2><p id="confirm-message" class="muted"></p><div id="confirm-impact" class="impact-list"></div><div class="dialog-actions"><button id="confirm-cancel" class="button quiet" type="button">Annulla</button><button id="confirm-ok" class="button danger" type="button">Conferma</button></div></dialog>
   <button id="results-open" class="results-fab" type="button" aria-label="Inserisci o conferma un risultato">+</button>
   <dialog id="player-results-dialog" aria-labelledby="player-results-title"><button type="button" class="dialog-close" id="player-results-close" aria-label="Chiudi">×</button><h2 id="player-results-title">Inserisci il risultato</h2><div id="player-results-content"></div></dialog>
+  <dialog id="profile-dialog" aria-labelledby="profile-title"><button type="button" class="dialog-close" id="profile-close" aria-label="Chiudi">×</button><h2 id="profile-title">Il tuo profilo</h2><div id="profile-content"></div></dialog>
   <dialog id="confirmations-dialog" aria-labelledby="confirmations-title"><button type="button" class="dialog-close" id="confirmations-close" aria-label="Chiudi">×</button><h2 id="confirmations-title">Risultati da confermare</h2><div id="confirmations-content"></div></dialog>
   <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
 </body>

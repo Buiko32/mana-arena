@@ -84,6 +84,8 @@ class Database:
             player_columns = {row[1] for row in conn.execute("PRAGMA table_info(players)")}
             if "avatar_hue" not in player_columns:
                 conn.execute("ALTER TABLE players ADD COLUMN avatar_hue INTEGER NOT NULL DEFAULT 215")
+            if "avatar_color" not in player_columns:
+                conn.execute("ALTER TABLE players ADD COLUMN avatar_color TEXT")
             columns = {row[1] for row in conn.execute("PRAGMA table_info(tournaments)")}
             if "archived_from" not in columns:
                 conn.execute("ALTER TABLE tournaments ADD COLUMN archived_from TEXT")
@@ -124,7 +126,7 @@ class Database:
 
     @staticmethod
     def public_player(row):
-        return {"id": row["id"], "name": row["name"], "photo_url": f"/photos/{row['photo']}" if row["photo"] else None, "avatar_hue": row["avatar_hue"]}
+        return {"id": row["id"], "name": row["name"], "photo_url": f"/photos/{row['photo']}" if row["photo"] else None, "avatar_hue": row["avatar_hue"], "avatar_color": row["avatar_color"]}
 
     @staticmethod
     def player(row):
@@ -143,8 +145,8 @@ class Database:
 
     @staticmethod
     def get_entrants(conn, tid):
-        rows = conn.execute("SELECT e.*,p.name,p.photo,p.active,p.avatar_hue FROM entrants e JOIN players p ON p.id=e.player_id WHERE e.tournament_id=? ORDER BY e.seed,e.player_id", (tid,)).fetchall()
-        return [{"id": r["player_id"], "seed": r["seed"], "withdrawn": bool(r["withdrawn"]), "avatar_hue": r["avatar_hue"], "name": r["name"], "photo_url": f"/photos/{r['photo']}" if r["photo"] else None} for r in rows]
+        rows = conn.execute("SELECT e.*,p.name,p.photo,p.active,p.avatar_hue,p.avatar_color FROM entrants e JOIN players p ON p.id=e.player_id WHERE e.tournament_id=? ORDER BY e.seed,e.player_id", (tid,)).fetchall()
+        return [{"id": r["player_id"], "seed": r["seed"], "withdrawn": bool(r["withdrawn"]), "avatar_hue": r["avatar_hue"], "avatar_color": r["avatar_color"], "name": r["name"], "photo_url": f"/photos/{r['photo']}" if r["photo"] else None} for r in rows]
 
     @staticmethod
     def get_matches(conn, tid):

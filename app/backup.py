@@ -127,7 +127,7 @@ def _validate_database(path: Path) -> None:
             raise ValueError("Il database del backup non supera la verifica schema/integrità.")
         for table, expected in SCHEMA_COLUMNS.items():
             columns = {row[1] for row in check.execute(f"PRAGMA table_info({table})")}
-            if columns != expected and not (table == "players" and columns == expected | {"avatar_hue"}):
+            if columns != expected and not (table == "players" and columns in (expected | {"avatar_hue"}, expected | {"avatar_hue", "avatar_color"})):
                 raise ValueError(f"Schema del backup non compatibile: tabella {table}.")
         optional_tables = {
             "round_reveals": {"tournament_id", "player_id", "round_no", "fingerprint"},

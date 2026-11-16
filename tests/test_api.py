@@ -202,7 +202,7 @@ def test_public_active_entrants_include_seed_and_withdrawal_only(client):
     start(client, tid, headers)
     assert client.post("/api/admin/tournaments/" + tid + "/withdrawals", json={"player_id":people[0]["id"]}, headers=headers).status_code == 200
     public = client.get("/api/public/tournaments/" + tid).json()
-    assert all(set(person) == {"id", "name", "photo_url", "avatar_hue", "seed", "withdrawn"} for person in public["entrants"])
+    assert all(set(person) == {"id", "name", "photo_url", "avatar_hue", "avatar_color", "seed", "withdrawn"} for person in public["entrants"])
     by_id = {person["id"]:person for person in public["entrants"]}
     assert by_id[people[0]["id"]]["seed"] == 1 and by_id[people[0]["id"]]["withdrawn"] is True
     assert by_id[people[1]["id"]]["seed"] == 2 and by_id[people[1]["id"]]["withdrawn"] is False

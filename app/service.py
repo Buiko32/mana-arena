@@ -85,7 +85,7 @@ def calculate_global_elo(players: list[dict], matches: list[dict]) -> list[dict]
 
 def global_elo_from_db(conn):
     import json
-    players = [dict(row) for row in conn.execute('SELECT id,name,active,photo,avatar_hue FROM players')]
+    players = [dict(row) for row in conn.execute('SELECT id,name,active,photo,avatar_hue,avatar_color FROM players')]
     # The audit id is the stable order in which results were recorded; use the latest
     # matching event after a rollback. Old backups without events have a deterministic fallback.
     events = {}

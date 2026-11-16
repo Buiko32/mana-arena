@@ -91,3 +91,7 @@ Errori business in forma {"detail":{"message":"...", ...}}. Codici: 401 sessione
 - POST /api/admin/restore?confirm=true usa multipart file, massimo 100 MiB. Conferma richiesta. Verifica versione DB, tutte le tabelle e colonne richieste, admin/schema, foreign key, hash, path, duplicati, symlink, rapporto di compressione, dimensione e integrità SQLite; inizializza e revoca sessioni nello staging prima della sostituzione. DB, foto e sessioni precedenti restano disponibili fino al completamento di ogni verifica post-installazione; errori ripristinano il vecchio stato. Risposta {"ok":true,"restored_photos":n}; tutte le sessioni vengono revocate dopo il successo.
 
 Manifest v1: version 1, database db/mana-arena.sqlite3, files [{path,size,sha256}].
+
+### Profilo del giocatore selezionato
+
+La sessione giocatore ottenuta selezionando un nome consente `GET /api/player/profile`. Per le modifiche occorre l'header `X-Player-CSRF` della sessione: `PATCH /api/player/profile` con `{"avatar_color":"#RRGGBB"}`, `POST /api/player/profile/photo` con file multipart JPEG, PNG o WebP e `DELETE /api/player/profile/photo` per tornare al segnaposto. L'identità è basata sulla fiducia: chiunque può selezionare un nome attivo.

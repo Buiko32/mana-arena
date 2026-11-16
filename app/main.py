@@ -1,6 +1,7 @@
 """FastAPI application for Mana Arena."""
 from __future__ import annotations
 
+import asyncio
 import csv
 import hashlib
 import io
@@ -144,6 +145,7 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
     secret = session_secret if session_secret is not None else os.getenv("SESSION_SECRET")
     secure = cookie_secure if cookie_secure is not None else os.getenv("COOKIE_SECURE", "false").lower() in ("1", "true", "yes")
     db = Database(data_dir)
+    photo_slots = asyncio.Semaphore(2)
 
     @asynccontextmanager
     async def lifespan(application):
@@ -446,7 +448,7 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
         with MUTATION_LOCK, db.transaction() as conn:
             row = conn.execute("SELECT * FROM players WHERE id=? AND active=1", (player_id,)).fetchone()
             if not row: _detail(404, "Giocatore non trovato.")
-            conn.execute("UPDATE players SET name=?,avatar_hue=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", (name.strip() if "name" in body else row["name"], hue if "avatar_hue" in body else row["avatar_hue"], player_id))
+            conn.execute("UPDATE players SET name=?,avatar_hue=?,avatar_color=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", (name.strip() if "name" in body else row["name"], hue if "avatar_hue" in body else row["avatar_hue"], None if "avatar_hue" in body else row["avatar_color"], player_id))
             row = conn.execute("SELECT * FROM players WHERE id=?", (player_id,)).fetchone()
         return Database.player(row)
 
@@ -463,24 +465,26 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             (db.photos_dir / old_photo).unlink(missing_ok=True)
         return {"ok": True}
 
-    @application.post("/api/admin/players/{player_id}/photo")
-    async def upload_photo(player_id: str, file: UploadFile = File(...), session=Depends(admin_write)):
+    async def save_player_photo(player_id: str, file: UploadFile):
         raw = await file.read(MAX_PHOTO + 1)
         await file.close()
         if len(raw) > MAX_PHOTO:
             _detail(413, "La foto non può superare 5 MiB.")
         if not raw:
             _detail(422, "Seleziona una foto JPEG, PNG o WebP valida.")
-        try:
-            image = Image.open(io.BytesIO(raw))
-            if image.format not in ("JPEG", "PNG", "WEBP") or image.width * image.height > MAX_PHOTO_PIXELS or max(image.size) > 6000:
-                _detail(422, "La foto deve essere JPEG, PNG o WebP con dimensioni contenute.")
-            image.load()
-            image = ImageOps.exif_transpose(image).convert("RGB")
-            output = io.BytesIO(); image.save(output, format="JPEG", quality=88, optimize=True)
-            encoded = output.getvalue()
-        except (UnidentifiedImageError, OSError, ValueError):
-            _detail(422, "Il file caricato non è un'immagine valida.")
+        def encode_photo():
+            try:
+                image = Image.open(io.BytesIO(raw))
+                if image.format not in ("JPEG", "PNG", "WEBP") or image.width * image.height > MAX_PHOTO_PIXELS or max(image.size) > 6000:
+                    _detail(422, "La foto deve essere JPEG, PNG o WebP con dimensioni contenute.")
+                image.load()
+                image = ImageOps.exif_transpose(image).convert("RGB")
+                output = io.BytesIO(); image.save(output, format="JPEG", quality=88, optimize=True)
+                return output.getvalue()
+            except (UnidentifiedImageError, OSError, ValueError):
+                _detail(422, "Il file caricato non è un'immagine valida.")
+        async with photo_slots:
+            encoded = await asyncio.to_thread(encode_photo)
         new_name = secrets.token_hex(16) + ".jpg"
         db.photos_dir.mkdir(parents=True, exist_ok=True)
         new_path = db.photos_dir / new_name
@@ -498,6 +502,44 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             new_path.unlink(missing_ok=True)
             raise
         return {"photo_url": f"/photos/{new_name}"}
+
+    @application.post("/api/admin/players/{player_id}/photo")
+    async def upload_photo(player_id: str, file: UploadFile = File(...), session=Depends(admin_write)):
+        return await save_player_photo(player_id, file)
+
+    @application.get('/api/player/profile')
+    def get_player_profile(session=Depends(player_session)):
+        with db.transaction() as conn:
+            row = conn.execute('SELECT * FROM players WHERE id=? AND active=1', (session['player_id'],)).fetchone()
+            if not row: _detail(404, 'Giocatore non trovato.')
+            return Database.public_player(row)
+
+    @application.patch('/api/player/profile')
+    async def update_player_profile(request: Request, session=Depends(player_write)):
+        body = await _json(request)
+        color = body.get('avatar_color')
+        if set(body) != {'avatar_color'} or not isinstance(color, str) or not re.fullmatch(r'#[0-9a-fA-F]{6}', color):
+            _detail(422, 'Inserisci un colore esadecimale valido, ad esempio #FF8800.')
+        with MUTATION_LOCK, db.transaction() as conn:
+            conn.execute('UPDATE players SET avatar_color=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND active=1', (color.lower(), session['player_id']))
+            row = conn.execute('SELECT * FROM players WHERE id=? AND active=1', (session['player_id'],)).fetchone()
+            if not row: _detail(404, 'Giocatore non trovato.')
+            return Database.public_player(row)
+
+    @application.post('/api/player/profile/photo')
+    async def update_player_photo(file: UploadFile = File(...), session=Depends(player_write)):
+        return await save_player_photo(session['player_id'], file)
+
+    @application.delete('/api/player/profile/photo')
+    def delete_player_photo(session=Depends(player_write)):
+        with MUTATION_LOCK:
+            with db.transaction() as conn:
+                row = conn.execute('SELECT photo FROM players WHERE id=? AND active=1', (session['player_id'],)).fetchone()
+                if not row: _detail(404, 'Giocatore non trovato.')
+                conn.execute('UPDATE players SET photo=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?', (session['player_id'],))
+            if row['photo']:
+                (db.photos_dir / row['photo']).unlink(missing_ok=True)
+        return {'ok': True}
 
     @application.get("/api/admin/tournaments")
     def admin_tournaments(session=Depends(admin_session)):
@@ -961,7 +1003,7 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             rows = global_elo_from_db(conn)
             return [{"rank": i, "id": row["id"], "name": row["name"], "rating": row["rating"],
                      "matches": row["matches"], "wins": row["wins"], "draws": row["draws"], "losses": row["losses"],
-                     "photo_url": f"/photos/{row['photo']}" if row.get("photo") else None, "avatar_hue": row["avatar_hue"]} for i, row in enumerate(rows, 1)]
+                     "photo_url": f"/photos/{row['photo']}" if row.get("photo") else None, "avatar_hue": row["avatar_hue"], "avatar_color": row["avatar_color"]} for i, row in enumerate(rows, 1)]
 
     def reveal_state(conn, tid, matches, pid):
         pending = [m['round'] for m in matches if not m.get('result') and not m.get('void')]
@@ -1009,7 +1051,7 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             active = conn.execute("SELECT player_id FROM player_sessions WHERE token_hash=? AND expires_at>strftime('%s','now')", (token_hash,)).fetchone()
             current, revealed = reveal_state(conn, tid, matches, active['player_id'] if active else None)
             shown = matches if current is None else [m for m in matches if m['round'] < current or (revealed and m['round'] == current)]
-            public_entrants = [{"id": p["id"], "name": p["name"], "photo_url": p["photo_url"], "avatar_hue": p["avatar_hue"], "seed": p["seed"], "withdrawn": p["withdrawn"]} for p in entrants]
+            public_entrants = [{"id": p["id"], "name": p["name"], "photo_url": p["photo_url"], "avatar_hue": p["avatar_hue"], "avatar_color": p["avatar_color"], "seed": p["seed"], "withdrawn": p["withdrawn"]} for p in entrants]
             return {"id": tid, "config": cfg, "status": tournament["status"], "entrants": public_entrants,
                     "matches": shown, "rounds": public_rounds(shown), "reveal_available": current is not None, "reveal_locked": current is not None and not revealed, "standings": engine.calculate_standings(cfg, entrants, shown),
                     "champion_id": tournament["champion_id"] if revealed else None, "warnings": tournament["warnings"] if revealed else []}
