@@ -24,6 +24,11 @@ data
 *.log
 
 app/static/mascots/*
+!app/static/mascots/white.gif
+!app/static/mascots/blue.gif
+!app/static/mascots/black.gif
+!app/static/mascots/red.gif
+!app/static/mascots/green.gif
 !app/static/mascots/white.png
 !app/static/mascots/blue.png
 !app/static/mascots/black.png
