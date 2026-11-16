@@ -11,7 +11,7 @@ Design approvato il 30 ottobre 2026. Cinque pinguini distinti in stile 3D cartoo
 | `app/static/mascots/green.png` | Druido con ramoscelli e bastone, torso naturale scoperto |
 | `app/static/mascots/quintet.png` | Tavola di riferimento del gruppo |
 
-Generazione: strumento integrato imagegen, immagini PNG con sfondo trasparente. Gli originali sono conservati; nessun file del torneo o dato personale è stato usato come riferimento. Le animazioni del sito saranno trasformazioni CSS brevi, alternate, disattivate con prefers-reduced-motion.
+Generazione: strumento integrato imagegen, immagini PNG con sfondo trasparente. Gli originali sono conservati; nessun file del torneo o dato personale è stato usato come riferimento. Le GIF locali sono generate dai PNG originali con `scripts/animate_mascots.py`: un movimento lieve dell’intero personaggio in ciclo di tre secondi. La pagina sceglie casualmente un personaggio per caricamento e mostra solo quello in apertura. Con prefers-reduced-motion usa il PNG statico corrispondente.
 
 ## Prompt della tavola di riferimento
 

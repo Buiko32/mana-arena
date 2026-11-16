@@ -102,21 +102,25 @@ def test_confirmation_dialog_close_control_is_not_a_form_submit(tmp_path):
     assert parser.dialog_close_buttons == [("button", {"type": "button", "class": "dialog-close", "data-dialog-close": None, "aria-label": "Chiudi"})]
 
 
-def test_hero_mascots_are_five_local_decorative_wubrg_assets(tmp_path):
+def test_random_hero_mascot_has_five_animated_local_assets(tmp_path):
     app = create_app(data_dir=tmp_path, admin_username="admin", admin_password="Valid-admin-passphrase-42", session_secret="ui-test-session-secret-at-least-32-bytes")
     names = ("white", "blue", "black", "red", "green")
     with TestClient(app) as client:
-        parser = StructureParser()
-        parser.feed(client.get("/").text)
-        assets = [client.get(f"/static/mascots/{name}.png") for name in names]
-    assert [image.get("src") for image in parser.hero_mascots] == [f"/static/mascots/{name}.png" for name in names]
-    assert all(image.get("alt") == "" and image.get("aria-hidden") == "true" for image in parser.hero_mascots)
-    assert all(response.status_code == 200 and response.headers.get("content-type", "").startswith("image/png") for response in assets)
-    assert all(response.content.startswith(b"\x89PNG\r\n\x1a\n") for response in assets)
+        page = client.get("/").text
+        js = client.get("/static/app.js").text
+        assets = [client.get(f"/static/mascots/{name}.gif") for name in names]
+    assert page.count('id="arena-mascot"') == 1
+    assert 'class="section-mascot"' not in page
+    assert "Math.random()" in js
+    assert "prefers-reduced-motion: reduce" in js
+    assert all(response.status_code == 200 and response.headers.get("content-type", "").startswith("image/gif") for response in assets)
     for response in assets:
         with Image.open(BytesIO(response.content)) as image:
-            assert image.mode == "RGBA"
-            assert image.getextrema()[3][0] == 0
+            assert image.is_animated and image.n_frames > 1
+            first = image.convert("RGBA").tobytes()
+            image.seek(image.n_frames // 4)
+            assert image.convert("RGBA").tobytes() != first
+            assert image.info.get("loop") == 0
 
 
 def test_static_interface_uses_only_local_assets_and_has_admin_workflow_controls(tmp_path):

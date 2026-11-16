@@ -28,16 +28,10 @@
   <main id="main-content" class="shell">
     <section id="public-view" class="view" aria-labelledby="public-title">
       <div class="hero" data-enter>
-        <div class="hero-copy"><p class="hero-kicker">TORNEI MAGIC: THE GATHERING</p><h1 id="public-title">Mana Arena</h1><p class="hero-description">Tornei, classifiche e risultati: tutto quello che succede al tavolo, in un posto solo.</p><a class="hero-link" href="#tournament-list">Esplora i tornei <span aria-hidden="true">↗</span></a></div>
-        <div class="hero-mascots" aria-hidden="true">
-          <img class="mascot mascot--white mascot-idle" src="/static/mascots/white.png" alt="" aria-hidden="true" width="1199" height="1312" decoding="async">
-          <img class="mascot mascot--blue mascot-idle" src="/static/mascots/blue.png" alt="" aria-hidden="true" width="1145" height="1374" decoding="async">
-          <img class="mascot mascot--black mascot-idle" src="/static/mascots/black.png" alt="" aria-hidden="true" width="1312" height="1199" decoding="async">
-          <img class="mascot mascot--red mascot-idle" src="/static/mascots/red.png" alt="" aria-hidden="true" width="1295" height="1214" decoding="async">
-          <img class="mascot mascot--green mascot-idle" src="/static/mascots/green.png" alt="" aria-hidden="true" width="1312" height="1199" decoding="async">
-        </div>
+        <div class="hero-copy"><p class="hero-kicker">MAGIC: THE GATHERING / TORNEI</p><h1 id="public-title">Mana Arena</h1><p class="hero-description">Il tuo spazio per i tornei. Segui turni, classifiche e risultati, partita dopo partita.</p><a class="hero-link" href="#tournament-list">Esplora i tornei <span aria-hidden="true">↗</span></a></div>
+        <div class="hero-mascots" aria-hidden="true"><span class="arena-orbit"></span><span class="arena-index">05 / PERSONAGGI</span><img id="arena-mascot" class="arena-mascot" alt="" width="288" height="288" decoding="async" hidden></div>
       </div>
-      <div class="section-heading public-heading"><div><p class="section-kicker">LA TUA ARENA</p><h2>Tornei</h2></div><span class="tournament-count-label">Tornei disponibili <span id="tournament-count" class="count-pill">—</span></span></div>
+      <div class="section-heading public-heading"><div><p class="section-kicker">IN DIRETTA DALL’ARENA</p><h2>Tornei</h2></div><span class="tournament-count-label">Tornei disponibili <span id="tournament-count" class="count-pill">—</span></span></div>
       <div id="public-error" class="notice error" role="alert" hidden></div>
       <div id="tournament-list" class="tournament-grid" aria-live="polite"><div class="loading-card">Caricamento tornei…</div></div>
       <section id="public-detail" class="detail-panel" aria-live="polite" hidden></section>
@@ -75,12 +69,12 @@
           <section id="tournament-manager" class="manager-panel" hidden></section>
         </section>
         <section id="admin-players" class="admin-section" role="tabpanel" aria-labelledby="tab-players" hidden>
-          <div class="section-heading compact mascot-section-heading"><h2>Giocatori</h2><img class="section-mascot" src="/static/mascots/green.png" alt="" aria-hidden="true" width="1312" height="1199" loading="lazy" decoding="async"></div>
+          <div class="section-heading compact mascot-section-heading"><h2>Giocatori</h2></div>
           <form id="player-form" class="player-create"><label>Nome giocatore<input name="name" maxlength="100" required placeholder="Nome e cognome"></label><button class="button primary" type="submit">＋ Aggiungi</button></form>
           <div id="players-list" class="players-list" aria-live="polite"></div>
         </section>
         <section id="admin-backup" class="admin-section" role="tabpanel" aria-labelledby="tab-backup" hidden>
-          <div class="section-heading compact mascot-section-heading"><h2>Backup e ripristino</h2><img class="section-mascot" src="/static/mascots/black.png" alt="" aria-hidden="true" width="1312" height="1199" loading="lazy" decoding="async"></div>
+          <div class="section-heading compact mascot-section-heading"><h2>Backup e ripristino</h2></div>
           <div class="backup-grid"><article class="backup-card"><span class="backup-icon">↓</span><h3>Backup</h3><button id="backup-download" class="button secondary" type="button">Scarica ZIP</button></article><article class="backup-card danger-card"><span class="backup-icon">↥</span><h3>Ripristino</h3><p>Sostituisce i dati correnti e richiede un nuovo accesso.</p><form id="restore-form"><label>Archivio ZIP<input name="file" type="file" accept=".zip,application/zip" required></label><button class="button danger" type="submit">Ripristina</button></form></article></div>
         </section>
       </div>
