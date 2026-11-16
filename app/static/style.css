@@ -147,3 +147,5 @@ footer{border-color:#263d41;color:#9eb2aa}.brand-mini{color:#94dccc}.notice.erro
 @media(max-width:540px){.topbar{height:64px;gap:1rem}.main-nav{gap:1rem}.main-nav a{font-size:.68rem}.brand{font-size:.75rem}#public-view>.hero{padding:2.5rem 0 1.5rem;gap:.5rem}#public-view>.hero>.hero-copy{max-width:none}.hero h1{font-size:clamp(3.5rem,15vw,5rem);line-height:.9}.hero-description{max-width:100%}.hero-mascots{min-height:200px;flex:auto}.arena-mascot{width:190px}.arena-orbit{width:170px}.hero-link{width:100%}.public-heading{margin-top:2rem}.admin-hero h1{font-size:3.4rem}.section-heading.compact{align-items:center;gap:.5rem}.section-heading.compact h2{font-size:1.55rem}}
 /* Align the orbit and mascot on the same centre at every width. */
 .arena-orbit{left:50%;top:50%;transform:translate(-50%,-50%)}
+.brand-mark{transform:none}
+@media(max-width:540px){.session-area{font-size:0;letter-spacing:0}.session-area .status-dot{width:9px;height:9px}}
