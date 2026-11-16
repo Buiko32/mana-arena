@@ -1,8 +1,10 @@
 <!doctype html>
-<html lang="it">
+<html lang="it" data-type="software">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="page-type" content="software">
+  <meta name="site-kind" content="software">
   <meta name="theme-color" content="#0c1320">
   <meta name="description" content="Mana Arena — tornei Magic: The Gathering">
   <title>Mana Arena — Tornei Magic</title>
@@ -25,8 +27,8 @@
   </header>
   <main id="main-content" class="shell">
     <section id="public-view" class="view" aria-labelledby="public-title">
-      <div class="hero">
-        <div><h1 id="public-title">Mana Arena</h1></div>
+      <div class="hero" data-enter>
+        <div class="hero-copy"><p class="hero-kicker">TORNEI MAGIC: THE GATHERING</p><h1 id="public-title">Mana Arena</h1><p class="hero-description">Tornei, classifiche e risultati: tutto quello che succede al tavolo, in un posto solo.</p><a class="hero-link" href="#tournament-list">Esplora i tornei <span aria-hidden="true">↗</span></a></div>
         <div class="hero-mascots" aria-hidden="true">
           <img class="mascot mascot--white mascot-idle" src="/static/mascots/white.png" alt="" aria-hidden="true" width="1199" height="1312" decoding="async">
           <img class="mascot mascot--blue mascot-idle" src="/static/mascots/blue.png" alt="" aria-hidden="true" width="1145" height="1374" decoding="async">
@@ -35,14 +37,14 @@
           <img class="mascot mascot--green mascot-idle" src="/static/mascots/green.png" alt="" aria-hidden="true" width="1312" height="1199" decoding="async">
         </div>
       </div>
-      <div class="section-heading"><h2>Tornei</h2><span id="tournament-count" class="count-pill">—</span></div>
+      <div class="section-heading public-heading"><div><p class="section-kicker">LA TUA ARENA</p><h2>Tornei</h2></div><span class="tournament-count-label">Tornei disponibili <span id="tournament-count" class="count-pill">—</span></span></div>
       <div id="public-error" class="notice error" role="alert" hidden></div>
       <div id="tournament-list" class="tournament-grid" aria-live="polite"><div class="loading-card">Caricamento tornei…</div></div>
       <section id="public-detail" class="detail-panel" aria-live="polite" hidden></section>
     </section>
 
     <section id="admin-view" class="view" aria-labelledby="admin-title" hidden>
-      <div class="hero admin-hero"><div><h1 id="admin-title">Gestione</h1></div></div>
+      <div class="hero admin-hero" data-enter><div><p class="hero-kicker">AREA ORGANIZZATORE</p><h1 id="admin-title">Gestione</h1><p class="hero-description">Organizza i tornei e segui ogni turno.</p></div></div>
       <div id="admin-error" class="notice error" role="alert" hidden></div>
       <div id="login-panel" class="login-card">
         <div class="card-icon" aria-hidden="true">✦</div><div><h2>Accesso organizzatore</h2></div>
