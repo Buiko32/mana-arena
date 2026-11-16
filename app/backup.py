@@ -130,6 +130,7 @@ def _validate_database(path: Path) -> None:
             if columns != expected and not (table == "players" and columns == expected | {"avatar_hue"}):
                 raise ValueError(f"Schema del backup non compatibile: tabella {table}.")
         optional_tables = {
+            "round_reveals": {"tournament_id", "player_id", "round_no", "fingerprint"},
             "player_credentials": {"player_id", "salt", "password_hash"},
             "player_sessions": {"token_hash", "player_id", "csrf", "expires_at"},
             "result_proposals": {"id", "proposer_id", "opponent_id", "tournament_id", "match_id", "winner_id", "status", "created_at"},

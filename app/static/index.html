@@ -29,7 +29,7 @@
       <a href="#global-ranking" data-ranking-link aria-current="false">Classifica globale</a>
       <a href="#admin-view" data-view-link="admin">Organizza</a>
     </nav>
-    <div class="session-area" id="session-area"><label class="visually-hidden" for="player-identity">Il tuo nome</label><select id="player-identity"><option value="">Scegli il tuo nome</option></select></div>
+    <button type="button" id="confirmations-open" class="button quiet" aria-label="Risultati da confermare">✓</button><div class="session-area" id="session-area"><label class="visually-hidden" for="player-identity">Il tuo nome</label><select id="player-identity"><option value="">Scegli il tuo nome</option></select></div>
   </header>
   <main id="main-content" class="shell">
     <div id="public-view" class="view" aria-labelledby="public-title">
@@ -95,19 +95,13 @@
   <footer><span class="brand-mini">✦ MANA ARENA</span><a href="#admin-view" data-view-link="admin">Area organizzatore</a></footer>
   <dialog id="reveal-dialog" class="reveal-dialog" aria-labelledby="reveal-title">
     <button type="button" class="dialog-close" id="reveal-close" aria-label="Chiudi">×</button>
-    <p class="reveal-eyebrow">MANA ARENA / ABBINAMENTI</p>
     <h2 id="reveal-title">Scopri il tuo incontro</h2>
-    <p class="muted">Scegli il tuo nome e il turno. Gli abbinamenti sono pubblici.</p>
-    <form id="reveal-form" class="reveal-form">
-      <label for="reveal-player">Giocatore</label><select id="reveal-player" required></select>
-      <label for="reveal-round">Turno</label><select id="reveal-round" required></select>
-      <button class="button primary" type="submit">Scopri l’abbinamento</button>
-    </form>
-    <div id="reveal-stage" class="reveal-stage" hidden><div class="reveal-card" aria-hidden="true"><span>✦</span><small>IL TUO INCONTRO</small></div><div id="reveal-result" class="reveal-result" role="status" aria-live="polite"></div></div>
+    <div id="reveal-stage" class="crystal-stage"><div class="crystal-ball"><div class="crystal-shine"></div><div id="reveal-result" class="crystal-result" role="status" aria-live="polite"></div></div><div class="crystal-base"></div></div>
   </dialog>
   <dialog id="confirm-dialog" aria-labelledby="confirm-title"><button type="button" class="dialog-close" data-dialog-close aria-label="Chiudi">×</button><h2 id="confirm-title">Conferma</h2><p id="confirm-message" class="muted"></p><div id="confirm-impact" class="impact-list"></div><div class="dialog-actions"><button id="confirm-cancel" class="button quiet" type="button">Annulla</button><button id="confirm-ok" class="button danger" type="button">Conferma</button></div></dialog>
   <button id="results-open" class="results-fab" type="button" aria-label="Inserisci o conferma un risultato">+</button>
-  <dialog id="player-results-dialog" aria-labelledby="player-results-title"><button type="button" class="dialog-close" id="player-results-close" aria-label="Chiudi">×</button><h2 id="player-results-title">Risultati</h2><div id="player-results-content"></div></dialog>
+  <dialog id="player-results-dialog" aria-labelledby="player-results-title"><button type="button" class="dialog-close" id="player-results-close" aria-label="Chiudi">×</button><h2 id="player-results-title">Inserisci il risultato</h2><div id="player-results-content"></div></dialog>
+  <dialog id="confirmations-dialog" aria-labelledby="confirmations-title"><button type="button" class="dialog-close" id="confirmations-close" aria-label="Chiudi">×</button><h2 id="confirmations-title">Risultati da confermare</h2><div id="confirmations-content"></div></dialog>
   <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
 </body>
 </html>

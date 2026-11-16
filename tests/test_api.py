@@ -132,7 +132,7 @@ def test_health_public_list_detail_standings_and_rounds(client):
     assert len(detail["entrants"]) == 2
     assert client.get(f"/api/public/tournaments/{tid}/standings").status_code == 200
     assert client.post(f"/api/admin/tournaments/{tid}/rounds/next", json={}, headers=headers).status_code == 200
-    assert client.get(f"/api/public/tournaments/{tid}/rounds").json()
+    assert client.get(f"/api/public/tournaments/{tid}/rounds").json() == []
     assert "audit" not in json.dumps(detail).lower()
 
 
@@ -321,7 +321,7 @@ def test_result_and_round_persistence_and_duplicate_guard(client):
     assert round2.json()["round"] == 2
     assert client.post(f"/api/admin/tournaments/{tid}/rounds/next", json={}, headers=headers).status_code == 409
     persisted = client.get(f"/api/public/tournaments/{tid}/rounds").json()
-    assert len(persisted) == 2
+    assert len(persisted) == 1
 
 
 def test_withdrawal_audit_and_reset_preserve_audit(client):

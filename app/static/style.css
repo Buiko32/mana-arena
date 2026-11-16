@@ -221,3 +221,15 @@ html{scroll-behavior:auto}
 tr.is-me td{background:#173b55}
 .graph-player-row.is-winner,.match-row .is-match-winner{color:#b1ffb5;background:#184b35;font-weight:800;border-radius:5px}
 .match-row .is-match-winner::after{content:' ✓';color:#b1ffb5}
+/* Consistent player cards and a geometrically centred plus. */
+.results-fab{font-size:0;position:fixed}
+.results-fab::before,.results-fab::after{content:"";position:absolute;left:50%;top:50%;background:currentColor;border-radius:2px;transform:translate(-50%,-50%)}
+.results-fab::before{width:20px;height:3px}.results-fab::after{width:3px;height:20px}
+.graph-player-row+.graph-player-row{margin-top:7px}
+.match-row>span:not(.versus){display:flex;align-items:center;gap:.45rem;min-height:42px;padding:.35rem .5rem;min-width:0}
+.match-row>span.right{justify-content:flex-end}.match-row>span>span:not(.avatar){overflow-wrap:anywhere;white-space:normal}
+.match-row .avatar{flex:0 0 28px;width:28px;height:28px}
+.crystal-stage{display:grid;justify-items:center;margin:1.5rem auto}.crystal-ball{position:relative;width:min(65vw,260px);aspect-ratio:1;border-radius:50%;display:grid;place-items:center;overflow:hidden;background:radial-gradient(circle at 32% 25%,#b5ecff99,#4e7ac9aa 24%,#252656 67%,#0a0d28);border:2px solid #afddff;box-shadow:0 0 35px #8ebcff80,inset 0 0 35px #d7efff55}.crystal-shine{position:absolute;inset:12%;border-radius:50%;background:linear-gradient(130deg,#ffffff55,transparent 45%);pointer-events:none}.crystal-result{position:relative;display:grid;justify-items:center;gap:.6rem;text-align:center;color:#fff;font-size:1.25rem;text-shadow:0 2px 8px #07132a}.crystal-result .avatar{width:90px;height:90px;border:3px solid #fff}.crystal-base{width:180px;height:24px;border-radius:50%;margin-top:-8px;background:linear-gradient(#dcb26b,#654626);z-index:2}.crystal-stage.is-revealing .crystal-ball{animation:crystal-glow 1.8s ease-in-out}@keyframes crystal-glow{0%,100%{filter:brightness(1)}45%{filter:brightness(1.9);box-shadow:0 0 70px #c6eaff}}
+@media(prefers-reduced-motion:reduce){.crystal-stage.is-revealing .crystal-ball{animation:none}}
+#confirmations-open{min-width:42px;min-height:42px;padding:.45rem;flex:none}
+@media(max-width:650px){.topbar{gap:0 .4rem}.topbar .brand{flex:none}.topbar .session-area{flex:1 1 105px;min-width:0;margin-left:auto}.topbar .session-area select{width:100%;min-width:0;max-width:none}.topbar .main-nav{order:3}}
