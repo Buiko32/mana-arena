@@ -54,7 +54,7 @@ Bozze e tornei archiviati restituiscono 404. Le viste pubbliche non includono au
 | --- | --- |
 | GET /api/admin/players | Array dei profili attivi: id, name, photo_url, active. |
 | POST /api/admin/players | JSON {"name":"..."}; crea e risponde 201 con profilo. |
-| PATCH /api/admin/players/{player_id} | JSON {"name":"..."}; restituisce profilo aggiornato. |
+| PATCH /api/admin/players/{player_id} | JSON con `name` e/o `avatar_hue` (numero intero da 0 a 360); restituisce il profilo aggiornato. Il colore predefinito è 215. |
 | DELETE /api/admin/players/{player_id} | Soft-delete; 409 se il profilo ha riferimenti storici. |
 | POST /api/admin/players/{player_id}/photo | Multipart file; max 5 MiB, JPEG/PNG/WebP decodificabili, pixel limitati. Risponde {"photo_url":"/photos/<uuid>.jpg"}. |
 

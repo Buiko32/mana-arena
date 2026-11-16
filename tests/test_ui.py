@@ -162,3 +162,15 @@ def test_static_interface_uses_only_local_assets_and_has_admin_workflow_controls
         assert marker in js
     assert "bracket_slot" in js
     assert "single_elim" in js
+
+
+def test_public_navigation_has_separate_ranking_and_visible_player_selector():
+    from pathlib import Path
+    page = Path('app/static/index.html').read_text()
+    js = Path('app/static/app.js').read_text()
+    assert 'id="player-identity"' in page.split('</header>')[0]
+    assert 'Solo lettura' not in page
+    assert 'Il tuo spazio per i tornei.' not in page
+    assert "$('#global-ranking').hidden=!ranking" in js
+    assert 'is-active-tournament' in js
+    assert 'Eliminato' in js

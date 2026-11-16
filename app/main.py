@@ -135,7 +135,7 @@ def _finalize_if_done(conn, tournament, entrants, matches):
 
 
 def create_app(*, data_dir=None, admin_username=None, admin_password=None, session_secret=None,
-               cookie_secure=None, login_limit=5):
+               cookie_secure=None, login_limit=5, allow_admin_result_override=False):
     """Create an isolated app; environment validation occurs in the lifespan."""
     data_dir = Path(data_dir or os.getenv("DATA_DIR", "/data"))
     username = admin_username if admin_username is not None else os.getenv("ADMIN_USERNAME", "admin")
@@ -189,6 +189,122 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
         if not token or not cookie or token != session["csrf"] or cookie != session["csrf"]:
             _detail(403, "Token di sicurezza CSRF mancante o non valido.")
         return session
+
+    def player_session(request: Request):
+        import hashlib
+        token = request.cookies.get('mana_player_session', '')
+        digest = hashlib.sha256(token.encode()).hexdigest()
+        with db.transaction() as conn:
+            row = conn.execute("SELECT s.*,p.name FROM player_sessions s JOIN players p ON p.id=s.player_id WHERE s.token_hash=? AND s.expires_at>strftime('%s','now') AND p.active=1", (digest,)).fetchone()
+        if not row: _detail(401, 'Accedi come giocatore.')
+        return dict(row)
+
+    def player_write(request: Request, session=Depends(player_session)):
+        if not secrets.compare_digest(request.headers.get('X-Player-CSRF', ''), session['csrf']):
+            _detail(403, 'Token di sicurezza non valido.')
+        return session
+
+    @application.post('/api/admin/players/{player_id}/credential')
+    def player_credential(player_id: str, session=Depends(admin_write)):
+        password = secrets.token_urlsafe(12)
+        salt, digest = hash_password(password)
+        with MUTATION_LOCK, db.transaction() as conn:
+            if not conn.execute('SELECT 1 FROM players WHERE id=? AND active=1', (player_id,)).fetchone(): _detail(404, 'Giocatore non trovato.')
+            conn.execute('INSERT OR REPLACE INTO player_credentials VALUES(?,?,?)', (player_id, salt, digest))
+            conn.execute('DELETE FROM player_sessions WHERE player_id=?', (player_id,))
+        return {'password': password}
+
+    @application.post('/api/player/login')
+    async def player_login(request: Request, response: Response):
+        import hashlib, time
+        body = await _json(request); pid = body.get('player_id'); password = body.get('password')
+        if not isinstance(pid, str) or not isinstance(password, str) or len(password)>1024: _detail(422, 'Credenziali non valide.')
+        auth = request.app.state.auth
+        key = 'player:' + (request.client.host if request.client else 'unknown') + ':' + pid
+        if not auth.allowed(key): _detail(429, 'Troppi tentativi. Riprova più tardi.')
+        with db.transaction() as conn:
+            row = conn.execute('SELECT c.*,p.name FROM player_credentials c JOIN players p ON p.id=c.player_id WHERE c.player_id=? AND p.active=1', (pid,)).fetchone()
+        import asyncio
+        valid = bool(row and secrets.compare_digest((await asyncio.to_thread(hash_password, password, row['salt']))[1], row['password_hash']))
+        if not valid:
+            auth.failed(key); _detail(401, 'Credenziali non valide.')
+        token = secrets.token_urlsafe(32); csrf = secrets.token_urlsafe(24)
+        with MUTATION_LOCK, db.transaction() as conn:
+            current = conn.execute('SELECT c.password_hash FROM player_credentials c JOIN players p ON p.id=c.player_id WHERE c.player_id=? AND p.active=1', (pid,)).fetchone()
+            if not current or not secrets.compare_digest(current['password_hash'],row['password_hash']): _detail(401, 'Credenziali non più valide.')
+            conn.execute("DELETE FROM player_sessions WHERE expires_at < strftime('%s','now')")
+            conn.execute('INSERT INTO player_sessions VALUES(?,?,?,?)', (hashlib.sha256(token.encode()).hexdigest(), pid, csrf, int(time.time())+30*86400))
+        auth.succeeded(key)
+        response.set_cookie('mana_player_session', token, httponly=True, secure=secure, samesite='lax', max_age=30*86400, path='/')
+        return {'player_id':pid, 'name':row['name'], 'csrf_token':csrf}
+
+    @application.get('/api/player/session')
+    def player_session_status(session=Depends(player_session)):
+        return {'player_id':session['player_id'], 'name':session['name'], 'csrf_token':session['csrf']}
+
+    @application.post('/api/player/logout')
+    def player_logout(response: Response, session=Depends(player_write)):
+        with db.transaction() as conn: conn.execute('DELETE FROM player_sessions WHERE token_hash=?', (session['token_hash'],))
+        response.delete_cookie('mana_player_session', path='/')
+        return {'ok':True}
+
+    @application.get('/api/player/results')
+    def player_results(session=Depends(player_session)):
+        with db.transaction() as conn:
+            rows = conn.execute("SELECT r.*,a.name AS proposer_name,b.name AS opponent_name,w.name AS winner_name FROM result_proposals r JOIN players a ON a.id=r.proposer_id JOIN players b ON b.id=r.opponent_id JOIN players w ON w.id=r.winner_id WHERE (r.proposer_id=? OR r.opponent_id=?) AND (r.status='pending' OR r.id IN (SELECT id FROM result_proposals WHERE (proposer_id=? OR opponent_id=?) AND status='confirmed' ORDER BY created_at DESC LIMIT 100)) ORDER BY r.created_at DESC", (session['player_id'],session['player_id'],session['player_id'],session['player_id'])).fetchall()
+            return [dict(row) for row in rows]
+
+    @application.post('/api/player/results', status_code=201)
+    async def propose_result(request: Request, session=Depends(player_write)):
+        body=await _json(request); player=session['player_id']; tid=body.get('tournament_id'); mid=body.get('match_id'); winner=body.get('winner_id')
+        with MUTATION_LOCK, db.transaction() as conn:
+            if tid:
+                tournament=_row_tournament(conn,tid)
+                if tournament['status']!='active': _detail(409,'Il torneo non è attivo.')
+                match=next((m for m in Database.get_matches(conn,tid) if m['id']==mid),None)
+                if not match or player not in (match.get('p1'),match.get('p2')) or match.get('bye') or match.get('result') or match.get('void'): _detail(409,'Incontro non disponibile.')
+                opponent=match['p2'] if match['p1']==player else match['p1']
+                if conn.execute("SELECT 1 FROM result_proposals WHERE tournament_id=? AND match_id=? AND status='pending'",(tid,mid)).fetchone(): _detail(409,'Esiste già una proposta per questo incontro.')
+            else:
+                opponent=body.get('opponent_id'); tid=None; mid=None
+                if not opponent or opponent==player or not conn.execute('SELECT 1 FROM players WHERE id=? AND active=1',(opponent,)).fetchone(): _detail(422,'Seleziona un avversario valido.')
+            if winner not in (player,opponent): _detail(422,'Seleziona il vincitore.')
+            rid=str(uuid.uuid4())
+            conn.execute('INSERT INTO result_proposals(id,proposer_id,opponent_id,tournament_id,match_id,winner_id) VALUES(?,?,?,?,?,?)',(rid,player,opponent,tid,mid,winner))
+        return {'id':rid}
+
+    @application.post('/api/player/results/{result_id}/confirm')
+    def confirm_player_result(result_id: str, session=Depends(player_write)):
+        with MUTATION_LOCK, db.transaction() as conn:
+            proposal=conn.execute('SELECT * FROM result_proposals WHERE id=?',(result_id,)).fetchone()
+            if not proposal: _detail(404,'Proposta non trovata.')
+            if proposal['opponent_id']!=session['player_id']: _detail(403,'Solo l’avversario può confermare.')
+            if proposal['status']!='pending': _detail(409,'Proposta già gestita.')
+            if proposal['tournament_id']:
+                tid=proposal['tournament_id']; tournament=_row_tournament(conn,tid)
+                if tournament['status']!='active': _detail(409,'Il torneo non è attivo.')
+                matches=Database.get_matches(conn,tid); match=next((m for m in matches if m['id']==proposal['match_id']),None)
+                if not match or match.get('result') or match.get('void') or set((match.get('p1'),match.get('p2')))!=set((proposal['proposer_id'],proposal['opponent_id'])): _detail(409,'L’incontro non è più disponibile.')
+                cfg=tournament['frozen_config'] or tournament['config']; p1win=proposal['winner_id']==match['p1']; target=2 if cfg['match_length']==3 else 1
+                finalized=engine.apply_result(cfg,match,{'result':'p1_win' if p1win else 'p2_win','p1_games':target if p1win else 0,'p2_games':0 if p1win else target})
+                if cfg['match_length'] != 1: finalized.update({'p1_games':None, 'p2_games':None, 'score_unknown':True})
+                matches[matches.index(match)]=finalized; _persist_match_rows(conn,tid,matches); _bump(conn,tid)
+                Database.audit(conn,tid,'match_result_recorded',{'match_id':match['id'],'round':match['round'],'result':finalized['result']})
+                _finalize_if_done(conn,tournament,Database.get_entrants(conn,tid),matches)
+            if not proposal['tournament_id']:
+                Database.audit(conn,None,'friendly_result_recorded',{'match_id':result_id})
+            conn.execute("UPDATE result_proposals SET status='confirmed' WHERE id=?",(result_id,))
+        return {'ok':True}
+
+    @application.post('/api/player/results/{result_id}/reject')
+    def reject_player_result(result_id: str, session=Depends(player_write)):
+        with MUTATION_LOCK, db.transaction() as conn:
+            row=conn.execute('SELECT * FROM result_proposals WHERE id=?',(result_id,)).fetchone()
+            if not row: _detail(404,'Proposta non trovata.')
+            if session['player_id'] not in (row['opponent_id'],row['proposer_id']): _detail(403,'Operazione non consentita.')
+            if row['status']!='pending': _detail(409,'Proposta già gestita.')
+            conn.execute("UPDATE result_proposals SET status='rejected' WHERE id=?",(result_id,))
+        return {'ok':True}
 
     @application.get("/healthz")
     def health():
@@ -299,13 +415,19 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
 
     @application.patch("/api/admin/players/{player_id}")
     async def edit_player(player_id: str, request: Request, session=Depends(admin_write)):
-        body = await _json(request); name = body.get("name")
-        if not isinstance(name, str) or not name.strip() or len(name.strip()) > 80:
+        body = await _json(request)
+        name = body.get("name")
+        hue = body.get("avatar_hue")
+        if not body or any(key not in ("name", "avatar_hue") for key in body):
+            _detail(422, "Modifica non valida.")
+        if "name" in body and (not isinstance(name, str) or not name.strip() or len(name.strip()) > 80):
             _detail(422, "Il nome del giocatore è obbligatorio e deve contenere al massimo 80 caratteri.")
+        if "avatar_hue" in body and (type(hue) is not int or not 0 <= hue <= 360):
+            _detail(422, "Il colore deve essere compreso tra 0 e 360.")
         with MUTATION_LOCK, db.transaction() as conn:
             row = conn.execute("SELECT * FROM players WHERE id=? AND active=1", (player_id,)).fetchone()
             if not row: _detail(404, "Giocatore non trovato.")
-            conn.execute("UPDATE players SET name=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", (name.strip(), player_id))
+            conn.execute("UPDATE players SET name=?,avatar_hue=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", (name.strip() if "name" in body else row["name"], hue if "avatar_hue" in body else row["avatar_hue"], player_id))
             row = conn.execute("SELECT * FROM players WHERE id=?", (player_id,)).fetchone()
         return Database.player(row)
 
@@ -398,6 +520,7 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
                 _detail(409, "La configurazione è congelata; conferma il rollback completo.", requires_confirmation=True,
                         affected_rounds=sorted({m["round"] for m in matches}), affected_results=sum(bool(m.get("result")) for m in matches))
             if confirm_rollback and tournament["status"] != "draft":
+                conn.execute("UPDATE result_proposals SET status='invalidated' WHERE tournament_id=?", (tid,))
                 conn.execute("DELETE FROM matches WHERE tournament_id=?", (tid,))
                 conn.execute("UPDATE entrants SET withdrawn=0 WHERE tournament_id=?", (tid,))
                 conn.execute("DELETE FROM withdrawals WHERE tournament_id=?", (tid,))
@@ -550,8 +673,10 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
 
     @application.put("/api/admin/tournaments/{tid}/matches/{match_id}/result")
     async def set_result(tid: str, match_id: str, request: Request, session=Depends(admin_write)):
+        if not allow_admin_result_override: _detail(403, "Il risultato deve essere proposto e confermato dai giocatori.")
         body = await _json(request)
         if set(body) - {"result", "p1_games", "p2_games"}: _detail(422, "Il corpo del risultato contiene campi non supportati.")
+        if body.get("result") not in ("p1_win", "p2_win"): _detail(422, "Seleziona uno dei due vincitori.")
         with MUTATION_LOCK, db.transaction() as conn:
             tournament = _row_tournament(conn, tid)
             if tournament["status"] != "active": _detail(409, "Il torneo non è attivo.")
@@ -574,6 +699,7 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
 
     @application.post("/api/admin/tournaments/{tid}/withdrawals")
     async def withdraw(tid: str, request: Request, session=Depends(admin_write)):
+        if not allow_admin_result_override: _detail(403, "I ritiri automatici non sono disponibili: il risultato deve essere confermato dai giocatori.")
         body = await _json(request); pid = body.get("player_id")
         if not isinstance(pid, str): _detail(422, "Seleziona un partecipante.")
         with MUTATION_LOCK, db.transaction() as conn:
@@ -646,12 +772,13 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
                         match = {**match, "result": None, "p1_games": 0, "p2_games": 0,
                                  "p1_points": 0, "p2_points": 0, "p1_wins": 0, "p2_wins": 0,
                                  "p1_draws": 0, "p2_draws": 0, "p1_losses": 0, "p2_losses": 0}
+                        match.pop("void", None)
+                        match.pop("score_unknown", None)
                     if match["round"] >= target["round"] and match.get("result") is None and match.get("p2"):
                         left_out = active_withdrawals.get(match["p1"], 10**9) <= match["round"]
                         right_out = active_withdrawals.get(match["p2"], 10**9) <= match["round"]
                         if left_out ^ right_out:
-                            result = "p1_forfeit" if left_out else "p2_forfeit"
-                            match = engine.apply_result(cfg, match, {"result": result, "p1_games": 0, "p2_games": 0})
+                            match = {**match, "result": "void", "void": True}
                         elif left_out and right_out:
                             match = {**match, "result": "void", "p1_games": 0, "p2_games": 0,
                                      "p1_points": 0, "p2_points": 0, "p1_wins": 0, "p2_wins": 0,
@@ -659,6 +786,8 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
                     kept.append(match)
             else:
                 kept = [m for m in matches if m["round"] < target["round"]]
+            for invalidated_match in invalidated:
+                conn.execute("UPDATE result_proposals SET status='invalidated' WHERE tournament_id=? AND match_id=?", (tid, invalidated_match["id"]))
             _persist_match_rows(conn, tid, kept)
             conn.execute("UPDATE tournaments SET status='active',champion_id=NULL WHERE id=?", (tid,))
             Database.audit(conn, tid, "match_rollback", summary); _bump(conn, tid)
@@ -671,6 +800,7 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
         with MUTATION_LOCK, db.transaction() as conn:
             tournament = _row_tournament(conn, tid)
             matches = Database.get_matches(conn, tid)
+            conn.execute("UPDATE result_proposals SET status='invalidated' WHERE tournament_id=?", (tid,))
             conn.execute("DELETE FROM matches WHERE tournament_id=?", (tid,))
             conn.execute("UPDATE entrants SET withdrawn=0 WHERE tournament_id=?", (tid,))
             conn.execute("DELETE FROM withdrawals WHERE tournament_id=?", (tid,))
@@ -759,14 +889,16 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
                     # Include orphaned files owned by the app, but never arbitrary paths.
                     photos = sorted(set(photos) | {p.name for p in db.photos_dir.iterdir() if re.fullmatch(r"[a-f0-9]{32}\.jpg", p.name)})
                 if scope == "results":
+                    conn.execute("DELETE FROM result_proposals")
                     conn.execute("DELETE FROM matches")
                     conn.execute("DELETE FROM withdrawals")
                     conn.execute("UPDATE entrants SET withdrawn=0")
-                    conn.execute("DELETE FROM audit WHERE action IN ('match_result_recorded','match_rollback','tournament_completed','player_withdrew')")
+                    conn.execute("DELETE FROM audit WHERE action IN ('match_result_recorded','friendly_result_recorded','match_rollback','tournament_completed','player_withdrew')")
                     conn.execute("UPDATE tournaments SET status='draft', archived_from=NULL, frozen_config_json=NULL, champion_id=NULL, warnings_json='[]', revision=revision+1, updated_at=CURRENT_TIMESTAMP")
                 else:
                     conn.execute("DELETE FROM tournaments")
                     if scope == "all":
+                        conn.execute("DELETE FROM result_proposals")
                         conn.execute("DELETE FROM players")
             for name in photos:
                 if not re.fullmatch(r"[a-f0-9]{32}\.jpg", name):
@@ -810,7 +942,7 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             rows = global_elo_from_db(conn)
             return [{"rank": i, "id": row["id"], "name": row["name"], "rating": row["rating"],
                      "matches": row["matches"], "wins": row["wins"], "draws": row["draws"], "losses": row["losses"],
-                     "photo_url": f"/photos/{row['photo']}" if row.get("photo") else None} for i, row in enumerate(rows, 1)]
+                     "photo_url": f"/photos/{row['photo']}" if row.get("photo") else None, "avatar_hue": row["avatar_hue"]} for i, row in enumerate(rows, 1)]
 
     @application.get("/api/public/tournaments")
     def public_tournaments():
@@ -826,7 +958,7 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             entrants = Database.get_entrants(conn, tid)
             matches = Database.get_matches(conn, tid)
             cfg = tournament["frozen_config"] or tournament["config"]
-            public_entrants = [{"id": p["id"], "name": p["name"], "photo_url": p["photo_url"], "seed": p["seed"], "withdrawn": p["withdrawn"]} for p in entrants]
+            public_entrants = [{"id": p["id"], "name": p["name"], "photo_url": p["photo_url"], "avatar_hue": p["avatar_hue"], "seed": p["seed"], "withdrawn": p["withdrawn"]} for p in entrants]
             return {"id": tid, "config": cfg, "status": tournament["status"], "entrants": public_entrants,
                     "matches": matches, "rounds": public_rounds(matches), "standings": engine.calculate_standings(cfg, entrants, matches),
                     "champion_id": tournament["champion_id"], "warnings": tournament["warnings"]}

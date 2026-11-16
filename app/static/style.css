@@ -189,3 +189,24 @@ footer a{min-height:44px;display:inline-flex;align-items:center}
 footer a:focus-visible{outline:2px solid #a6fff0;outline-offset:3px}
 /* Keyboard focus must move into view immediately. */
 html{scroll-behavior:auto}
+
+/* Action colours and tournament status */
+.button.secondary{background:#2864a1;border-color:#528bd0;color:#fff}
+.button.danger{background:#a33849;border-color:#d65d6d;color:#fff}
+.session-area select{width:auto;max-width:190px;min-width:140px}
+.player-status{display:inline-block;border-radius:99px;padding:.2rem .55rem;font-size:.7rem;font-weight:700;white-space:nowrap}
+.player-status.in-play{color:#a8f0ca;background:#174b3c}
+.player-status.eliminated{color:#ffd0cb;background:#63303a}
+.tournament-card.is-active-tournament{position:relative;z-index:1;box-shadow:inset 0 0 0 1px #9df7e2,0 0 22px #63eadc55;animation:arena-aura 3s ease-in-out infinite alternate}
+.tournament-card.is-active-tournament::after{content:'✦  ·  ✧';position:absolute;right:1rem;top:-.8rem;color:#d3fff6;text-shadow:0 0 10px #7ffff0;pointer-events:none;animation:arena-sparkle 2s ease-in-out infinite alternate}
+@keyframes arena-aura{from{box-shadow:inset 0 0 0 1px #9df7e2,0 0 12px #63eadc44}to{box-shadow:inset 0 0 0 1px #c5fff3,0 0 30px #63eadc88}}
+@keyframes arena-sparkle{from{opacity:.5;transform:translateY(2px)}to{opacity:1;transform:translateY(-4px)}}
+@media(prefers-reduced-motion:reduce){.tournament-card.is-active-tournament,.tournament-card.is-active-tournament::after{animation:none}}
+
+.avatar{background:hsl(var(--avatar-hue,215) 48% 30%);color:#fff;font-weight:700;flex-shrink:0}
+.avatar-color{display:grid;gap:3px;color:var(--muted);font-size:.7rem;min-width:110px}.avatar-color input{min-height:20px;padding:0;border:0;background:transparent;accent-color:hsl(var(--avatar-hue,215) 70% 55%)}
+@media(max-width:700px){.player-actions{flex-wrap:wrap}.player-list-row{grid-template-columns:auto 1fr}.player-actions{grid-column:1/-1}}
+.results-fab{position:fixed;right:1.4rem;bottom:1.4rem;z-index:20;width:60px;height:60px;border:0;border-radius:50%;background:#4f9bf2;color:#071a31;font-size:2.5rem;line-height:1;box-shadow:0 6px 24px #0009;cursor:pointer}.results-fab:hover{background:#91c4ff}.results-panel{display:grid;gap:.8rem}.results-panel label{display:grid;gap:.35rem}.results-panel button{min-height:44px}.result-pending{padding:.8rem;background:#172d36;border:1px solid #345760;margin:.6rem 0}.result-pending p{margin:.2rem 0 .7rem}.results-error{color:#ffc0ba}.results-actions{display:flex;gap:.5rem;flex-wrap:wrap}
+
+.avatar-mascot{width:100%;height:100%;display:block}
+.session-area select{font-size:.85rem}
