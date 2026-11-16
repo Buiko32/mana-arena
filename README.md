@@ -2,6 +2,10 @@
 
 Mana Arena gestisce tornei amatoriali di Magic in italiano. È pensata per una partita 1v1, con un massimo di 64 partecipanti. Gli abbinamenti e gli spareggi sono strumenti amatoriali: l’OMW usa la percentuale effettiva senza soglia minima. L’app non gestisce tornei multiplayer Commander e non offre funzioni o certificazioni DCI/sanzionate.
 
+## Scoprire il proprio abbinamento
+
+Apri un torneo pubblico e scegli **Scopri il tuo incontro**. Seleziona il tuo nome e il turno: una breve animazione mostra l'avversario e il tavolo, oppure segnala bye, incontro annullato o abbinamento non ancora disponibile. I dati vengono riletti dal server prima della rivelazione. Gli incontri restano pubblici anche nelle viste turni e tabellone; non è una funzione di segretezza o autenticazione. Con movimento ridotto il risultato compare subito.
+
 ## Installazione su UGREEN UGOS
 
 Serve Docker/Container Manager e accesso in scrittura alla cartella del progetto. Crea `.env` copiando `.env.example` e sostituisci i due valori di esempio. Genera due valori distinti e casuali, ad esempio con Python:
@@ -49,7 +53,7 @@ python -m pytest -q
 node --version
 node --check app/static/brackets.js
 node --check app/static/app.js
-node --test tests/brackets.test.cjs
+node --test tests/brackets.test.cjs tests/reveal.test.cjs
 ```
 
 GitHub Actions esegue gli stessi test prima di costruire l’immagine.

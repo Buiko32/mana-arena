@@ -1,0 +1,10 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { findPairing } = require('../app/static/reveal.js');
+const entrants = [{id:'a',name:'Alba'},{id:'b',name:'Bruno'}];
+const rounds = [{round:1,matches:[{p1:'a',p2:'b',table:2}]},{round:2,matches:[{p1:'a',p2:null,bye:true,table:1},{p1:'b',p2:null,void:true}]}];
+test('reveals the real opponent regardless of player side',()=>{assert.deepEqual(findPairing(rounds,entrants,1,'b'),{kind:'match',player:'Bruno',opponent:'Alba',round:1,table:2});});
+test('reports bye and void distinctly',()=>{assert.equal(findPairing(rounds,entrants,2,'a').kind,'bye');assert.equal(findPairing(rounds,entrants,2,'b').kind,'void');});
+test('handles unpaired, invalid or unavailable rounds without inventing a match',()=>{assert.equal(findPairing(rounds,entrants,3,'a').kind,'unavailable');assert.equal(findPairing(rounds,entrants,1,'x').kind,'unavailable');assert.equal(findPairing([{round:1,matches:[]}],entrants,1,'a').kind,'unpaired');});
+test('keeps an undecided opponent distinct from bye',()=>{assert.equal(findPairing([{round:1,matches:[{p1:'a',p2:null}]}],entrants,1,'a').kind,'pending');});

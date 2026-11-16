@@ -135,6 +135,20 @@ def test_random_hero_mascot_has_five_animated_local_assets(tmp_path):
             assert image.info.get("loop") == 0
 
 
+def test_public_pairing_reveal_uses_accessible_dialog_and_local_script(tmp_path):
+    app = create_app(data_dir=tmp_path, admin_username="admin", admin_password="Valid-admin-passphrase-42", session_secret="ui-test-session-secret-at-least-32-bytes")
+    with TestClient(app) as client:
+        page = client.get("/").text
+        js = client.get("/static/app.js").text
+        helper = client.get("/static/reveal.js")
+    assert helper.status_code == 200
+    assert page.index('/static/reveal.js') < page.index('/static/app.js')
+    for marker in ('id="reveal-dialog"', 'id="reveal-player"', 'id="reveal-round"', 'aria-live="polite"'):
+        assert marker in page
+    assert 'data-reveal-open' in js and 'ManaReveal.findPairing' in js
+    assert 'prefers-reduced-motion: reduce' in js
+
+
 def test_static_interface_uses_only_local_assets_and_has_admin_workflow_controls(tmp_path):
     app = create_app(data_dir=tmp_path, admin_username="admin", admin_password="Valid-admin-passphrase-42", session_secret="ui-test-session-secret-at-least-32-bytes")
     with TestClient(app) as client:
