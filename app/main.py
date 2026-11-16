@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import json
 import os
@@ -318,7 +319,11 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
     def home():
         index = Path(__file__).parent / "static" / "index.html"
         if index.is_file():
-            return FileResponse(index, media_type="text/html; charset=utf-8")
+            html = index.read_text(encoding="utf-8")
+            for asset in ("style.css", "taste/motion.css", "taste/motion.js", "brackets.js", "reveal.js", "app.js", "player-results.js"):
+                version = hashlib.sha256((index.parent / asset).read_bytes()).hexdigest()[:12]
+                html = html.replace(f'/static/{asset}"', f'/static/{asset}?v={version}"')
+            return HTMLResponse(html, headers={"Cache-Control": "no-store"})
         return HTMLResponse("<!doctype html><html lang='it'><meta charset='utf-8'><title>Mana Arena</title><body><main><h1>Mana Arena</h1><p>Interfaccia in preparazione.</p></main></body></html>")
 
     @application.get("/photos/{filename}")
