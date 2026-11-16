@@ -195,3 +195,16 @@ def test_hero_rules_target_current_markup():
     css = Path('app/static/style.css').read_text()
     assert '#tournament-home>.hero' in css
     assert '#public-view>.hero' not in css
+
+
+def test_tournament_form_hides_format_and_presets_and_highlights_players(tmp_path):
+    app = create_app(data_dir=tmp_path, admin_username='admin', admin_password='Valid-admin-passphrase-42', session_secret='ui-test-session-secret-at-least-32-bytes')
+    with TestClient(app) as client:
+        page = client.get('/').text
+        js = client.get('/static/app.js').text
+        css = client.get('/static/style.css').text
+    assert 'data-preset=' not in page
+    assert 'name="game_format"' not in page
+    assert 'name="name"' in page and 'name="description"' in page
+    assert 'is-match-winner' in js and "player?.id===savedPlayer()" in js
+    assert '.graph-player-row.is-me' in css and '.graph-player-row.is-winner' in css

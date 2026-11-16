@@ -218,24 +218,14 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
     @application.post('/api/player/login')
     async def player_login(request: Request, response: Response):
         import hashlib, time
-        body = await _json(request); pid = body.get('player_id'); password = body.get('password')
-        if not isinstance(pid, str) or not isinstance(password, str) or len(password)>1024: _detail(422, 'Credenziali non valide.')
-        auth = request.app.state.auth
-        key = 'player:' + (request.client.host if request.client else 'unknown') + ':' + pid
-        if not auth.allowed(key): _detail(429, 'Troppi tentativi. Riprova più tardi.')
-        with db.transaction() as conn:
-            row = conn.execute('SELECT c.*,p.name FROM player_credentials c JOIN players p ON p.id=c.player_id WHERE c.player_id=? AND p.active=1', (pid,)).fetchone()
-        import asyncio
-        valid = bool(row and secrets.compare_digest((await asyncio.to_thread(hash_password, password, row['salt']))[1], row['password_hash']))
-        if not valid:
-            auth.failed(key); _detail(401, 'Credenziali non valide.')
+        body = await _json(request); pid = body.get('player_id')
+        if not isinstance(pid, str) or not pid: _detail(422, 'Seleziona un giocatore.')
         token = secrets.token_urlsafe(32); csrf = secrets.token_urlsafe(24)
         with MUTATION_LOCK, db.transaction() as conn:
-            current = conn.execute('SELECT c.password_hash FROM player_credentials c JOIN players p ON p.id=c.player_id WHERE c.player_id=? AND p.active=1', (pid,)).fetchone()
-            if not current or not secrets.compare_digest(current['password_hash'],row['password_hash']): _detail(401, 'Credenziali non più valide.')
+            row = conn.execute('SELECT id,name FROM players WHERE id=? AND active=1', (pid,)).fetchone()
+            if not row: _detail(404, 'Giocatore non trovato.')
             conn.execute("DELETE FROM player_sessions WHERE expires_at < strftime('%s','now')")
             conn.execute('INSERT INTO player_sessions VALUES(?,?,?,?)', (hashlib.sha256(token.encode()).hexdigest(), pid, csrf, int(time.time())+30*86400))
-        auth.succeeded(key)
         response.set_cookie('mana_player_session', token, httponly=True, secure=secure, samesite='lax', max_age=30*86400, path='/')
         return {'player_id':pid, 'name':row['name'], 'csrf_token':csrf}
 
@@ -414,7 +404,10 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             _detail(422, "Il nome del giocatore è obbligatorio e deve contenere al massimo 80 caratteri.")
         pid = str(uuid.uuid4())
         with MUTATION_LOCK, db.transaction() as conn:
-            conn.execute("INSERT INTO players(id,name) VALUES(?,?)", (pid, name.strip()))
+            used = {row[0] for row in conn.execute("SELECT avatar_hue FROM players WHERE active=1")}
+            palette = [215, 0, 120, 40, 280, 175, 325, 75, 250, 20, 150, 300]
+            hue = next((value for value in palette + list(range(360)) if value not in used), 215)
+            conn.execute("INSERT INTO players(id,name,avatar_hue) VALUES(?,?,?)", (pid, name.strip(), hue))
             row = conn.execute("SELECT * FROM players WHERE id=?", (pid,)).fetchone()
         return Database.player(row)
 

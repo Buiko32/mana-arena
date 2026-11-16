@@ -215,3 +215,9 @@ html{scroll-behavior:auto}
 .results-fab{left:50%;right:auto;bottom:max(1rem,env(safe-area-inset-bottom));transform:translateX(-50%);display:grid;place-items:center;width:60px;height:60px;padding:0;border:2px solid #bdeaff;border-radius:50%;background:#4f9bf2;color:#071a31;font-size:2.3rem;line-height:1;box-shadow:0 8px 28px #0009,0 0 0 5px #4f9bf22b}.results-fab:focus-visible{outline:3px solid #fff;outline-offset:4px}.shell{padding-bottom:7rem}
 #public-view,#global-ranking{scroll-margin-top:90px}
 @media(max-width:540px){#public-view,#global-ranking{scroll-margin-top:120px}}
+/* Distinguish the selected player from match winners without relying on position. */
+.hero-mascots::before{display:none}
+.player-chip.is-me,.graph-player-row.is-me,.match-row .is-me{outline:2px solid #70b9ff;outline-offset:2px;background:#163854;border-radius:5px}
+tr.is-me td{background:#173b55}
+.graph-player-row.is-winner,.match-row .is-match-winner{color:#b1ffb5;background:#184b35;font-weight:800;border-radius:5px}
+.match-row .is-match-winner::after{content:' ✓';color:#b1ffb5}
