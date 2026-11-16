@@ -69,13 +69,25 @@ def test_public_and_admin_entry_points_are_labeled_and_keyboard_friendly(tmp_pat
         page = client.get("/").text
     for marker in ('id="public-view"', 'id="admin-view"', 'aria-label="Navigazione principale"', 'id="login-form"', 'id="tournament-form"', 'id="players-list"'):
         assert marker in page
-    assert '<h1 id="public-title">Mana Arena</h1>' in page
+    assert '<h1 id="public-title">Tornei Magic</h1>' in page
     assert "Il tavolo è" not in page
     assert "La strategia incontra" not in page
     assert "prefers-reduced-motion" in client.get("/static/style.css").text
     assert "scroll-margin-top" in client.get("/static/style.css").text
     assert "visibilitychange" in client.get("/static/app.js").text
     assert "document.visibilityState" in client.get("/static/app.js").text
+
+
+def test_navigation_points_to_existing_view_ids_and_supports_legacy_admin_link(tmp_path):
+    app = create_app(data_dir=tmp_path, admin_username="admin", admin_password="Valid-admin-passphrase-42", session_secret="ui-test-session-secret-at-least-32-bytes")
+    with TestClient(app) as client:
+        page = client.get("/").text
+        js = client.get("/static/app.js").text
+    parser = StructureParser()
+    parser.feed(page)
+    assert 'href="#public-view"' in page and "public-view" in parser.ancestors
+    assert 'href="#admin-view"' in page and "admin-view" in parser.ancestors
+    assert "location.hash==='#admin'" in js and "location.hash==='#admin-view'" in js
 
 
 def test_tournament_manager_is_outside_hidden_form_and_fieldsets_are_closed(tmp_path):

@@ -149,3 +149,16 @@ footer{border-color:#263d41;color:#9eb2aa}.brand-mini{color:#94dccc}.notice.erro
 .arena-orbit{left:50%;top:50%;transform:translate(-50%,-50%)}
 .brand-mark{transform:none}
 @media(max-width:540px){.session-area{font-size:0;letter-spacing:0}.session-area .status-dot{width:9px;height:9px}}
+
+/* The home view is an application: keep tournament data close to its controls. */
+.brand-name{white-space:nowrap;font-weight:750;letter-spacing:.1em}
+#public-view>.hero{display:block}
+.hero-wrap{display:flex;align-items:center;justify-content:space-between;gap:clamp(1.5rem,4vw,4rem)}
+#public-view>.hero .hero-copy{flex:1 1 60%;min-width:0;max-width:730px}
+.hero-mascots{flex:1 1 40%;min-width:0;isolation:isolate}
+.hero-mascots::before{content:'';position:absolute;width:min(27vw,310px);aspect-ratio:1;left:50%;top:50%;transform:translate(-50%,-50%);border:1px solid #68d7c455;border-radius:50%;box-shadow:0 0 0 20px #68d7c40a,0 0 0 55px #68d7c407,inset 0 0 65px #66e4ce0b;pointer-events:none}
+.tournaments-section{padding-bottom:2rem}
+@media(max-width:540px){.hero-wrap{display:flex;flex-direction:column;align-items:stretch;gap:.5rem}#public-view>.hero .hero-copy{flex:auto}.hero-mascots{width:100%;min-height:200px}.hero-mascots::before{width:170px}.brand-name{font-size:.68rem}}
+@media(min-width:801px){.hero-wrap{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:24px}.hero-copy{grid-column:span 7}.hero-mascots{grid-column:span 5}}
+@media(max-width:540px){.tournament-count-label{font-size:0;gap:0}.tournament-count-label .count-pill{font-size:.73rem}}
+@media(min-width:801px){#public-view>.hero .hero-copy{max-width:none}}
