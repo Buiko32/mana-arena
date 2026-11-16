@@ -25,6 +25,7 @@
     </a>
     <nav aria-label="Navigazione principale" class="main-nav">
       <a href="#public-view" data-view-link="public" aria-current="page">Tornei</a>
+      <a href="#global-ranking" data-ranking-link aria-current="false">Classifica globale</a>
       <a href="#admin-view" data-view-link="admin">Organizza</a>
     </nav>
     <div class="session-area" id="session-area"><span class="status-dot"></span><span>Solo lettura</span></div>
@@ -37,12 +38,14 @@
         <div class="hero-mascots" aria-hidden="true"><img id="arena-mascot" class="arena-mascot" alt="" width="288" height="288" decoding="async" hidden></div>
         </div>
       </section>
+      <div class="identity-bar"><label for="player-identity">Il tuo profilo giocatore</label><select id="player-identity"><option value="">Seleziona il tuo nome</option></select><span class="identity-note">Memorizzato solo in questo browser.</span></div>
       <section class="tournaments-section wrap" aria-labelledby="tournaments-title">
       <div class="section-heading public-heading"><div><p class="section-kicker">IN DIRETTA DALL’ARENA</p><h2 id="tournaments-title">Tornei</h2></div><span class="tournament-count-label">Tornei disponibili <span id="tournament-count" class="count-pill">—</span></span></div>
       <div id="public-error" class="notice error" role="alert" hidden></div>
       <div id="tournament-list" class="tournament-grid" aria-live="polite"><div class="loading-card">Caricamento tornei…</div></div>
       <section id="public-detail" class="detail-panel" aria-live="polite" hidden></section>
       </section>
+      <section id="global-ranking" class="ranking-section wrap" aria-labelledby="ranking-title"><div class="section-heading"><div><p class="section-kicker">TUTTI I TORNEI</p><h2 id="ranking-title">Classifica globale</h2></div></div><p class="muted">Elo interno: 1500 iniziali; K 40 nelle prime 30 partite, poi 20 o 10 dopo 2400. Bye e forfait esclusi. Non è un rating FIDE ufficiale.</p><div id="ranking-list" aria-live="polite"><p class="muted">Caricamento classifica…</p></div></section>
     </div>
 
     <section id="admin-view" class="view" aria-labelledby="admin-title" hidden>
@@ -84,6 +87,7 @@
         <section id="admin-backup" class="admin-section" role="tabpanel" aria-labelledby="tab-backup" hidden>
           <div class="section-heading compact mascot-section-heading"><h2>Backup e ripristino</h2></div>
           <div class="backup-grid"><article class="backup-card"><span class="backup-icon">↓</span><h3>Backup</h3><button id="backup-download" class="button secondary" type="button">Scarica ZIP</button></article><article class="backup-card danger-card"><span class="backup-icon">↥</span><h3>Ripristino</h3><p>Sostituisce i dati correnti e richiede un nuovo accesso.</p><form id="restore-form"><label>Archivio ZIP<input name="file" type="file" accept=".zip,application/zip" required></label><button class="button danger" type="submit">Ripristina</button></form></article></div>
+          <section class="reset-area" aria-labelledby="reset-title"><h3 id="reset-title">Eliminazione dati</h3><p>Scarica un backup prima di procedere. L’account organizzatore rimane attivo.</p><div class="reset-options"><button type="button" class="button danger" data-reset-scope="results">Elimina turni e risultati</button><button type="button" class="button danger" data-reset-scope="tournaments">Elimina tutti i tornei</button><button type="button" class="button danger" data-reset-scope="all">Elimina tutti i dati di gioco</button></div></section>
         </section>
       </div>
     </section>

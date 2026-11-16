@@ -572,3 +572,68 @@ def test_completed_and_archived_config_requires_explicit_reopen_then_rollback(cl
     assert client.put(f"/api/admin/tournaments/{tid}/config",json=changed,headers=headers).status_code == 409
     assert client.put(f"/api/admin/tournaments/{tid}/config?confirm_rollback=true",json=changed,headers=headers).status_code == 200
 
+
+
+def test_global_elo_is_based_on_valid_recorded_results_and_rollbacks(client):
+    headers = admin_headers(client)
+    tid, people = tournament_with_players(client, headers, 2, config(rounds=2))
+    start(client, tid, headers)
+    match = client.post(f"/api/admin/tournaments/{tid}/rounds/next", json={}, headers=headers).json()["matches"][0]
+    result = client.put(f"/api/admin/tournaments/{tid}/matches/{match['id']}/result", json={"result":"p1_win", "p1_games":1, "p2_games":0}, headers=headers)
+    assert result.status_code == 200
+    ranking = {p["id"]:p for p in client.get('/api/public/ranking').json()}
+    assert ranking[match["p1"]]["rating"] == 1520
+    assert ranking[match["p2"]]["rating"] == 1480
+    assert client.post(f"/api/admin/tournaments/{tid}/rollback", json={"match_id":match["id"],"confirm":True}, headers=headers).status_code == 200
+    assert all(p["rating"] == 1500 for p in client.get('/api/public/ranking').json())
+
+
+def test_applying_elo_seeds_requires_admin_and_only_changes_draft(client):
+    headers = admin_headers(client)
+    tid, people = tournament_with_players(client, headers, 2, config(seeding="random"))
+    assert client.post(f'/api/admin/tournaments/{tid}/seed-from-ranking').status_code in (401, 403)
+    applied = client.post(f'/api/admin/tournaments/{tid}/seed-from-ranking', headers=headers)
+    assert applied.status_code == 200
+    assert sorted(p['seed'] for p in applied.json()['entrants']) == [1, 2]
+    assert client.get(f'/api/admin/tournaments/{tid}', headers=headers).json()['config']['seeding'] == 'manual'
+    start(client, tid, headers)
+    assert client.post(f'/api/admin/tournaments/{tid}/seed-from-ranking', headers=headers).status_code == 409
+
+
+def test_selective_reset_requires_confirmation_and_preserves_admin(client):
+    headers = admin_headers(client)
+    tid, people = tournament_with_players(client, headers, 2)
+    start(client, tid, headers)
+    assert client.post(f'/api/admin/tournaments/{tid}/rounds/next', json={}, headers=headers).status_code == 200
+    assert client.post('/api/admin/reset-data', json={'scope':'results'}, headers=headers).status_code == 422
+    assert client.post('/api/admin/reset-data', json={'scope':'results','confirmation':'ELIMINA'}, headers=headers).status_code == 200
+    tournament = client.get(f'/api/admin/tournaments/{tid}', headers=headers).json()
+    assert tournament['status'] == 'draft' and tournament['matches'] == [] and len(tournament['entrants']) == 2
+    assert client.post('/api/admin/reset-data', json={'scope':'tournaments','confirmation':'ELIMINA'}, headers=headers).status_code == 200
+    assert client.get('/api/admin/tournaments', headers=headers).json() == []
+    assert len(client.get('/api/admin/players', headers=headers).json()) == 2
+    assert client.post('/api/admin/reset-data', json={'scope':'all','confirmation':'ELIMINA'}, headers=headers).status_code == 200
+    assert client.get('/api/admin/players', headers=headers).json() == []
+    assert client.get('/api/admin/session').status_code == 200
+
+
+def test_all_reset_deletes_managed_player_photos(client, tmp_path):
+    headers = admin_headers(client)
+    person = player(client, headers, 'Con foto')
+    image = Image.new('RGB', (16, 16), (20, 30, 40))
+    stream = io.BytesIO(); image.save(stream, format='PNG')
+    uploaded = client.post(f"/api/admin/players/{person['id']}/photo", files={'file': ('photo.png', stream.getvalue(), 'image/png')}, headers=headers)
+    path = tmp_path / 'photos' / uploaded.json()['photo_url'].split('/')[-1]
+    assert path.exists()
+    orphan = tmp_path / 'photos' / ('a' * 32 + '.jpg')
+    orphan.write_bytes(b'orphan')
+    result = client.post('/api/admin/reset-data', json={'scope':'all', 'confirmation':'ELIMINA'}, headers=headers)
+    assert result.status_code == 200 and not path.exists() and not orphan.exists()
+
+
+def test_global_reset_requires_admin_and_csrf(client):
+    assert client.get('/api/admin/reset-data/preview').status_code == 401
+    assert client.post('/api/admin/reset-data', json={'scope':'all','confirmation':'ELIMINA'}).status_code == 401
+    headers = admin_headers(client)
+    assert client.post('/api/admin/reset-data', json={'scope':'all','confirmation':'ELIMINA'}).status_code == 403
+    assert client.post('/api/admin/reset-data', json={'scope':'other','confirmation':'ELIMINA'}, headers=headers).status_code == 422

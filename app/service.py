@@ -49,3 +49,55 @@ def safe_csv(value) -> str:
         return "'" + text
     return text
 
+
+# Internal Elo inspired by FIDE K thresholds, not an official FIDE rating.
+def calculate_global_elo(players: list[dict], matches: list[dict]) -> list[dict]:
+    rows = {p['id']: {**p, 'rating': 1500.0, 'matches': 0, 'wins': 0, 'draws': 0, 'losses': 0, 'peak_2400': False} for p in players}
+    for match in matches:
+        result = match.get('result')
+        a, b = rows.get(match.get('p1')), rows.get(match.get('p2'))
+        if result not in ('p1_win', 'p2_win', 'draw') or not a or not b or a is b or match.get('bye') or match.get('void'):
+            continue
+        score_a = {'p1_win': 1.0, 'p2_win': 0.0, 'draw': 0.5}[result]
+        ra, rb = a['rating'], b['rating']
+        def expected(own, other):
+            diff = other - own
+            if own < 2650:
+                diff = max(-400, min(400, diff))
+            return 1 / (1 + 10 ** (diff / 400))
+        def factor(row):
+            return 40 if row['matches'] < 30 else 10 if row['peak_2400'] else 20
+        a['rating'] += factor(a) * (score_a - expected(ra, rb))
+        b['rating'] += factor(b) * ((1 - score_a) - expected(rb, ra))
+        for row in (a, b):
+            row['matches'] += 1
+            row['peak_2400'] |= row['rating'] >= 2400
+        if score_a == 1: a['wins'] += 1; b['losses'] += 1
+        elif score_a == 0: b['wins'] += 1; a['losses'] += 1
+        else: a['draws'] += 1; b['draws'] += 1
+    result = sorted(rows.values(), key=lambda row: (-row['rating'], -row['wins'], row['name'].casefold(), row['id']))
+    for position, row in enumerate(result, 1):
+        row['rating'] = round(row['rating'])
+        row['rank'] = position
+        del row['peak_2400']
+    return result
+
+
+def global_elo_from_db(conn):
+    import json
+    players = [dict(row) for row in conn.execute('SELECT id,name,active,photo FROM players')]
+    # The audit id is the stable order in which results were recorded; use the latest
+    # matching event after a rollback. Old backups without events have a deterministic fallback.
+    events = {}
+    for row in conn.execute("SELECT id,detail_json FROM audit WHERE action='match_result_recorded' ORDER BY id"):
+        detail = json.loads(row['detail_json'])
+        if detail.get('match_id'):
+            events[detail['match_id']] = row['id']
+    matches = []
+    for row in conn.execute('SELECT m.id,m.data_json,m.round_no,m.table_no,t.created_at,t.id AS tid FROM matches m JOIN tournaments t ON t.id=m.tournament_id'):
+        match = json.loads(row['data_json'])
+        event = events.get(row['id'])
+        key = (1, event) if event is not None else (0, row['created_at'], row['tid'], row['round_no'], row['table_no'], row['id'])
+        matches.append((key, match))
+    matches.sort(key=lambda item: item[0])
+    return [row for row in calculate_global_elo(players, [item[1] for item in matches]) if row['active']]

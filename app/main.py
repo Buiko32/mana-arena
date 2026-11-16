@@ -21,7 +21,7 @@ from . import engine
 from .auth import AuthManager, hash_password, valid_bootstrap_password
 from .backup import create_backup, restore_backup
 from .db import Database, MUTATION_LOCK, _dump
-from .service import champion_id, public_rounds, safe_csv
+from .service import champion_id, public_rounds, safe_csv, global_elo_from_db
 
 MAX_PHOTO = 5 * 1024 * 1024
 MAX_PHOTO_PIXELS = 20_000_000
@@ -502,6 +502,21 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             _finalize_if_done(conn, current, entrants, schedule["matches"])
             return {**Database.get_tournament(conn, tid), "entrants": Database.get_entrants(conn, tid), "matches": Database.get_matches(conn, tid)}
 
+    @application.post("/api/admin/tournaments/{tid}/seed-from-ranking")
+    def seed_from_ranking(tid: str, session=Depends(admin_write)):
+        with MUTATION_LOCK, db.transaction() as conn:
+            tournament = _row_tournament(conn, tid)
+            if tournament["status"] != "draft": _detail(409, "I seed possono essere aggiornati solo in bozza.")
+            entrants = Database.get_entrants(conn, tid)
+            ranks = {row['id']: index for index, row in enumerate(global_elo_from_db(conn))}
+            ordered = sorted(entrants, key=lambda p: (ranks.get(p['id'], 10**9), p['seed'], p['id']))
+            for index, player in enumerate(ordered, 1):
+                conn.execute("UPDATE entrants SET seed=? WHERE tournament_id=? AND player_id=?", (index, tid, player['id']))
+            cfg = dict(tournament["config"]); cfg["seeding"] = "manual"
+            Database.audit(conn, tid, "seeds_from_global_ranking", {"player_ids": [p['id'] for p in ordered]})
+            _bump(conn, tid, config=cfg)
+            return {"entrants": Database.get_entrants(conn, tid)}
+
     @application.post("/api/admin/tournaments/{tid}/rounds/next")
     async def next_round(tid: str, request: Request, session=Depends(admin_write)):
         body = await _json(request)
@@ -722,6 +737,46 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             content = "\ufeff" + out.getvalue()
         return Response(content=content, media_type="text/csv; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="mana-arena-{kind}.csv"'})
 
+    @application.get("/api/admin/reset-data/preview")
+    def reset_data_preview(session=Depends(admin_session)):
+        with db.transaction() as conn:
+            return {"tournaments": conn.execute("SELECT COUNT(*) FROM tournaments").fetchone()[0],
+                    "players": conn.execute("SELECT COUNT(*) FROM players").fetchone()[0],
+                    "matches": conn.execute("SELECT COUNT(*) FROM matches").fetchone()[0],
+                    "photos": conn.execute("SELECT COUNT(*) FROM players WHERE photo IS NOT NULL").fetchone()[0]}
+
+    @application.post("/api/admin/reset-data")
+    async def reset_data(request: Request, session=Depends(admin_write)):
+        body = await _json(request)
+        scope = body.get("scope")
+        if scope not in ("results", "tournaments", "all") or body.get("confirmation") != "ELIMINA":
+            _detail(422, "Scegli i dati e scrivi ELIMINA per confermare.")
+        failures = []
+        with MUTATION_LOCK:
+            with db.transaction() as conn:
+                photos = [row[0] for row in conn.execute("SELECT photo FROM players WHERE photo IS NOT NULL")] if scope == "all" else []
+                if scope == "all" and db.photos_dir.exists():
+                    # Include orphaned files owned by the app, but never arbitrary paths.
+                    photos = sorted(set(photos) | {p.name for p in db.photos_dir.iterdir() if re.fullmatch(r"[a-f0-9]{32}\.jpg", p.name)})
+                if scope == "results":
+                    conn.execute("DELETE FROM matches")
+                    conn.execute("DELETE FROM withdrawals")
+                    conn.execute("UPDATE entrants SET withdrawn=0")
+                    conn.execute("DELETE FROM audit WHERE action IN ('match_result_recorded','match_rollback','tournament_completed','player_withdrew')")
+                    conn.execute("UPDATE tournaments SET status='draft', archived_from=NULL, frozen_config_json=NULL, champion_id=NULL, warnings_json='[]', revision=revision+1, updated_at=CURRENT_TIMESTAMP")
+                else:
+                    conn.execute("DELETE FROM tournaments")
+                    if scope == "all":
+                        conn.execute("DELETE FROM players")
+            for name in photos:
+                if not re.fullmatch(r"[a-f0-9]{32}\.jpg", name):
+                    failures.append(name); continue
+                try:
+                    (db.photos_dir / name).unlink(missing_ok=True)
+                except OSError:
+                    failures.append(name)
+        return {"ok": True, "scope": scope, "photos_not_deleted": len(failures)}
+
     @application.get("/api/admin/backup")
     def backup(session=Depends(admin_session)):
         with MUTATION_LOCK:
@@ -748,6 +803,14 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
         response = Response(content=json.dumps({"ok": True, "restored_photos": len(restored_photos)}), media_type="application/json")
         response.delete_cookie(SESSION_COOKIE, path="/"); response.delete_cookie(CSRF_COOKIE, path="/")
         return response
+
+    @application.get("/api/public/ranking")
+    def public_ranking():
+        with db.transaction() as conn:
+            rows = global_elo_from_db(conn)
+            return [{"rank": i, "id": row["id"], "name": row["name"], "rating": row["rating"],
+                     "matches": row["matches"], "wins": row["wins"], "draws": row["draws"], "losses": row["losses"],
+                     "photo_url": f"/photos/{row['photo']}" if row.get("photo") else None} for i, row in enumerate(rows, 1)]
 
     @application.get("/api/public/tournaments")
     def public_tournaments():

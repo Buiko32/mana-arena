@@ -6,6 +6,12 @@ Mana Arena gestisce tornei amatoriali di Magic in italiano. È pensata per una p
 
 Apri un torneo pubblico e scegli **Scopri il tuo incontro**. Seleziona il tuo nome e il turno: una breve animazione mostra l'avversario e il tavolo, oppure segnala bye, incontro annullato o abbinamento non ancora disponibile. I dati vengono riletti dal server prima della rivelazione. Gli incontri restano pubblici anche nelle viste turni e tabellone; non è una funzione di segretezza o autenticazione. Con movimento ridotto il risultato compare subito.
 
+## Classifica globale e reset
+
+La classifica globale ricalcola gli incontri ancora validi di tutti i tornei, compresi quelli archiviati, in ordine di registrazione dei risultati. Per i vecchi dati senza un evento in cronologia usa un ordine deterministico basato sul torneo e sul turno. Ogni profilo parte da 1500 punti: K=40 per le prime 30 partite valide, poi K=20, oppure K=10 dopo aver raggiunto 2400; le patte valgono mezzo punto e bye, forfait e incontri annullati non vengono conteggiati. La probabilità usa la formula Elo con differenza limitata a 400 punti per rating inferiori a 2650. È una classifica interna ispirata alle soglie FIDE: non usa i periodi ufficiali, le regole per minorenni o l'inizializzazione FIDE e non è un rating ufficiale. Correzioni e rollback ricalcolano la classifica dai risultati esistenti. Nella bozza un organizzatore può applicare i seed globali e poi modificarli manualmente.
+
+Il profilo scelto nella pagina pubblica è ricordato solo nel browser e non autentica il giocatore. In **Organizza → Backup** si può scegliere tra eliminare turni e risultati riportando i tornei in bozza, eliminare i tornei conservando i profili, o eliminare tutti i dati di gioco e le foto. Ogni azione richiede di digitare ELIMINA; l'account amministratore resta. Scaricare prima un backup: le eliminazioni sono irreversibili. Se una foto non può essere rimossa dal disco, l'app segnala il numero di file rimasti.
+
 ## Installazione su UGREEN UGOS
 
 Serve Docker/Container Manager e accesso in scrittura alla cartella del progetto. Crea `.env` copiando `.env.example` e sostituisci i due valori di esempio. Genera due valori distinti e casuali, ad esempio con Python:
