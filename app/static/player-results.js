@@ -59,21 +59,22 @@
   $('#player-results-close').addEventListener('click',()=>dialog.close());
   dialog.addEventListener('close',()=>{const id=session?.player_id||'';select.value=id;try{if(id)localStorage.setItem('mana-arena-player-id',id);else localStorage.removeItem('mana-arena-player-id');}catch{}});
   select.addEventListener('change',async()=>{++confirmationRequest;showConfirmationCount(0);const id=select.value;document.dispatchEvent(new Event('player-identity-changing'));try{if(!id){if(session)await post('/api/player/logout');session=null;localStorage.removeItem('mana-arena-player-id');}else{session=await post('/api/player/login',{player_id:id});localStorage.setItem('mana-arena-player-id',id);}document.dispatchEvent(new Event('player-identity-changed'));await refreshConfirmationCount();}catch(err){select.value=session?.player_id||'';document.dispatchEvent(new Event('player-identity-changed'));await refreshConfirmationCount();window.alert(err.message);}});
-  const welcome=$('#identity-welcome'), welcomeForm=$('#identity-welcome-form'), welcomeSelect=$('#identity-welcome-select'), welcomeMessage=$('#identity-welcome-message'), welcomeSubmit=$('#identity-welcome-submit');
+  const welcome=$('#identity-welcome'), welcomeForm=$('#identity-welcome-form'), welcomePlayers=$('#identity-welcome-players'), welcomeMessage=$('#identity-welcome-message'), welcomeSubmit=$('#identity-welcome-submit');
   async function showIdentityWelcome(){
     if(!welcome)return;
     if(!welcome.open)welcome.showModal();
     try{
       const list=await api('/api/public/ranking');
-      welcomeSelect.innerHTML='<option value="">Seleziona il tuo nome</option>'+list.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
-      welcomeSubmit.disabled=!list.length;
+      welcomePlayers.innerHTML=list.map(p=>`<label class="identity-player"><span class="identity-player-info">${window.manaPlayerAvatar(p.name,p.photo_url,p.avatar_hue,p.avatar_color)}<span>${esc(p.name)}</span></span><input type="radio" name="welcome-player" value="${esc(p.id)}" required></label>`).join('');
+      welcomeSubmit.disabled=true;
       welcomeMessage.textContent=list.length?'':'Non ci sono ancora giocatori. Puoi proseguire e aggiungerli nell’area organizzatore.';
-    }catch{welcomeSelect.innerHTML='<option value="">Giocatori non disponibili</option>';welcomeSubmit.disabled=true;welcomeMessage.textContent='Impossibile caricare i giocatori. Riprova ricaricando la pagina o prosegui senza scegliere.';}
+    }catch{welcomePlayers.innerHTML='';welcomeSubmit.disabled=true;welcomeMessage.textContent='Impossibile caricare i giocatori. Riprova ricaricando la pagina o prosegui senza scegliere.';}
   }
   if(welcome){
     $('#identity-welcome-skip').addEventListener('click',()=>welcome.close());
+    welcomePlayers.addEventListener('change',event=>{if(event.target.matches('input[name="welcome-player"]'))welcomeSubmit.disabled=false;});
     welcomeForm.addEventListener('submit',async event=>{
-      event.preventDefault();const id=welcomeSelect.value;if(!id)return;
+      event.preventDefault();const id=welcomeForm.querySelector('input[name="welcome-player"]:checked')?.value;if(!id)return;
       welcomeSubmit.disabled=true;welcomeMessage.textContent='';
       try{
         document.dispatchEvent(new Event('player-identity-changing'));
