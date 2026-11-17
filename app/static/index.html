@@ -8,13 +8,13 @@
   <meta name="theme-color" content="#0c1320">
   <meta name="description" content="Mana Arena — tornei Magic: The Gathering">
   <title>Mana Arena — Tornei Magic</title>
-  <link rel="stylesheet" href="/static/style.css?v=20261117-poses">
+  <link rel="stylesheet" href="/static/style.css">
   <link rel="stylesheet" href="/static/taste/motion.css">
   <script>document.documentElement.classList.add('m-enter');setTimeout(()=>document.documentElement.classList.add('m-enter-done'),700)</script>
   <script type="module" src="/static/taste/motion.js"></script>
   <script src="/static/brackets.js" defer></script>
   <script src="/static/reveal.js" defer></script>
-  <script src="/static/app.js?v=20261117-poses" defer></script>
+  <script src="/static/app.js" defer></script>
   <script src="/static/player-results.js" defer></script>
 </head>
 <body>
@@ -29,7 +29,7 @@
       <a href="#global-ranking" data-ranking-link aria-current="false">Classifica globale</a>
       <a href="#admin-view" data-view-link="admin">Organizza</a>
     </nav>
-    <button type="button" id="profile-open" class="button quiet" aria-label="Modifica il tuo profilo" title="Modifica il tuo profilo">👤</button><button type="button" id="confirmations-open" class="button quiet" aria-label="Risultati da confermare">✓</button><div class="session-area" id="session-area"><label class="visually-hidden" for="player-identity">Il tuo nome</label><select id="player-identity"><option value="">Scegli il tuo nome</option></select></div>
+    <div class="session-area" id="session-area"><label class="visually-hidden" for="player-identity">Il tuo nome</label><select id="player-identity"><option value="">Scegli il tuo nome</option></select><button type="button" id="profile-open" class="button quiet" aria-label="Modifica il tuo profilo" title="Modifica il tuo profilo">👤</button></div>
   </header>
   <main id="main-content" class="shell">
     <div id="public-view" class="view" aria-labelledby="public-title">
@@ -99,7 +99,7 @@
     <div id="reveal-stage" class="crystal-stage"><div class="crystal-ball"><div class="crystal-shine"></div><div id="reveal-result" class="crystal-result" role="status" aria-live="polite"></div></div><div class="crystal-base"></div></div>
   </dialog>
   <dialog id="confirm-dialog" aria-labelledby="confirm-title"><button type="button" class="dialog-close" data-dialog-close aria-label="Chiudi">×</button><h2 id="confirm-title">Conferma</h2><p id="confirm-message" class="muted"></p><div id="confirm-impact" class="impact-list"></div><div class="dialog-actions"><button id="confirm-cancel" class="button quiet" type="button">Annulla</button><button id="confirm-ok" class="button danger" type="button">Conferma</button></div></dialog>
-  <button id="results-open" class="results-fab" type="button" aria-label="Inserisci o conferma un risultato">+</button>
+  <div class="results-fab-group"><button id="results-open" class="results-fab" type="button" aria-label="Inserisci un risultato">+</button><button type="button" id="confirmations-open" class="button quiet" aria-label="Risultati da confermare">✓</button></div>
   <dialog id="player-results-dialog" aria-labelledby="player-results-title"><button type="button" class="dialog-close" id="player-results-close" aria-label="Chiudi">×</button><h2 id="player-results-title">Inserisci il risultato</h2><div id="player-results-content"></div></dialog>
   <dialog id="profile-dialog" aria-labelledby="profile-title"><button type="button" class="dialog-close" id="profile-close" aria-label="Chiudi">×</button><h2 id="profile-title">Il tuo profilo</h2><div id="profile-content"></div></dialog>
   <dialog id="confirmations-dialog" aria-labelledby="confirmations-title"><button type="button" class="dialog-close" id="confirmations-close" aria-label="Chiudi">×</button><h2 id="confirmations-title">Risultati da confermare</h2><div id="confirmations-content"></div></dialog>

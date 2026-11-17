@@ -136,6 +136,25 @@ def _finalize_if_done(conn, tournament, entrants, matches):
     return tournament
 
 
+def _advance_completed_round(conn, tournament, entrants, matches):
+    _finalize_if_done(conn, tournament, entrants, matches)
+    cfg = tournament['frozen_config'] or tournament['config']
+    if tournament['status'] != 'active' or cfg['structure'] == 'league' or not matches:
+        return
+    latest = max(m['round'] for m in matches)
+    if any(not m.get('result') for m in matches if m['round'] == latest):
+        return
+    schedule = engine.make_round(cfg, entrants, matches, latest + 1)
+    if not schedule['matches']:
+        return
+    new = [engine.apply_result(cfg, m, {'result':'bye','p1_games':0,'p2_games':0}) if m.get('bye') and not m.get('result') else m for m in schedule['matches']]
+    matches.extend(new)
+    _persist_match_rows(conn, tournament['id'], matches)
+    _bump(conn, tournament['id'], warnings=tournament['warnings'] + schedule['warnings'])
+    Database.audit(conn, tournament['id'], 'round_created', {'round':latest + 1, 'matches':len(new), 'warnings':schedule['warnings']})
+    _advance_completed_round(conn, tournament, entrants, matches)
+
+
 def create_app(*, data_dir=None, admin_username=None, admin_password=None, session_secret=None,
                cookie_secure=None, login_limit=5, allow_admin_result_override=False):
     """Create an isolated app; environment validation occurs in the lifespan."""
@@ -253,15 +272,20 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
     def player_results(session=Depends(player_session)):
         with db.transaction() as conn:
             rows = conn.execute("SELECT r.*,a.name AS proposer_name,b.name AS opponent_name,w.name AS winner_name FROM result_proposals r JOIN players a ON a.id=r.proposer_id JOIN players b ON b.id=r.opponent_id JOIN players w ON w.id=r.winner_id WHERE (r.proposer_id=? OR r.opponent_id=?) AND (r.status='pending' OR r.id IN (SELECT id FROM result_proposals WHERE (proposer_id=? OR opponent_id=?) AND status='confirmed' ORDER BY created_at DESC LIMIT 100)) ORDER BY r.created_at DESC", (session['player_id'],session['player_id'],session['player_id'],session['player_id'])).fetchall()
-            visible = []
+            return [dict(row) for row in rows]
+
+    @application.get('/api/player/matches')
+    def player_matches(session=Depends(player_session)):
+        with db.transaction() as conn:
+            rows = conn.execute("SELECT id, frozen_config_json, config_json FROM tournaments WHERE status='active'").fetchall()
+            result = []
             for row in rows:
-                if row['tournament_id'] and row['status']=='pending':
-                    matches = Database.get_matches(conn, row['tournament_id'])
-                    current, revealed = reveal_state(conn, row['tournament_id'], matches, session['player_id'])
-                    match = next((m for m in matches if m['id']==row['match_id']),None)
-                    if match and current is not None and match['round']>=current and not revealed: continue
-                visible.append(dict(row))
-            return visible
+                matches = Database.get_matches(conn, row['id'])
+                current, _ = reveal_state(conn, row['id'], matches, session['player_id'])
+                for match in matches:
+                    if match['round'] == current and session['player_id'] in (match.get('p1'), match.get('p2')) and not match.get('result') and not match.get('void') and not match.get('bye'):
+                        result.append({**match, 'tournament': {'id': row['id'], 'config': json.loads(row['frozen_config_json'] or row['config_json'])}})
+            return result
 
     @application.post('/api/player/results', status_code=201)
     async def propose_result(request: Request, session=Depends(player_write)):
@@ -272,7 +296,6 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
                 if tournament['status']!='active': _detail(409,'Il torneo non è attivo.')
                 matches = Database.get_matches(conn,tid)
                 current, revealed = reveal_state(conn,tid,matches,player)
-                if not revealed: _detail(403,'Scopri prima il tuo incontro.')
                 match=next((m for m in matches if m['id']==mid and m['round']==current),None)
                 if not match or player not in (match.get('p1'),match.get('p2')) or match.get('bye') or match.get('result') or match.get('void'): _detail(409,'Incontro non disponibile.')
                 opponent=match['p2'] if match['p1']==player else match['p1']
@@ -293,8 +316,6 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             if proposal['opponent_id']!=session['player_id']: _detail(403,'Solo l’avversario può confermare.')
             if proposal['status']!='pending': _detail(409,'Proposta già gestita.')
             if proposal['tournament_id']:
-                current, revealed = reveal_state(conn,proposal['tournament_id'],Database.get_matches(conn,proposal['tournament_id']),session['player_id'])
-                if not revealed: _detail(403,'Scopri prima il tuo incontro.')
                 tid=proposal['tournament_id']; tournament=_row_tournament(conn,tid)
                 if tournament['status']!='active': _detail(409,'Il torneo non è attivo.')
                 matches=Database.get_matches(conn,tid); match=next((m for m in matches if m['id']==proposal['match_id']),None)
@@ -304,7 +325,7 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
                 if cfg['match_length'] != 1: finalized.update({'p1_games':None, 'p2_games':None, 'score_unknown':True})
                 matches[matches.index(match)]=finalized; _persist_match_rows(conn,tid,matches); _bump(conn,tid)
                 Database.audit(conn,tid,'match_result_recorded',{'match_id':match['id'],'round':match['round'],'result':finalized['result']})
-                _finalize_if_done(conn,tournament,Database.get_entrants(conn,tid),matches)
+                _advance_completed_round(conn,tournament,Database.get_entrants(conn,tid),matches)
             if not proposal['tournament_id']:
                 Database.audit(conn,None,'friendly_result_recorded',{'match_id':result_id})
             conn.execute("UPDATE result_proposals SET status='confirmed' WHERE id=?",(result_id,))
@@ -755,7 +776,7 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             _persist_match_rows(conn, tid, matches)
             _bump(conn, tid)
             Database.audit(conn, tid, "match_result_recorded", {"match_id": match_id, "round": found["round"], "result": finalized["result"]})
-            _finalize_if_done(conn, tournament, entrants, matches)
+            _advance_completed_round(conn, tournament, entrants, matches)
             return {"id": match_id, **finalized, "status": Database.get_tournament(conn, tid)["status"]}
 
     @application.post("/api/admin/tournaments/{tid}/withdrawals")
@@ -801,7 +822,7 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             _bump(conn, tid)
             Database.audit(conn, tid, "player_withdrew", {"player_id": pid, "effective_round": effective_round})
             refreshed = Database.get_entrants(conn, tid)
-            _finalize_if_done(conn, tournament, refreshed, matches)
+            _advance_completed_round(conn, tournament, refreshed, matches)
             return {"entrant": next(p for p in refreshed if p["id"] == pid), "effective_round": effective_round, "matches": matches}
 
     @application.post("/api/admin/tournaments/{tid}/rollback")
@@ -1033,10 +1054,16 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             return {'round':current,'opponent':Database.public_player(person) if person else None,'bye':bool(match and match.get('bye')),'unpaired':match is None}
 
     @application.get("/api/public/tournaments")
-    def public_tournaments():
+    def public_tournaments(request: Request):
         with db.transaction() as conn:
             rows = conn.execute("SELECT * FROM tournaments WHERE status IN ('active','completed') ORDER BY created_at DESC,id").fetchall()
-            return [{"id": row["id"], "config": json.loads(row["frozen_config_json"] or row["config_json"]), "status": row["status"], "champion_id": None} for row in rows]
+            token_hash = hashlib.sha256(request.cookies.get('mana_player_session', '').encode()).hexdigest()
+            active = conn.execute("SELECT player_id FROM player_sessions WHERE token_hash=? AND expires_at>strftime('%s','now')", (token_hash,)).fetchone()
+            result = []
+            for row in rows:
+                current, revealed = reveal_state(conn, row['id'], Database.get_matches(conn, row['id']), active['player_id'] if active else None)
+                result.append({"id": row["id"], "config": json.loads(row["frozen_config_json"] or row["config_json"]), "status": row["status"], "champion_id": None, "reveal_locked": current is not None and not revealed, "reveal_available": current is not None})
+            return result
 
     def public_detail(tid, request: Request):
         with db.transaction() as conn:
