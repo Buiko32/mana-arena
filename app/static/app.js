@@ -9,7 +9,7 @@
     if (!image) return;
     const name = MASCOT_NAMES[Math.floor(Math.random() * MASCOT_NAMES.length)];
     const motion = matchMedia('(prefers-reduced-motion: reduce)');
-    const update = () => { image.src = `/static/mascots/${name}.${motion.matches ? 'png' : 'gif'}`; image.hidden = false; };
+    const update = () => { image.src = `/static/mascots/${name}${motion.matches ? '-still.png' : '.gif'}?v=20261117-poses`; image.hidden = false; };
     update();
     motion.addEventListener?.('change', update);
   }

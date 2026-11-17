@@ -34,3 +34,5 @@ app/static/mascots/*
 !app/static/mascots/black.png
 !app/static/mascots/red.png
 !app/static/mascots/green.png
+
+!app/static/mascots/*-still.png

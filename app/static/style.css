@@ -251,3 +251,7 @@ tr.is-me td{background:#173b55}
 
 .profile-preview{gap:1.5rem}.profile-preview>div{display:grid;justify-items:center;gap:.35rem;font-size:.8rem;color:var(--muted)}.profile-preview .avatar{width:100px;height:100px;border:2px solid #a4c9d4}#profile-avatar-preview{display:block}
 @media(max-width:650px){.topbar .session-area{flex-basis:80px}.topbar .session-area select{font-size:.75rem}}
+
+/* Align mascot with the orbit. */
+#public-view .hero-mascots{grid-template-columns:minmax(0,1fr);justify-content:center;justify-items:center;align-content:center}
+#public-view .arena-mascot{display:block;aspect-ratio:1;object-position:center}
