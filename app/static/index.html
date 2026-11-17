@@ -92,7 +92,19 @@
       </div>
     </section>
   </main>
-  <footer><span class="brand-mini">✦ MANA ARENA</span><span class="app-version">Versione 0.01.10</span><a href="#admin-view" data-view-link="admin">Area organizzatore</a></footer>
+  <footer><span class="brand-mini">✦ MANA ARENA</span><span class="app-version">Versione 0.01.11</span><a href="#admin-view" data-view-link="admin">Area organizzatore</a></footer>
+  <dialog id="identity-welcome" class="identity-welcome" aria-labelledby="identity-welcome-title" aria-describedby="identity-welcome-description">
+    <p class="identity-welcome-kicker">MANA ARENA</p>
+    <h2 id="identity-welcome-title">Chi sta giocando?</h2>
+    <p id="identity-welcome-description">Scegli il tuo nome per vedere i tuoi incontri e i risultati da confermare. Potrai cambiarlo in qualsiasi momento.</p>
+    <form id="identity-welcome-form">
+      <label for="identity-welcome-select">Il tuo nome</label>
+      <select id="identity-welcome-select" required><option value="">Caricamento giocatori…</option></select>
+      <p id="identity-welcome-message" class="identity-welcome-message" role="status" aria-live="polite"></p>
+      <button class="button primary" id="identity-welcome-submit" type="submit" disabled>Continua</button>
+      <button class="button quiet" id="identity-welcome-skip" type="button">Continua senza scegliere</button>
+    </form>
+  </dialog>
   <dialog id="reveal-dialog" class="reveal-dialog" aria-labelledby="reveal-title">
     <button type="button" class="dialog-close" id="reveal-close" aria-label="Chiudi">×</button>
     <h2 id="reveal-title">Scopri il tuo incontro</h2>

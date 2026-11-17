@@ -4,7 +4,11 @@ Mana Arena gestisce tornei amatoriali di Magic in italiano. È pensata per una p
 
 ## Versione
 
-La versione mostrata nel footer è `0.01.10` e segue il formato `major.release.fix`: il primo numero indica la major release, il secondo la release di base e l’ultimo i fix. Per ogni modifica richiesta dall’utente si incrementa il numero dei fix; release di base e major avanzano quando viene richiesta una nuova release di quel livello. Aggiorna il valore nel footer di `app/static/index.html` insieme alla modifica.
+La versione mostrata nel footer è `0.01.11` e segue il formato `major.release.fix`: il primo numero indica la major release, il secondo la release di base e l’ultimo i fix. Per ogni modifica richiesta dall’utente si incrementa il numero dei fix; release di base e major avanzano quando viene richiesta una nuova release di quel livello. Aggiorna il valore nel footer di `app/static/index.html` insieme alla modifica.
+
+## Scelta del giocatore
+
+Alla prima apertura il browser chiede di scegliere un giocatore. La scelta è ricordata sul dispositivo e può essere cambiata dal menu in alto. Si può continuare senza scegliere, ad esempio per accedere all’area organizzatore quando non ci sono ancora giocatori. Il profilo scelto non costituisce autenticazione.
 
 ## Scoprire il proprio abbinamento
 
@@ -67,7 +71,7 @@ python -m pytest -q
 node --version
 node --check app/static/brackets.js
 node --check app/static/app.js
-node --test tests/brackets.test.cjs tests/reveal.test.cjs tests/confirmation-badge.test.cjs
+node --test tests/brackets.test.cjs tests/reveal.test.cjs tests/confirmation-badge.test.cjs tests/identity-welcome.test.cjs
 ```
 
 GitHub Actions esegue gli stessi test prima di costruire l’immagine.
