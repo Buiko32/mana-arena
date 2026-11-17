@@ -1,0 +1,20 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+const fs = require('node:fs');
+test('badge counts only results awaiting the current player and refreshes', async () => {
+  const handlers = {}, elements = {};
+  const make = id => elements[id] = {id, hidden:false, value:'', textContent:'', options:[], setAttribute(k,v){this[k]=v}, addEventListener(n,fn){handlers[id+':'+n]=fn}, add(o){this.options.push(o)}, querySelector(){return null}, querySelectorAll(){return []}};
+  for(const id of ['player-results-dialog','player-results-content','player-identity','profile-dialog','profile-content','profile-open','profile-close','confirmations-dialog','confirmations-content','confirmations-open','confirmations-count','confirmations-close','results-open','player-results-close']) make(id);
+  let pending=[{status:'pending',opponent_id:'p1'},{status:'pending',opponent_id:'p2'},{status:'confirmed',opponent_id:'p1'}], tick;
+  const document={querySelector:s=>elements[s.slice(1)], addEventListener(){},dispatchEvent(){},visibilityState:'visible'};
+  const fetch=async path=>({ok:true,json:async()=>path==='/api/player/session'?{player_id:'p1',name:'Uno'}:pending});
+  const context={document,fetch,Headers,Event,CustomEvent:class{},Option:class{constructor(text,value){this.text=text;this.value=value}},localStorage:{setItem(){},removeItem(){}},window:{},setInterval(fn){tick=fn}};
+  vm.runInNewContext(fs.readFileSync('app/static/player-results.js','utf8'),context);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(elements['confirmations-count'].textContent,'1');
+  assert.equal(elements['confirmations-count'].hidden,false);
+  assert.equal(elements['confirmations-open']['aria-label'],'Risultati da confermare: 1');
+  pending=[];tick();await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(elements['confirmations-count'].hidden,true);
+});
