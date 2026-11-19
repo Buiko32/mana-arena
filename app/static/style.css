@@ -223,8 +223,8 @@ tr.is-me td{background:#173b55}
 .match-row .is-match-winner::after{content:' ✓';color:#b1ffb5}
 /* Consistent player cards and a geometrically centred plus. */
 .results-fab{font-size:0;position:fixed}
-.results-fab::before,.results-fab::after{content:"";position:absolute;left:50%;top:50%;background:currentColor;border-radius:2px;transform:translate(-50%,-50%)}
-.results-fab::before{width:20px;height:3px}.results-fab::after{width:3px;height:20px}
+.results-fab:not(.life-dock-link)::before,.results-fab:not(.life-dock-link)::after{content:"";position:absolute;left:50%;top:50%;background:currentColor;border-radius:2px;transform:translate(-50%,-50%)}
+.results-fab:not(.life-dock-link)::before{width:20px;height:3px}.results-fab:not(.life-dock-link)::after{width:3px;height:20px}
 .graph-player-row+.graph-player-row{margin-top:7px}
 .match-row>span:not(.versus){display:flex;align-items:center;gap:.45rem;min-height:42px;padding:.35rem .5rem;min-width:0}
 .match-row>span.right{justify-content:flex-end}.match-row>span>span:not(.avatar){overflow-wrap:anywhere;white-space:normal}
