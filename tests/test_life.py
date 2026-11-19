@@ -123,3 +123,35 @@ def test_life_concurrent_retries_make_only_one_proposal(app_factory):
         assert len({r.json()['result_id'] for r in responses})==1
         with app.state.db.transaction() as conn:
             assert conn.execute('SELECT count(*) FROM result_proposals').fetchone()[0]==1
+
+
+@pytest.mark.parametrize(('error','expected'), [
+    (PermissionError(13, 'denied'), 'permessi'),
+    (OSError(30, 'read only'), 'sola lettura'),
+    (OSError(28, 'full'), 'spazio'),
+    (FileNotFoundError(2, 'missing'), 'percorso'),
+    (sqlite3.OperationalError('database is locked'), 'occupato'),
+    (sqlite3.OperationalError('unable to open database file'), 'percorso'),
+])
+def test_life_storage_errors_offer_specific_recovery(error, expected):
+    from app.life import _storage_error_message
+    assert expected in _storage_error_message(error).lower()
+
+
+def test_life_http_storage_error_logs_path_without_payload(app_factory, monkeypatch, caplog):
+    from fastapi.testclient import TestClient
+    from importlib import import_module
+    life_module=import_module("app.life")
+    app=app_factory()
+    def deny(*args):
+        raise PermissionError(13, 'denied')
+    monkeypatch.setattr(life_module, '_save', deny)
+    body={'format':'duel','session_id':'7a86cbf9-4367-4104-bb28-91fa765a5bd6',
+          'started_at':'2026-11-19T12:00:00Z','ended_at':'2026-11-19T12:02:00Z','starting_life':20,
+          'players':[{'name':n,'members':[{'name':n}],'initial_life':20,'final_life':20} for n in ['PrivateName','Other']],
+          'changes':[],'winner':'Other'}
+    with TestClient(app) as client:
+        response=client.post('/api/life/games',json=body)
+    assert response.status_code==503 and 'permessi' in response.json()['detail'].lower()
+    assert 'life-stats.sqlite3' in caplog.text and 'errno=13' in caplog.text
+    assert 'PrivateName' not in caplog.text

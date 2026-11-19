@@ -1,6 +1,52 @@
 services:
+  prepara-statistiche:
+    image: ghcr.io/buiko32/mana-arena:latest
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    restart: "no"
+    volumes:
+      - ${LIFE_STATS_HOST_PATH:-./life-stats}:/data/life
+    entrypoint: ["python", "-c"]
+    command:
+      - |
+        import os, stat
+        folder = "/data/life"
+        uid = 10001
+        allowed = {"life-stats.sqlite3" + suffix for suffix in ("", "-wal", "-shm", "-journal")}
+        directory = os.open(folder, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        entries = set(os.listdir(directory))
+        files = []
+        for name in sorted(entries & allowed):
+            fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise SystemExit("Archivio non regolare: preparazione interrotta")
+            files.append(fd)
+        def writable():
+            pid = os.fork()
+            if pid == 0:
+                os.setgroups([])
+                os.setgid(uid)
+                os.setuid(uid)
+                ok = os.access(folder, os.R_OK | os.W_OK | os.X_OK)
+                ok = ok and all(os.access(os.path.join(folder, name), os.R_OK | os.W_OK) for name in entries & allowed)
+                os._exit(0 if ok else 1)
+            return os.waitpid(pid, 0)[1] == 0
+        if not writable():
+            if entries - allowed:
+                raise SystemExit("La cartella contiene altri file: scegliere una cartella dedicata alle statistiche")
+            for fd, access in [(directory, 0o700)] + [(fd, 0o600) for fd in files]:
+                os.fchown(fd, uid, -1)
+                os.fchmod(fd, stat.S_IMODE(os.fstat(fd).st_mode) | access)
+            if not writable():
+                raise SystemExit("Il volume NAS non consente la scrittura al processo Mana Arena")
+        print("Cartella statistiche pronta")
   mana-arena:
     image: ghcr.io/buiko32/mana-arena:latest
+    depends_on:
+      prepara-statistiche:
+        condition: service_started
     pull_policy: always
     env_file:
       - .env

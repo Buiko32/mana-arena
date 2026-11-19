@@ -1,9 +1,12 @@
 """Persistent, idempotent life-counter session records."""
 from __future__ import annotations
 
+import errno
 import json
+import logging
 import os
 import sqlite3
+from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
@@ -15,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 router = APIRouter()
 MAX_BODY = 1024 * 1024
+logger = logging.getLogger(__name__)
 
 
 class Member(BaseModel):
@@ -124,7 +128,7 @@ def _save(game: Game, data_dir: str | Path | None = None) -> bool:
     # The complete timeline is retained; these aggregates make downstream analysis easier.
     data["statistics"] = _statistics(game)
     payload = json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    with sqlite3.connect(path, timeout=10) as conn:
+    with closing(sqlite3.connect(path, timeout=10)) as conn, conn:
         conn.execute("BEGIN IMMEDIATE")
         conn.execute("CREATE TABLE IF NOT EXISTS games (session_id TEXT PRIMARY KEY, ended_at TEXT NOT NULL, payload TEXT NOT NULL)")
         existing = conn.execute("SELECT payload FROM games WHERE session_id = ?", (str(game.session_id),)).fetchone()
@@ -140,6 +144,24 @@ def _save(game: Game, data_dir: str | Path | None = None) -> bool:
                 raise HTTPException(409, "Questa sessione è già stata salvata con dati diversi.")
             return True
     return False
+
+
+def _storage_error_message(exc: Exception) -> str:
+    number = getattr(exc, "errno", None)
+    code = getattr(exc, "sqlite_errorcode", None)
+    primary = code & 0xff if isinstance(code, int) else None
+    text = str(exc).lower()
+    if number == errno.EROFS or primary == sqlite3.SQLITE_READONLY or "readonly" in text or "read-only" in text:
+        return "Archivio statistiche in sola lettura. Verifica il mount e i permessi della cartella."
+    if number in (errno.EACCES, errno.EPERM) or primary == sqlite3.SQLITE_PERM:
+        return "Permessi insufficienti per l'archivio statistiche. Verifica accesso e scrittura per l'utente del container."
+    if number in (errno.ENOSPC, getattr(errno, "EDQUOT", -1)) or primary == sqlite3.SQLITE_FULL or "database or disk is full" in text:
+        return "Spazio o quota esauriti nell'archivio statistiche. Libera spazio sul volume e riprova."
+    if primary in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED) or "database is locked" in text or "database table is locked" in text:
+        return "Archivio statistiche occupato. Attendi e riprova; se persiste verifica processi e blocchi sul volume."
+    if number in (errno.ENOENT, errno.ENOTDIR, errno.EISDIR, errno.EINVAL) or primary == sqlite3.SQLITE_CANTOPEN or "unable to open database file" in text:
+        return "Impossibile aprire il percorso dell'archivio statistiche. Verifica mount, percorso e permessi della cartella."
+    return "Archivio statistiche non disponibile. Verifica il volume configurato e consulta i log del server."
 
 
 @router.post("/api/life/games")
@@ -161,10 +183,12 @@ async def save_life_game(request: Request):
         duplicate = await run_in_threadpool(_save, game, getattr(db, "data_dir", None))
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
-    except OSError as exc:
-        raise HTTPException(503, "Archivio statistiche non disponibile.") from exc
-    except sqlite3.Error as exc:
-        raise HTTPException(503, "Archivio statistiche non disponibile.") from exc
+    except (OSError, sqlite3.Error) as exc:
+        logger.error("Life statistics storage failure: path=%r type=%s errno=%s sqlite_code=%s sqlite_name=%s",
+                     str(_path(getattr(db, "data_dir", None))), type(exc).__name__,
+                     getattr(exc, "errno", None), getattr(exc, "sqlite_errorcode", None),
+                     getattr(exc, "sqlite_errorname", None))
+        raise HTTPException(503, _storage_error_message(exc)) from exc
     from .life_results import submit_result
     if game.result_target and db:
         result = await run_in_threadpool(submit_result, db, game, request.cookies.get('mana_player_session', ''), request.headers.get('X-Player-CSRF', ''))
