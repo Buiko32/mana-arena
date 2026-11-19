@@ -79,7 +79,7 @@
   select.addEventListener('change',async()=>{++confirmationRequest;showConfirmationCount(0);const id=select.value;document.dispatchEvent(new Event('player-identity-changing'));try{if(!id){if(session)await post('/api/player/logout');session=null;localStorage.removeItem('mana-arena-player-id');}else{session=await post('/api/player/login',{player_id:id});localStorage.setItem('mana-arena-player-id',id);}document.dispatchEvent(new Event('player-identity-changed'));await refreshConfirmationCount();}catch(err){select.value=session?.player_id||'';document.dispatchEvent(new Event('player-identity-changed'));await refreshConfirmationCount();window.alert(err.message);}});
   const welcome=$('#identity-welcome'), welcomeForm=$('#identity-welcome-form'), welcomePlayers=$('#identity-welcome-players'), welcomeMessage=$('#identity-welcome-message'), welcomeSubmit=$('#identity-welcome-submit');
   async function showIdentityWelcome(){
-    if(!welcome)return;
+    if(!welcome || window.location?.hash === '#life')return;
     if(!welcome.open)welcome.showModal();
     try{
       const list=await api('/api/public/ranking');

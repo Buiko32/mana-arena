@@ -349,3 +349,32 @@ footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:va
 .identity-welcome .identity-player input{width:20px;height:20px;min-height:0;margin:0;accent-color:var(--amber);flex:none}
 .identity-player:has(input:checked){border-color:var(--amber);background:#46312c}
 .identity-player:has(input:focus-visible){outline:2px solid var(--amber-bright);outline-offset:2px}
+
+#history {max-width:52rem;margin:2rem auto 4rem}
+.month-controls {display:flex;align-items:center;justify-content:space-between}
+.month-controls button,.history-grid button {color:inherit;background:var(--surface,#252629);border:1px solid var(--line,#454545);border-radius:.4rem;cursor:pointer;min-height:44px}
+.month-controls button {width:44px;font-size:1.5rem}
+.history-grid {display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:.25rem;text-align:center;margin:1rem 0 2rem}
+.history-grid button {font:inherit;padding:.35rem 0}
+.history-grid button span {display:block;min-height:1em;font-size:.66rem;color:var(--amber,#e8b870)}
+.history-grid button[aria-pressed=true] {outline:2px solid var(--amber,#e8b870);outline-offset:-2px}
+#history-games article {padding:1rem 0;border-bottom:1px solid var(--line,#454545)}
+#history-games article h3,#history-games article p {margin:.3rem 0}
+
+.life-page .results-fab-group {display:none}
+@media (max-width:650px){
+  .topbar .main-nav {gap:.4rem}
+  .topbar .main-nav a {font-size:clamp(.65rem,2.9vw,.82rem)}
+  .admin-tabs {flex-wrap:wrap}
+}
+
+.friendly-calendar,.friendly-day,#friendly-edit {max-width:48rem;margin:1.2rem auto}
+.friendly-calendar-nav {display:flex;justify-content:space-between;align-items:center;padding:.5rem 0}
+.friendly-calendar-grid {display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:.25rem;text-align:center}
+.friendly-calendar-grid button,.friendly-calendar-nav button {background:var(--surface,#252629);color:inherit;border:1px solid var(--line,#555);border-radius:.4rem;min-height:44px;padding:.2rem;cursor:pointer}
+.friendly-calendar-nav button {width:44px;font-size:1.4rem}
+.friendly-calendar-grid button span {display:block;color:var(--amber,#e8b870);font-size:.68rem}
+.friendly-calendar-grid button[aria-pressed=true] {outline:2px solid var(--amber,#e8b870);outline-offset:-2px}
+.friendly-day .button {margin:.2rem .4rem .2rem 0}
+#friendly-edit {display:flex;align-items:end;flex-wrap:wrap;gap:1rem}
+#friendly-edit h4 {width:100%}

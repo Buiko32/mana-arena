@@ -297,3 +297,24 @@ def test_invalid_profile_photo_preserves_previous_image_and_backup_restores_colo
         user.post('/api/player/login',json={'player_id':person['id']})
         profile=user.get('/api/player/profile').json()
         assert profile['avatar_color']=='#123456' and profile['photo_url']==url
+
+def test_admin_can_edit_and_delete_confirmed_friendly(app_factory):
+    app = app_factory()
+    with TestClient(app) as admin, TestClient(app) as a, TestClient(app) as b:
+        headers = admin_headers(admin)
+        _, people = tournament_with_players(admin, headers)
+        tokens = []
+        for client, person in zip((a, b), people):
+            password = admin.post(f"/api/admin/players/{person['id']}/credential", headers=headers).json()['password']
+            tokens.append({'X-Player-CSRF': client.post('/api/player/login', json={'player_id':person['id'],'password':password}).json()['csrf_token']})
+        rid = a.post('/api/player/results', headers=tokens[0], json={'opponent_id':people[1]['id'],'winner_id':people[0]['id']}).json()['id']
+        b.post(f'/api/player/results/{rid}/confirm', headers=tokens[1])
+        assert admin.get('/api/admin/friendlies', headers=headers).status_code == 422
+        response = admin.patch(f'/api/admin/friendlies/single/{rid}', headers=headers, json={'at':'2024-03-05T12:30:00Z','winner_id':people[1]['id']})
+        assert response.status_code == 200
+        listed = admin.get('/api/admin/friendlies?start=2024-03-01T00:00:00Z&end=2024-04-01T00:00:00Z', headers=headers).json()
+        assert len(listed) == 1 and listed[0]['id'] == rid and listed[0]['winner'] == 'b'
+        assert admin.get('/api/admin/friendlies?start=2024-02-01T00:00:00Z&end=2024-03-01T00:00:00Z', headers=headers).json() == []
+        assert next(p for p in admin.get('/api/public/ranking').json() if p['id']==people[1]['id'])['wins'] == 1
+        assert admin.delete(f'/api/admin/friendlies/single/{rid}', headers=headers).status_code == 200
+        assert all(p['matches'] == 0 for p in admin.get('/api/public/ranking').json())

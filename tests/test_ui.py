@@ -166,12 +166,12 @@ def test_static_interface_uses_only_local_assets_and_has_admin_workflow_controls
 
 def test_public_navigation_has_separate_ranking_and_visible_player_selector():
     from pathlib import Path
-    page = Path('app/static/index.html').read_text()
-    js = Path('app/static/app.js').read_text()
+    page = Path('app/static/index.html').read_text(encoding='utf-8')
+    js = Path('app/static/app.js').read_text(encoding='utf-8')
     assert 'id="player-identity"' in page.split('</header>')[0]
     assert 'Solo lettura' not in page
     assert 'Il tuo spazio per i tornei.' not in page
-    assert "$('#global-ranking').hidden=!ranking" in js
+    assert "$('#global-ranking').hidden = !ranking" in js
     assert 'is-active-tournament' in js
     assert 'Eliminato' in js
 
@@ -184,7 +184,7 @@ def test_page_versions_script_and_stylesheet_urls_and_disables_html_cache(tmp_pa
     with TestClient(app) as client:
         response = client.get('/')
     assert 'no-cache' in response.headers['cache-control'] or 'no-store' in response.headers['cache-control']
-    for asset in ('style.css', 'taste/motion.css', 'taste/motion.js', 'brackets.js', 'reveal.js', 'app.js', 'player-results.js'):
+    for asset in ('style.css', 'taste/motion.css', 'taste/motion.js', 'brackets.js', 'reveal.js', 'app.js', 'player-results.js', 'history.js', 'admin-friendlies.js'):
         digest = hashlib.sha256((Path('app/static') / asset).read_bytes()).hexdigest()[:12]
         assert f'/static/{asset}?v={digest}' in response.text
     assert re.search(r'<section id="global-ranking"[^>]*\bhidden\b', response.text)
@@ -192,7 +192,7 @@ def test_page_versions_script_and_stylesheet_urls_and_disables_html_cache(tmp_pa
 
 def test_hero_rules_target_current_markup():
     from pathlib import Path
-    css = Path('app/static/style.css').read_text()
+    css = Path('app/static/style.css').read_text(encoding='utf-8')
     assert '#tournament-home>.hero' in css
     assert '#public-view>.hero' not in css
 
@@ -208,3 +208,21 @@ def test_tournament_form_hides_format_and_presets_and_highlights_players(tmp_pat
     assert 'name="name"' in page and 'name="description"' in page
     assert 'is-match-winner' in js and "player?.id===savedPlayer()" in js
     assert '.graph-player-row.is-me' in css and '.graph-player-row.is-winner' in css
+
+
+def test_offline_counter_caches_only_its_own_versioned_shell(tmp_path):
+    import re
+
+    app = create_app(data_dir=tmp_path, admin_username="admin",
+                     admin_password="Local-test-password-42", session_secret="test-secret-longer-than-thirty-two-bytes")
+    with TestClient(app) as client:
+        shell = client.get("/segnavita")
+        worker = client.get("/life-worker.js")
+        assert shell.status_code == worker.status_code == 200
+        urls = re.findall(r'(?:href|src)="(/static/[^"]+)"', shell.text)
+        assert len(urls) == 4
+        for url in urls:
+            assert "?v=" in url and url in worker.text
+            assert client.get(url).status_code == 200
+        assert "player-results.js" not in shell.text and "/static/app.js" not in shell.text
+        assert "__CACHE_NAME__" not in worker.text and "__ASSETS__" not in worker.text

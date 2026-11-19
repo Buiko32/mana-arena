@@ -4,11 +4,14 @@ services:
     pull_policy: always
     env_file:
       - .env
+    environment:
+      LIFE_STATS_DIR: /data/life
     ports:
       - "3388:3388"
     volumes:
       - mana-arena-db:/data/db
       - mana-arena-photos:/data/photos
+      - ${LIFE_STATS_HOST_PATH:-./life-stats}:/data/life
     init: true
     restart: unless-stopped
     healthcheck:

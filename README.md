@@ -81,3 +81,19 @@ GitHub Actions esegue gli stessi test prima di costruire l’immagine.
 GitHub Actions esegue i test, costruisce e prova l’immagine `linux/amd64`, poi pubblica su GHCR i tag `latest` e commit; i tag di release `v*` ricevono anche il tag di versione. Alla prima pubblicazione, rendi il package GHCR **Public** dalle impostazioni del package: la visibilità del repository non lo rende pubblico automaticamente. La modalità manuale `verify_public_only` prova il pull anonimo e l’avvio dell’immagine pubblica esistente senza login al registry.
 
 La distribuzione sul NAS UGREEN non è stata eseguita né verificata. Il target del container è Linux amd64. Le regole di torneo sono amatoriali e non sostituiscono un software ufficiale di organizzazione o arbitraggio.
+
+### Statistiche del contatore vita
+
+Le partite concluse vengono archiviate separatamente in `life-stats.sqlite3`, con vincitore, vita iniziale e finale, cronologia delle variazioni e riepiloghi. In `.env` imposta `LIFE_STATS_HOST_PATH` sul percorso della cartella del NAS (predefinito `./life-stats`), creala e rendila scrivibile dall'UID/GID `10001`; Compose la monta in `/data/life`. Per avvii senza Compose si può impostare `LIFE_STATS_DIR` direttamente; altrimenti si usa `DATA_DIR/life`. Le richieste ripetute della stessa sessione non creano duplicati.
+
+Le statistiche vita **non sono incluse nel backup ZIP dell'app**: arresta il servizio e copia separatamente la cartella configurata, insieme ai backup di database e foto. La registrazione è pubblica come il contatore: usa l'app su una rete fidata. I dati possono contenere i nomi dei giocatori.
+
+Per leggere l'archivio con SQLite, apri il file `life-stats.sqlite3` con un programma come DB Browser for SQLite oppure esegui `SELECT session_id, ended_at, payload FROM games;`. Il campo JSON `payload` contiene `format`, i lati `players` con i singoli `members` (ID profilo e nome), `changes`, `winner` e `statistics`.
+
+### Segnavita al tavolo
+
+Apri **Segnavita** dal menu e conserva il collegamento alla pagina `/segnavita` sul telefono. Per poterla riaprire senza rete, accedi una prima volta in HTTPS e attendi la dicitura **Segnavita disponibile offline su questo dispositivo**. Il browser conserva sul telefono i file necessari, i profili disponibili e la partita in corso. In modalità privata o cancellando i dati del sito puoi perdere le partite ancora da inviare.
+
+I tocchi sui contatori e i lanci del dado avvengono sul telefono. Alla fine scegli **Termina**, verifica il vincitore e conferma. Se il NAS è irraggiungibile, riapri il segnavita con lo stesso browser quando torna la connessione per sincronizzare le partite concluse. Per una partita di torneo offline serve l’abbinamento già caricato sul dispositivo. Se nel frattempo il risultato è stato registrato, l’archivio conserva i dati vita e l’app segnala il conflitto.
+
+Mentre il tavolo è visibile, il segnavita chiede al telefono di mantenere il display acceso. La dicitura sul tavolo indica se il dispositivo ha concesso la richiesta. Su un NAS aperto dal telefono tramite indirizzo IP in HTTP, la riapertura offline e il mantenimento del display acceso richiedono l’accesso in HTTPS.
