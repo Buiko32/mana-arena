@@ -92,14 +92,13 @@
       </div>
     </section>
   </main>
-  <footer><span class="brand-mini">✦ MANA ARENA</span><span class="app-version">Versione 0.01.11</span><a href="#admin-view" data-view-link="admin">Area organizzatore</a></footer>
+  <footer><span class="brand-mini">✦ MANA ARENA</span><span class="app-version">Versione 0.01.12</span><a href="#admin-view" data-view-link="admin">Area organizzatore</a></footer>
   <dialog id="identity-welcome" class="identity-welcome" aria-labelledby="identity-welcome-title" aria-describedby="identity-welcome-description">
     <p class="identity-welcome-kicker">MANA ARENA</p>
     <h2 id="identity-welcome-title">Chi sta giocando?</h2>
     <p id="identity-welcome-description">Scegli il tuo nome per vedere i tuoi incontri e i risultati da confermare. Potrai cambiarlo in qualsiasi momento.</p>
     <form id="identity-welcome-form">
-      <label for="identity-welcome-select">Il tuo nome</label>
-      <select id="identity-welcome-select" required><option value="">Caricamento giocatori…</option></select>
+      <fieldset class="identity-welcome-fieldset"><legend>Il tuo nome</legend><div id="identity-welcome-players" class="identity-welcome-players">Caricamento giocatori…</div></fieldset>
       <p id="identity-welcome-message" class="identity-welcome-message" role="status" aria-live="polite"></p>
       <button class="button primary" id="identity-welcome-submit" type="submit" disabled>Continua</button>
       <button class="button quiet" id="identity-welcome-skip" type="button">Continua senza scegliere</button>

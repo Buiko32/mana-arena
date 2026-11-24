@@ -338,3 +338,14 @@ footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:va
 .identity-welcome form label{font-weight:700}
 .identity-welcome form select,.identity-welcome form button{width:100%;min-height:48px}
 .identity-welcome-message{min-height:1.2em;margin:0;color:var(--muted);font-size:.85rem}
+
+/* Profili visibili nella scelta iniziale. */
+.identity-welcome-fieldset{border:0;margin:0;padding:0;min-width:0}
+.identity-welcome-fieldset legend{font-weight:700;margin-bottom:.65rem}
+.identity-welcome-players{display:grid;gap:.5rem;max-height:min(40vh,360px);overflow:auto;padding:2px}
+.identity-welcome form .identity-player{display:flex;align-items:center;justify-content:space-between;gap:1rem;min-height:56px;padding:.55rem .75rem;border:1px solid var(--line);border-radius:8px;background:var(--panel-2);cursor:pointer}
+.identity-player-info{display:flex;align-items:center;gap:.7rem;min-width:0;overflow-wrap:anywhere}
+.identity-player-info .avatar{width:40px;height:40px;flex:0 0 40px}
+.identity-welcome .identity-player input{width:20px;height:20px;min-height:0;margin:0;accent-color:var(--amber);flex:none}
+.identity-player:has(input:checked){border-color:var(--amber);background:#46312c}
+.identity-player:has(input:focus-visible){outline:2px solid var(--amber-bright);outline-offset:2px}
