@@ -5,7 +5,7 @@ from test_api import app_factory, admin_headers, tournament_with_players
 
 
 @pytest.mark.parametrize('team_size', [1, 2])
-def test_team_friendly_requires_all_opponents_and_updates_each_elo_once(app_factory, team_size):
+def test_team_friendly_registers_immediately_and_updates_each_elo_once(app_factory, team_size):
     app=app_factory()
     with ExitStack() as stack:
         admin=stack.enter_context(TestClient(app))
@@ -23,8 +23,6 @@ def test_team_friendly_requires_all_opponents_and_updates_each_elo_once(app_fact
         confirm = f'/api/player/team-results/{rid}/confirm'
         assert clients[0].post(confirm, headers=tokens[0]).status_code == 403
         for index in range(team_size, 2 * team_size):
-            assert all(row['matches'] == 0 for row in admin.get('/api/public/ranking').json())
-            assert clients[index].post(confirm, headers=tokens[index]).status_code == 200
             assert clients[index].post(confirm, headers=tokens[index]).status_code == 409
         ranks = {p['id']: p for p in admin.get('/api/public/ranking').json()}
         assert [ranks[i]['rating'] for i in ids] == [1520] * team_size + [1480] * team_size
@@ -40,10 +38,10 @@ def test_team_validation_rejection_and_backup_roundtrip(app_factory):
             tokens.append({'X-Player-CSRF':client.post('/api/player/login',json={'player_id':person['id'],'password':pw}).json()['csrf_token']})
         assert clients[0].post('/api/player/team-results',headers=tokens[0],json={'team_a':ids[:2],'team_b':[ids[1],ids[2]],'winner':'a'}).status_code==422
         rid=clients[0].post('/api/player/team-results',headers=tokens[0],json={'team_a':ids[:2],'team_b':ids[2:],'winner':'b'}).json()['id']
-        assert len(clients[2].get('/api/player/team-results').json())==1
-        assert clients[2].post(f'/api/player/team-results/{rid}/reject',headers=tokens[2]).status_code==200
+        assert len(clients[2].get('/api/player/team-results').json())==0
+        assert clients[2].post(f'/api/player/team-results/{rid}/reject',headers=tokens[2]).status_code==409
         assert clients[3].post(f'/api/player/team-results/{rid}/confirm',headers=tokens[3]).status_code==409
-        assert all(row['matches']==0 for row in admin.get('/api/public/ranking').json())
+        assert all(row['matches']==1 for row in admin.get('/api/public/ranking').json())
         backup=admin.get('/api/admin/backup',headers=headers)
         assert backup.status_code==200
         restored=admin.post('/api/admin/restore?confirm=true',headers=headers,files={'file':('backup.zip',backup.content,'application/zip')})

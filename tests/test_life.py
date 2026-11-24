@@ -51,10 +51,10 @@ def test_life_game_creates_one_proposal_even_after_deletion(app_factory):
              'result_target':{'kind':'friendly','proposer_id':people[0]['id']}}
         assert player.post('/api/life/games',json=raw).json()['result_status']=='unauthorized'
         response=player.post('/api/life/games',json=raw,headers=token).json()
-        assert response['duplicate'] and response['result_status']=='pending'
+        assert response['duplicate'] and response['result_status']=='confirmed'
         assert player.post('/api/life/games',json=raw,headers=token).json()['result_id']==response['result_id']
         login=opponent.post('/api/player/login',json={'player_id':people[1]['id']}).json()
-        assert opponent.post('/api/player/results/'+response['result_id']+'/confirm',headers={'X-Player-CSRF':login['csrf_token']}).status_code==200
+        assert opponent.post('/api/player/results/'+response['result_id']+'/confirm',headers={'X-Player-CSRF':login['csrf_token']}).status_code==409
         from app.history import month_matches
         with app.state.db.transaction() as conn:
             history=month_matches(conn,'2026-11-19 00:00:00','2026-11-20 00:00:00')
@@ -66,7 +66,7 @@ def test_life_game_creates_one_proposal_even_after_deletion(app_factory):
             assert conn.execute('SELECT count(*) FROM result_proposals').fetchone()[0]==0
 
 
-def test_life_team_creates_normal_pending_proposal(app_factory):
+def test_life_team_registers_immediately(app_factory):
     from fastapi.testclient import TestClient
     from test_api import admin_headers, tournament_with_players
     app=app_factory()
@@ -81,10 +81,8 @@ def test_life_team_creates_normal_pending_proposal(app_factory):
               'players':[{'name':f'Squadra {i}','members':[{'id':p['id'],'name':p['name']} for p in side],'initial_life':20,'final_life':20} for i,side in enumerate(sides)],
               'changes':[],'winner':'Squadra 1','result_target':{'kind':'friendly','proposer_id':people[0]['id']}}
         result=player.post('/api/life/games',json=body,headers=token).json()
-        assert result['result_status']=='pending'
-        proposal=player.get('/api/player/team-results').json()[0]
-        assert proposal['id']==result['result_id'] and proposal['winning_team']=='b'
-        assert len(proposal['players'])==3
+        assert result['result_status']=='confirmed'
+        assert player.get('/api/player/team-results').json()==[]
 
 
 def test_life_unavailable_tournament_keeps_archive(app_factory):

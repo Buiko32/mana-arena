@@ -7,20 +7,48 @@
   const post=(path,data={})=>api(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
   function error(e){const el=$('#player-results-error');if(el)el.textContent=e.message;}
   async function getSession(){try{session=await api('/api/player/session');localStorage.setItem('mana-arena-player-id',session.player_id);if(![...select.options].some(o=>o.value===session.player_id))select.add(new Option(session.name,session.player_id));select.value=session.player_id;document.dispatchEvent(new Event('player-identity-changed'));}catch(error){if(error.status===401){session=null;try{localStorage.removeItem('mana-arena-player-id');}catch{}select.value='';}else throw error;}}
+  let resultSaved=false;
+  function updateSummary(form, label, sides, winner, valid) {
+    const summary=form.querySelector('.result-review');
+    summary.innerHTML=`<p class="result-review-kind">${esc(label)}</p><p class="result-review-sides">${sides.map(side=>esc(side.join(' + ')||'Da selezionare')).join(' <span>contro</span> ')}</p><p class="result-review-winner">Vincitore: <strong>${esc(winner||'Da selezionare')}</strong></p>`;
+    form.querySelector('button[type="submit"]').disabled=!valid||Boolean(form.dataset.saving);
+  }
+  async function saveResult(form, path, payload, errorSelector) {
+    if (form.dataset.saving) return;
+    form.dataset.saving = 'true';
+    const enabledControls = [...form.elements].filter(control => !control.disabled);
+    enabledControls.forEach(control => { control.disabled = true; });
+    try {
+      await post(path, payload);
+      if (dialog.open) {
+        resultSaved = true;
+        if (form.isConnected) content.innerHTML = '<p role="status">Risultato registrato.</p>';
+      } else {
+        document.dispatchEvent(new Event('player-result-saved'));
+      }
+    } catch (err) {
+      form.querySelector(errorSelector).textContent = err.message;
+      delete form.dataset.saving;
+      enabledControls.forEach(control => { control.disabled = false; });
+    }
+  }
   async function render(){if(!session){content.innerHTML='<p>Seleziona il tuo nome in alto per accedere.</p>';return;}
     const [ranking,ownMatches]=await Promise.all([api('/api/public/ranking'),api('/api/player/matches')]);players=ranking;matches=ownMatches;
     const name=id=>players.find(p=>p.id===id)?.name||'Giocatore';
     $('#player-results-title').textContent=`Inserisci il risultato ${session.name}`;
-    content.innerHTML=`<div class="results-panel"><form id="new-player-result" class="results-panel"><label>Partita<select name="match">${matches.map((m,i)=>`<option value="${i}">${esc(m.tournament.config.name)} · ${esc(name(m.p1))} – ${esc(name(m.p2))}</option>`).join('')}<option value="friendly">Amichevole</option></select></label><label id="opponent-label">Avversario<select name="opponent">${players.filter(p=>p.id!==session.player_id).map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></label><label>Vincitore<select name="winner"></select></label><p id="player-results-error" class="results-error" role="alert"></p><button class="button primary" type="submit">Invia all’avversario</button></form></div>`;
-    content.querySelector('[data-result-reveal]')?.addEventListener('click',event=>{const id=event.currentTarget.dataset.resultReveal;dialog.close();document.dispatchEvent(new CustomEvent('reveal-tournament',{detail:id}));});
-    const teamButton=document.createElement('button');teamButton.type='button';teamButton.className='button secondary';teamButton.textContent='Amichevole (1–3 per parte)';content.prepend(teamButton);teamButton.addEventListener('click',renderTeamForm);
-    const form=$('#new-player-result');function update(){const m=matches[Number(form.elements.match.value)],friendly=form.elements.match.value==='friendly';$('#opponent-label').hidden=!friendly;form.elements.opponent.required=friendly;const opponent=friendly?form.elements.opponent.value:(m.p1===session.player_id?m.p2:m.p1);form.elements.winner.innerHTML=[session.player_id,opponent].filter(Boolean).map(id=>`<option value="${esc(id)}">${esc(name(id))}</option>`).join('');}form.elements.match.addEventListener('change',update);form.elements.opponent.addEventListener('change',update);update();form.addEventListener('submit',async e=>{e.preventDefault();const m=matches[Number(form.elements.match.value)],friendly=form.elements.match.value==='friendly';try{await post('/api/player/results',friendly?{opponent_id:form.elements.opponent.value,winner_id:form.elements.winner.value}:{tournament_id:m.tournament.id,match_id:m.id,winner_id:form.elements.winner.value});await render();const notice=document.createElement('p');notice.setAttribute('role','status');notice.textContent='Risultato inviato: in attesa della conferma dell’avversario.';content.prepend(notice);}catch(err){error(err)}});
+    content.innerHTML=`<div class="results-panel"><button type="button" class="button secondary" id="friendly-result">Amichevole (1–3 per parte)</button><form id="new-player-result" class="results-panel"><label>Partita di torneo<select name="match" required><option value="">Seleziona una partita</option>${matches.map((m,i)=>`<option value="${i}">🏆 ${esc(m.tournament.config.name)} · ${esc(name(m.p1))} – ${esc(name(m.p2))}</option>`).join('')}</select></label><label>Chi ha vinto?<select name="winner" required><option value="">Seleziona chi ha vinto</option></select></label><div class="result-review" aria-live="polite"></div><p id="player-results-error" class="results-error" role="alert"></p><button class="button primary" type="submit" disabled>Salva risultato</button></form></div>`;
+    $('#friendly-result').addEventListener('click',renderTeamForm);
+    const form=$('#new-player-result');
+    function update(){const value=form.elements.match.value,m=value===''?null:matches[Number(value)],winner=form.elements.winner.value;updateSummary(form,m?'🏆 Partita di torneo · '+m.tournament.config.name:'Partita di torneo',m?[[name(m.p1)],[name(m.p2)]]:[[],[]],winner?name(winner):'',Boolean(m&&winner));}
+    form.elements.match.addEventListener('change',()=>{const value=form.elements.match.value,m=value===''?null:matches[Number(value)];form.elements.winner.replaceChildren(new Option('Seleziona chi ha vinto',''));if(m)for(const id of [m.p1,m.p2])form.elements.winner.add(new Option(name(id),id));update();});
+    form.elements.winner.addEventListener('change',update);update();
+    form.addEventListener('submit',event=>{event.preventDefault();const value=form.elements.match.value,m=value===''?null:matches[Number(value)],winner=form.elements.winner.value;if(m&&winner)saveResult(form,'/api/player/results',{tournament_id:m.tournament.id,match_id:m.id,winner_id:winner},'#player-results-error');});
   }
   function renderTeamForm(){
     const choice=(p,locked=false)=>`<label class="team-choice"><span class="team-choice-person">${window.manaPlayerAvatar(p.name,p.photo_url,p.avatar_hue,p.avatar_color)}<span>${esc(p.name)}${locked?' (tu)':''}</span></span><input type="checkbox" value="${esc(p.id)}" ${locked?'checked disabled':''}></label>`;
     const options=players.filter(p=>p.id!==session.player_id).map(p=>choice(p)).join('');
     const own=players.find(p=>p.id===session.player_id)||{id:session.player_id,name:session.name};
-    content.innerHTML=`<form id="team-result-form" class="results-panel"><p>Puoi giocare da solo o scegliere fino a due compagni. Seleziona da uno a tre avversari.</p><fieldset><legend>La tua squadra</legend><div class="team-choices">${choice(own,true)}<div id="team-a" class="team-choices">${options}</div></div></fieldset><fieldset><legend>Avversari</legend><div id="team-b" class="team-choices">${options}</div></fieldset><label>Chi ha vinto?<select name="winner" required></select></label><p id="team-result-error" class="results-error" role="alert"></p><button class="button primary" type="submit">Invia agli avversari</button><button class="button quiet" type="button" id="team-result-back">Indietro</button></form>`;
+    content.innerHTML=`<form id="team-result-form" class="results-panel"><p>Puoi giocare da solo o scegliere fino a due compagni. Seleziona da uno a tre avversari.</p><fieldset><legend>La tua squadra</legend><div class="team-choices">${choice(own,true)}<div id="team-a" class="team-choices">${options}</div></div></fieldset><fieldset><legend>Avversari</legend><div id="team-b" class="team-choices">${options}</div></fieldset><label>Chi ha vinto?<select name="winner" required></select></label><div class="result-review" aria-live="polite"></div><p id="team-result-error" class="results-error" role="alert"></p><button class="button primary" type="submit" disabled>Salva risultato</button><button class="button quiet" type="button" id="team-result-back">Indietro</button></form>`;
     const teamForm=$('#team-result-form');
     const selected = key => [...teamForm.querySelectorAll(`#team-${key} input:checked`)].map(input => input.value);
     const winner = teamForm.elements.winner;
@@ -38,17 +66,20 @@
         winner.value = previousWinner;
       }
     }
-    updateWinnerOptions();
+    const names=ids=>ids.map(id=>players.find(p=>p.id===id)?.name||session.name);
+    function updateTeamSummary(){const a=[session.player_id,...selected('a')],b=selected('b'),win=winner.value,valid=a.length<=3&&b.length>=1&&b.length<=3&&Boolean(win);updateSummary(teamForm,'Amichevole',[names(a),names(b)],win?names(win==='a'?a:b).join(' + '):'',valid);}
+    updateWinnerOptions();updateTeamSummary();
+    winner.addEventListener('change',updateTeamSummary);
     teamForm.addEventListener('change',event=>{
       const input=event.target;
       if(!input.matches('#team-a input[type="checkbox"], #team-b input[type="checkbox"]'))return;
       const other=input.closest('#team-a')?$('#team-b'):$('#team-a');
       const counterpart=[...other.querySelectorAll('input[type="checkbox"]')].find(item=>item.value===input.value);
       if(counterpart){counterpart.disabled=input.checked;counterpart.closest('.team-choice').classList.toggle('is-unavailable',input.checked);}
-      updateWinnerOptions();
+      updateWinnerOptions();updateTeamSummary();
     });
     $('#team-result-back').addEventListener('click',()=>render().catch(error));
-    $('#team-result-form').addEventListener('submit',async event=>{event.preventDefault();const a=[session.player_id,...selected('a')],b=selected('b');if(a.length>3||b.length<1||b.length>3||new Set([...a,...b]).size!==a.length+b.length){$('#team-result-error').textContent='Scegli da 1 a 3 giocatori distinti per parte.';return;}try{await post('/api/player/team-results',{team_a:a,team_b:b,winner:event.currentTarget.elements.winner.value});content.innerHTML='<p role="status">Risultato inviato: tutti gli avversari devono confermare.</p>';await refreshConfirmationCount();}catch(err){$('#team-result-error').textContent=err.message;}});
+    teamForm.addEventListener('submit',event=>{event.preventDefault();const a=[session.player_id,...selected('a')],b=selected('b'),win=winner.value;if(a.length>3||b.length<1||b.length>3||!win||new Set([...a,...b]).size!==a.length+b.length){$('#team-result-error').textContent='Scegli da 1 a 3 giocatori distinti per parte e il vincitore.';return;}saveResult(teamForm,'/api/player/team-results',{team_a:a,team_b:b,winner:win},'#team-result-error');});
   }
   const profileDialog=$('#profile-dialog'), profileContent=$('#profile-content');
   function hueHex(h){const hue=((Number(h)||0)%360)/360, sat=.64, light=.48;const f=n=>{const k=(n+hue*12)%12;const a=sat*Math.min(light,1-light);return Math.round(255*(light-a*Math.max(-1,Math.min(k-3,9-k,1)))).toString(16).padStart(2,'0');};return `#${f(0)}${f(8)}${f(4)}`;}
@@ -64,19 +95,10 @@
   }
   $('#profile-open').addEventListener('click',async()=>{profileDialog.showModal();try{await getSession();await renderProfile();}catch(err){profileContent.textContent=err.message;}});
   $('#profile-close').addEventListener('click',()=>profileDialog.close());
-  const confirmations=$('#confirmations-dialog'), confirmationsContent=$('#confirmations-content');
-  const confirmationButton=$('#confirmations-open'), confirmationCount=$('#confirmations-count');
-  let confirmationRequest=0;
-  function showConfirmationCount(count){confirmationCount.hidden=!count;confirmationCount.textContent=count>99?'99+':String(count||'');confirmationButton.setAttribute('aria-label',count?`Risultati da confermare: ${count}`:'Risultati da confermare');}
-  async function refreshConfirmationCount(){const request=++confirmationRequest, playerId=session?.player_id;if(!playerId){showConfirmationCount(0);return;}try{const [results,teams]=await Promise.all([api('/api/player/results'),api('/api/player/team-results')]);if(request===confirmationRequest&&session?.player_id===playerId)showConfirmationCount(results.filter(p=>p.status==='pending'&&p.opponent_id===playerId).length+teams.filter(p=>p.players?.some(m=>m.player_id===playerId&&m.team==='b'&&!m.confirmed)).length);}catch{if(request===confirmationRequest)showConfirmationCount(0);}}
-
-  async function renderConfirmations(){if(!session){confirmationsContent.textContent='Seleziona il tuo nome in alto.';return;}const [pending,profiles,teamResults]=await Promise.all([api('/api/player/results'),api('/api/public/ranking').catch(()=>[]),api('/api/player/team-results')]);const player=(id,name)=>{const p=profiles.find(item=>item.id===id)||{};return `<span class="confirmation-player">${window.manaPlayerAvatar(name,p.photo_url,p.avatar_hue,p.avatar_color)}<span>${esc(name)}</span></span>`;};const awaiting=pending.filter(p=>p.status==='pending');showConfirmationCount(awaiting.filter(p=>p.opponent_id===session.player_id).length+teamResults.filter(p=>p.players?.some(m=>m.player_id===session.player_id&&m.team==='b'&&!m.confirmed)).length);confirmationsContent.innerHTML=awaiting.map(p=>`<div class="result-pending"><div class="confirmation-match">${player(p.proposer_id,p.proposer_name)}<span class="confirmation-versus">vs</span>${player(p.opponent_id,p.opponent_name)}</div><p class="confirmation-winner">Vince ${esc(p.winner_name)}</p><div class="results-actions">${p.opponent_id===session.player_id?`<button type="button" class="button primary" data-confirm="${esc(p.id)}">Conferma</button>`:'<span>In attesa dell’avversario</span>'}<button type="button" class="button danger" data-reject="${esc(p.id)}">${p.opponent_id===session.player_id?'Rifiuta':'Annulla'}</button></div></div>`).join('')||'<p>Nessuna richiesta in attesa.</p>';if(teamResults.length){if(!awaiting.length)confirmationsContent.innerHTML='';confirmationsContent.innerHTML+=teamResults.map(p=>{const members=key=>p.players.filter(m=>m.team===key);const team=key=>`<section class="confirmation-team ${p.winning_team===key?'is-winning':''}"><div class="confirmation-team-players">${members(key).map(m=>player(m.player_id,m.name)).join('')}</div></section>`;const winners=members(p.winning_team);const me=p.players.find(m=>m.player_id===session.player_id);const canConfirm=me?.team==='b'&&!me.confirmed;const canReject=me?.team==='b'||p.proposer_id===session.player_id;return `<div class="result-pending"><strong>Amichevole</strong><div class="confirmation-teams">${team('a')}${team('b')}</div><p class="confirmation-winner">${winners.length===1?'Vince':'Vincono'} ${esc(winners.map(m=>m.name).join(' e '))}</p><div class="results-actions">${canConfirm?`<button type="button" class="button primary" data-team-confirm="${esc(p.id)}">Conferma</button>`:'<span>In attesa delle conferme</span>'}${canReject?`<button type="button" class="button danger" data-team-reject="${esc(p.id)}">${p.proposer_id===session.player_id?'Annulla':'Rifiuta'}</button>`:''}</div></div>`;}).join('');confirmationsContent.querySelectorAll('[data-team-confirm],[data-team-reject]').forEach(button=>button.onclick=async()=>{try{const id=button.dataset.teamConfirm||button.dataset.teamReject;await post(`/api/player/team-results/${encodeURIComponent(id)}/${button.dataset.teamConfirm?'confirm':'reject'}`);await renderConfirmations();}catch(err){confirmationsContent.textContent=err.message;}});}confirmationsContent.querySelectorAll('[data-confirm],[data-reject]').forEach(button=>button.onclick=async()=>{try{const id=button.dataset.confirm||button.dataset.reject;await post(`/api/player/results/${encodeURIComponent(id)}/${button.dataset.confirm?'confirm':'reject'}`);await renderConfirmations();}catch(err){confirmationsContent.textContent=err.message;}});}
-  $('#confirmations-open').addEventListener('click',async()=>{confirmations.showModal();try{await getSession();await renderConfirmations();}catch(err){confirmationsContent.textContent=err.message;}});
-  $('#confirmations-close').addEventListener('click',()=>confirmations.close());
   $('#results-open').addEventListener('click',async()=>{dialog.showModal();try{await getSession();await render();}catch(e){content.textContent=e.message;}});
   $('#player-results-close').addEventListener('click',()=>dialog.close());
-  dialog.addEventListener('close',()=>{const id=session?.player_id||'';select.value=id;try{if(id)localStorage.setItem('mana-arena-player-id',id);else localStorage.removeItem('mana-arena-player-id');}catch{}});
-  select.addEventListener('change',async()=>{++confirmationRequest;showConfirmationCount(0);const id=select.value;document.dispatchEvent(new Event('player-identity-changing'));try{if(!id){if(session)await post('/api/player/logout');session=null;localStorage.removeItem('mana-arena-player-id');}else{session=await post('/api/player/login',{player_id:id});localStorage.setItem('mana-arena-player-id',id);}document.dispatchEvent(new Event('player-identity-changed'));await refreshConfirmationCount();}catch(err){select.value=session?.player_id||'';document.dispatchEvent(new Event('player-identity-changed'));await refreshConfirmationCount();window.alert(err.message);}});
+  dialog.addEventListener('close',()=>{if(resultSaved){resultSaved=false;document.dispatchEvent(new Event('player-result-saved'));}const id=session?.player_id||'';select.value=id;try{if(id)localStorage.setItem('mana-arena-player-id',id);else localStorage.removeItem('mana-arena-player-id');}catch{}});
+  select.addEventListener('change',async()=>{const id=select.value;document.dispatchEvent(new Event('player-identity-changing'));try{if(!id){if(session)await post('/api/player/logout');session=null;localStorage.removeItem('mana-arena-player-id');}else{session=await post('/api/player/login',{player_id:id});localStorage.setItem('mana-arena-player-id',id);}document.dispatchEvent(new Event('player-identity-changed'));}catch(err){select.value=session?.player_id||'';document.dispatchEvent(new Event('player-identity-changed'));window.alert(err.message);}});
   const welcome=$('#identity-welcome'), welcomeForm=$('#identity-welcome-form'), welcomePlayers=$('#identity-welcome-players'), welcomeMessage=$('#identity-welcome-message'), welcomeSubmit=$('#identity-welcome-submit');
   async function showIdentityWelcome(){
     if(!welcome || window.location?.hash === '#life')return;
@@ -100,7 +122,7 @@
         try{localStorage.setItem('mana-arena-player-id',id);}catch{}
         if(![...select.options].some(o=>o.value===id))select.add(new Option(session.name,id));
         select.value=id;document.dispatchEvent(new Event('player-identity-changed'));
-        welcome.close();await refreshConfirmationCount();
+        welcome.close();
       }catch(err){document.dispatchEvent(new Event('player-identity-changed'));welcomeMessage.textContent=err.message||'Impossibile selezionare il giocatore.';}
       finally{welcomeSubmit.disabled=false;}
     });
@@ -110,8 +132,6 @@
     if(!session&&rememberedPlayer){
       try{session=await post('/api/player/login',{player_id:rememberedPlayer});try{localStorage.setItem('mana-arena-player-id',session.player_id);}catch{}if(![...select.options].some(o=>o.value===session.player_id))select.add(new Option(session.name,session.player_id));select.value=session.player_id;document.dispatchEvent(new Event('player-identity-changed'));}catch{}
     }
-    if(session)await refreshConfirmationCount();else await showIdentityWelcome();
+    if(!session)await showIdentityWelcome();
   }).catch(()=>showIdentityWelcome());
-  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')refreshConfirmationCount();});
-  setInterval(()=>{if(document.visibilityState==='visible')refreshConfirmationCount();},15000);
 })();

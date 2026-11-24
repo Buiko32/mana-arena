@@ -16,7 +16,7 @@ Apri un torneo pubblico e scegli **Scopri il tuo incontro**. Seleziona il tuo no
 
 ## Amichevoli a squadre
 
-Da Inserisci risultato si può proporre un’amichevole da 1 a 3 giocatori per parte, anche 1 contro 1. Tutti gli avversari devono confermare; un rifiuto annulla la proposta. L’Elo di ciascun giocatore viene confrontato con la media Elo della squadra avversaria prima della partita. Per ogni avversario in più si aggiungono 150 punti alla forza avversaria stimata; per ogni compagno in più se ne sottraggono 150. La variazione usa il K personale e considera il risultato della squadra: le variazioni individuali possono essere diverse e la somma dei punti può cambiare. Il vantaggio numerico è una convenzione regolabile, non una misura verificata del gioco.
+Da **Inserisci risultato** si può registrare un’amichevole da 1 a 3 giocatori per parte, anche 1 contro 1. Il riepilogo mostra le due squadre e il vincitore prima del salvataggio. L’Elo di ciascun giocatore viene confrontato con la media Elo della squadra avversaria prima della partita. Per ogni avversario in più si aggiungono 150 punti alla forza avversaria stimata; per ogni compagno in più se ne sottraggono 150. La variazione usa il K personale e considera il risultato della squadra: le variazioni individuali possono essere diverse e la somma dei punti può cambiare. Il vantaggio numerico è una convenzione regolabile, non una misura verificata del gioco.
 
 ## Classifica globale e reset
 
@@ -71,7 +71,7 @@ python -m pytest -q
 node --version
 node --check app/static/brackets.js
 node --check app/static/app.js
-node --test tests/brackets.test.cjs tests/reveal.test.cjs tests/confirmation-badge.test.cjs tests/identity-welcome.test.cjs
+node --test tests/brackets.test.cjs tests/reveal.test.cjs tests/identity-welcome.test.cjs
 ```
 
 GitHub Actions esegue gli stessi test prima di costruire l’immagine.
@@ -106,6 +106,6 @@ Per leggere l'archivio con SQLite, apri il file `life-stats.sqlite3` con un prog
 
 Apri **Segnavita** dalla barra in basso e conserva il collegamento alla pagina `/segnavita` sul telefono. Per poterla riaprire senza rete, accedi una prima volta in HTTPS e lascia completare il caricamento. Il browser conserva sul telefono i file necessari, i profili disponibili e la partita in corso. In modalità privata o cancellando i dati del sito puoi perdere le partite ancora da inviare.
 
-I tocchi sui contatori e i lanci del dado avvengono sul telefono. Alla fine scegli **Termina**, verifica il vincitore e conferma. Se il NAS è irraggiungibile, riapri il segnavita con lo stesso browser quando torna la connessione per sincronizzare le partite concluse. Per una partita di torneo offline serve l’abbinamento già caricato sul dispositivo. Se nel frattempo il risultato è stato registrato, l’archivio conserva i dati vita e l’app segnala il conflitto.
+I tocchi sui contatori e i lanci del dado avvengono sul telefono. Alla fine scegli **Termina**, verifica il vincitore e seleziona **Salva risultato**. Se il NAS è irraggiungibile, riapri il segnavita con lo stesso browser quando torna la connessione per sincronizzare le partite concluse. Per una partita di torneo offline serve l’abbinamento già caricato sul dispositivo. Se nel frattempo il risultato è stato registrato, l’archivio conserva i dati vita e l’app segnala il conflitto.
 
 Mentre il tavolo è visibile, il segnavita chiede al telefono di mantenere il display acceso. Su un NAS aperto dal telefono tramite indirizzo IP in HTTP, la riapertura offline e il mantenimento del display acceso richiedono l’accesso in HTTPS.

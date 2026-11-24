@@ -26,7 +26,7 @@
     for (const match of matches) {
       const sides = match.sides.map(side => side.join(' + '));
       const card = document.createElement('article');
-      card.append(element('small', match.label), element('h3', sides.join(' contro ')),
+      card.append(element('small', (match.kind === 'tournament' ? '🏆 ' : '') + match.label), element('h3', sides.join(' contro ')),
         element('p', match.winner === null ? 'Pareggio' : 'Vittoria di ' + sides[match.winner]));
       games.append(card);
     }

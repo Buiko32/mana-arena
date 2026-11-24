@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 from test_api import app_factory, admin_headers, tournament_with_players, start
 
 
-def test_players_confirm_results_and_cannot_confirm_their_own(app_factory):
+def test_tournament_result_registers_immediately_and_legacy_confirm_is_rejected(app_factory):
     app = app_factory()
     with TestClient(app) as admin, TestClient(app) as a, TestClient(app) as b:
         headers = admin_headers(admin)
@@ -21,13 +21,22 @@ def test_players_confirm_results_and_cannot_confirm_their_own(app_factory):
         proposal = a.post('/api/player/results', headers=tokens[0], json={'tournament_id': tid, 'match_id': match['id'], 'winner_id': players[0]['id']})
         assert proposal.status_code == 201
         pid = proposal.json()['id']
-        assert a.post(f'/api/player/results/{pid}/confirm', headers=tokens[0]).status_code == 403
-        assert admin.get(f'/api/admin/tournaments/{tid}',headers=headers).json()['matches'][0].get('result') is None
-        assert b.post(f'/api/player/results/{pid}/confirm', headers=tokens[1]).status_code == 200
-        assert admin.get(f'/api/admin/tournaments/{tid}',headers=headers).json()['matches'][0]['result'] in ('p1_win', 'p2_win')
+        matches = admin.get(f'/api/admin/tournaments/{tid}', headers=headers).json()['matches']
+        stored = next(m for m in matches if m['id'] == match['id'])
+        assert stored['result'] == ('p1_win' if stored['p1'] == players[0]['id'] else 'p2_win')
+        from datetime import datetime, timedelta, timezone
+        now = datetime.now(timezone.utc)
+        history = a.get('/api/public/history', params={
+            'start': (now - timedelta(days=1)).isoformat(), 'end': (now + timedelta(days=1)).isoformat(),
+        }).json()
+        assert len(history) == 1 and history[0]['kind'] == 'tournament'
+        assert history[0]['label'] == 'Serata Mana · Turno 1'
+        assert b.post(f'/api/player/results/{pid}/confirm', headers=tokens[1]).status_code == 409
+        duplicate = b.post('/api/player/results', headers=tokens[1], json={'tournament_id': tid, 'match_id': match['id'], 'winner_id': players[1]['id']})
+        assert duplicate.status_code == 409
 
 
-def test_friendly_requires_auth_csrf_and_opponent_confirmation(app_factory):
+def test_friendly_registers_immediately_and_legacy_confirm_is_closed(app_factory):
     app = app_factory()
     with TestClient(app) as admin, TestClient(app) as first, TestClient(app) as second:
         headers = admin_headers(admin)
@@ -42,13 +51,12 @@ def test_friendly_requires_auth_csrf_and_opponent_confirmation(app_factory):
         created = first.post('/api/player/results', json=body, headers=tokens[0])
         assert created.status_code == 201
         rid = created.json()['id']
-        assert second.post(f'/api/player/results/{rid}/confirm', headers=tokens[1]).status_code == 200
         assert second.post(f'/api/player/results/{rid}/confirm', headers=tokens[1]).status_code == 409
         assert first.get('/api/player/results').status_code == 200
         assert admin.post('/api/admin/reset-data', json={'scope':'all','confirmation':'ELIMINA'}, headers=headers).status_code == 200
 
 
-def test_confirmed_friendly_counts_toward_global_ranking(app_factory):
+def test_friendly_updates_global_ranking_immediately(app_factory):
     app = app_factory()
     with TestClient(app) as admin, TestClient(app) as a, TestClient(app) as b:
         headers = admin_headers(admin)
@@ -57,15 +65,14 @@ def test_confirmed_friendly_counts_toward_global_ranking(app_factory):
         for client, person in zip((a,b), people):
             password = admin.post(f"/api/admin/players/{person['id']}/credential", headers=headers).json()['password']
             tokens.append({'X-Player-CSRF':client.post('/api/player/login', json={'player_id':person['id'],'password':password}).json()['csrf_token']})
-        rid = a.post('/api/player/results', headers=tokens[0], json={'opponent_id':people[1]['id'],'winner_id':people[0]['id']}).json()['id']
-        assert all(p['matches'] == 0 for p in admin.get('/api/public/ranking').json())
-        assert b.post(f'/api/player/results/{rid}/confirm', headers=tokens[1]).status_code == 200
+        result = a.post('/api/player/results', headers=tokens[0], json={'opponent_id':people[1]['id'],'winner_id':people[0]['id']})
+        assert result.status_code == 201 and result.json().get('id')
         rows={p['id']:p for p in admin.get('/api/public/ranking').json()}
         assert rows[people[0]['id']]['wins']==1
         assert rows[people[1]['id']]['losses']==1
 
 
-def test_organizer_cannot_bypass_player_confirmation(tmp_path):
+def test_organizer_cannot_bypass_player_registration(tmp_path):
     from app.main import create_app
     from test_api import PASSWORD, SECRET
     app=create_app(data_dir=tmp_path, admin_username='organizer', admin_password=PASSWORD, session_secret=SECRET)
@@ -78,7 +85,7 @@ def test_organizer_cannot_bypass_player_confirmation(tmp_path):
         assert response.status_code == 403
 
 
-def test_rollback_invalidates_pending_proposal(app_factory):
+def test_rollback_invalidates_registered_result(app_factory):
     app = app_factory()
     with TestClient(app) as admin, TestClient(app) as a, TestClient(app) as b:
         headers=admin_headers(admin)
@@ -119,7 +126,7 @@ def test_player_selects_identity_without_a_code(app_factory):
         tokens = [{'X-Player-CSRF': response.json()['csrf_token']} for response in sessions]
         proposed = first.post('/api/player/results', headers=tokens[0], json={'opponent_id':people[1]['id'], 'winner_id':people[0]['id']})
         assert proposed.status_code == 201
-        assert second.post(f"/api/player/results/{proposed.json()['id']}/confirm", headers=tokens[1]).status_code == 200
+        assert second.post(f"/api/player/results/{proposed.json()['id']}/confirm", headers=tokens[1]).status_code == 409
 
 
 def test_new_players_receive_distinct_available_colors(app_factory):
@@ -177,7 +184,7 @@ def test_player_responses_are_not_cacheable(app_factory):
             assert 'Cookie' in response.headers['vary']
 
 
-def test_unrevealed_players_can_propose_and_confirm(app_factory):
+def test_unrevealed_players_can_register_result_immediately(app_factory):
     app=app_factory()
     with TestClient(app) as admin, TestClient(app) as a, TestClient(app) as b:
         headers=admin_headers(admin)
@@ -192,8 +199,7 @@ def test_unrevealed_players_can_propose_and_confirm(app_factory):
         assert len(a.get('/api/player/matches').json()) == 1
         proposal = a.post('/api/player/results',json=body,headers=tokens[0])
         assert proposal.status_code==201
-        assert len(b.get('/api/player/results').json())==1
-        assert b.post(f"/api/player/results/{proposal.json()['id']}/confirm",headers=tokens[1]).status_code==200
+        assert b.post(f"/api/player/results/{proposal.json()['id']}/confirm",headers=tokens[1]).status_code==409
         tournament = admin.get(f'/api/admin/tournaments/{tid}',headers=headers).json()
         assert max(m['round'] for m in tournament['matches']) == 2
 
