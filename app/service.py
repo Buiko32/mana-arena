@@ -56,9 +56,9 @@ def calculate_global_elo(players: list[dict], matches: list[dict]) -> list[dict]
     for match in matches:
         result = match.get('result')
         a, b = rows.get(match.get('p1')), rows.get(match.get('p2'))
-        if result not in ('p1_win', 'p2_win', 'draw') or not a or not b or a is b or match.get('bye') or match.get('void'):
+        if result not in ('p1_win', 'p2_win') or not a or not b or a is b or match.get('bye') or match.get('void'):
             continue
-        score_a = {'p1_win': 1.0, 'p2_win': 0.0, 'draw': 0.5}[result]
+        score_a = {'p1_win': 1.0, 'p2_win': 0.0}[result]
         ra, rb = a['rating'], b['rating']
         def expected(own, other):
             diff = other - own
@@ -74,7 +74,6 @@ def calculate_global_elo(players: list[dict], matches: list[dict]) -> list[dict]
             row['peak_2400'] |= row['rating'] >= 2400
         if score_a == 1: a['wins'] += 1; b['losses'] += 1
         elif score_a == 0: b['wins'] += 1; a['losses'] += 1
-        else: a['draws'] += 1; b['draws'] += 1
     result = sorted(rows.values(), key=lambda row: (-row['rating'], -row['wins'], row['name'].casefold(), row['id']))
     for position, row in enumerate(result, 1):
         row['rating'] = round(row['rating'])
