@@ -14,11 +14,11 @@ function fixture({offline = false, matches = [match('uno','b'),match('due','c')]
   const player = {player_id:'a',name:'Ada'};
   if (cached) values.set('mana-life-matches-v1',JSON.stringify({player,matches}));
   const nodes = new Map();
-  const field = (value = '') => ({value,innerHTML:'',hidden:false,disabled:false,textContent:''});
+  const field = (value = '') => ({value,innerHTML:'',hidden:false,disabled:false,textContent:'',focus(){}});
   const submit = field();
   const form = {
     elements:{kind:field('friendly'),format:field('duel'),tournament_player:field(),match:field(),life_mode:field('same')},
-    querySelector:() => submit, addEventListener(){},
+    querySelector:() => submit, addEventListener(event, callback){this[event] = callback;},
   };
   const root = {
     addEventListener(){}, querySelectorAll:() => [],
@@ -63,7 +63,10 @@ test('loads and selects the first tournament match with fixed players',async () 
   assert.match(sides.innerHTML,/Ada.*Carla/);
   form.elements.kind.value = 'friendly';
   form.elements.kind.onchange();
-  assert.match(sides.innerHTML,/data-add-profile/);
+  assert.match(sides.innerHTML,/data-profile="0"/);
+  assert.doesNotMatch(sides.innerHTML,/data-add-profile/);
+  form.change({target:{value:'b',dataset:{profile:'0'},matches:() => true}});
+  assert.match(sides.innerHTML,/data-remove-member="0,0"/);
   assert.doesNotMatch(root.innerHTML,/I risultati con un vincitore|Carica abbinamenti/);
 });
 

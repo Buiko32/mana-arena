@@ -221,7 +221,7 @@
     select.onchange();
   }
   function drawSetup() {
-    root.innerHTML = `<div class="life-shell"><header><p class="life-kicker">MANA ARENA · AL TAVOLO</p><h1>Segnapunti vita</h1><p>Un telefono al centro del tavolo, un contatore per ogni lato.</p></header><form id="life-setup"><label>Tipo partita<select name="kind"><option value="friendly">Amichevole</option><option value="tournament">🏆 Partita di torneo</option></select></label><label data-tournament-player hidden>Il tuo profilo<select name="tournament_player"><option value="">Seleziona profilo</option></select></label><label data-match-label hidden>Incontro<select name="match"><option value="">Nessun abbinamento disponibile</option></select></label><p data-match-hint role="status" hidden></p><label data-friendly-format>Formato<select name="format"><option value="duel">Duello</option><option value="team">Squadre</option><option value="ffa">Tutti contro tutti</option></select></label><label>Vita iniziale<select name="life_mode"><option value="same">Uguale per tutti</option><option value="different">Diversa per ogni lato</option></select></label><label data-common>Vita iniziale comune<input type="number" name="common_life" min="1" max="999" value="20" required></label><div class="life-setup-sides"></div><div class="life-setup-actions"><button type="button" class="button secondary" data-add-side hidden>Aggiungi lato</button><button type="submit" class="button primary">Inizia partita</button></div><p data-queue-status role="status"></p><button type="button" class="button secondary" data-queue-retry hidden>Riprova sincronizzazione</button><button type="button" class="button secondary" data-queue-login hidden>Accedi come proponente e sincronizza</button><p class="life-error" role="alert"></p></form></div>`;
+    root.innerHTML = `<div class="life-shell"><header><p class="life-kicker">MANA ARENA · AL TAVOLO</p><h1>Segnapunti vita</h1><p>Un telefono al centro del tavolo, un contatore per ogni lato.</p></header><form id="life-setup"><label>Tipo partita<select name="kind"><option value="friendly">Amichevole</option><option value="tournament">🏆 Partita di torneo</option></select></label><label data-tournament-player hidden>Il tuo profilo<select name="tournament_player"><option value="">Seleziona profilo</option></select></label><label data-match-label hidden>Incontro<select name="match"><option value="">Nessun abbinamento disponibile</option></select></label><p data-match-hint role="status" hidden></p><label data-friendly-format>Formato<select name="format"><option value="duel">Duello 1v1</option><option value="team">Squadre</option><option value="ffa">Tutti contro tutti</option></select></label><label>Vita iniziale<select name="life_mode"><option value="same">Uguale per tutti</option><option value="different">Diversa per ogni lato</option></select></label><label data-common>Vita iniziale comune<input type="number" name="common_life" min="1" max="999" value="20" required></label><div class="life-setup-sides"></div><div class="life-setup-actions"><button type="button" class="button secondary" data-add-side hidden>Aggiungi lato</button><button type="submit" class="button primary">Inizia partita</button></div><p data-queue-status role="status"></p><button type="button" class="button secondary" data-queue-retry hidden>Riprova sincronizzazione</button><button type="button" class="button secondary" data-queue-login hidden>Accedi come proponente e sincronizza</button><p class="life-error" role="alert"></p></form></div>`;
     const form = root.querySelector('form');
     function renderSides() {
       const editable = form.elements.kind.value !== 'tournament';
@@ -230,7 +230,7 @@
       root.querySelector('[data-add-side]').hidden = !editable || format !== 'ffa' || sides.length >= 4;
       root.querySelector('.life-setup-sides').innerHTML = sides.map((members, i) => {
         if (!editable && !members.length) return '';
-        const controls = editable ? `<div class="life-add-member"><span data-profile-preview="${i}" class="life-profile-preview" aria-hidden="true"></span><select aria-label="Profilo lato ${i+1}" data-profile="${i}"><option value="">Scegli profilo</option>${profiles.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select><button type="button" data-add-profile="${i}">Aggiungi</button></div><div class="life-add-member"><input data-guest="${i}" maxlength="60" placeholder="Nome ospite" aria-label="Nome ospite lato ${i+1}"><button type="button" data-add-guest="${i}">Aggiungi</button></div>` : '';
+        const controls = editable ? `<div class="life-add-member"><select aria-label="Profilo lato ${i+1}" data-profile="${i}"><option value="">Scegli profilo</option>${profiles.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div><div class="life-add-member"><input data-guest="${i}" maxlength="60" placeholder="Nome ospite" aria-label="Nome ospite lato ${i+1}"><button type="button" data-add-guest="${i}">Aggiungi</button></div>` : '';
         return `<fieldset><legend>${format === 'team' ? 'Squadra' : 'Lato'} ${i + 1}</legend><div class="life-members">${members.map((m, j) => `<div class="life-member"><span class="life-person">${avatar(m)}<span>${esc(m.name)}</span></span>${editable ? `<button type="button" data-remove-member="${i},${j}" aria-label="Rimuovi ${esc(m.name)}">×</button>` : ''}</div>`).join('')}</div>${controls}<label ${form.elements.life_mode.value === 'same' ? 'hidden' : ''}>Vita iniziale<input type="number" data-initial="${i}" min="1" max="999" value="${esc(initial[i] ?? 20)}" required></label>${editable && format === 'ffa' && sides.length > 2 ? `<button type="button" data-remove-side="${i}">Rimuovi lato</button>` : ''}</fieldset>`;
       }).join('');
     }
@@ -272,7 +272,33 @@
       }) : [[],[]];
       renderSides();
     };
-    form.addEventListener('change',event=>{const select=event.target;if(!select.matches('[data-profile]'))return;const person=profiles.find(p=>String(p.id)===select.value);root.querySelector(`[data-profile-preview="${select.dataset.profile}"]`).innerHTML=person?avatar(person):'';});
+    form.addEventListener('change', event => {
+      const select = event.target;
+      if (!select.matches('[data-profile]') || !select.value) return;
+      const i = Number(select.dataset.profile), id = select.value;
+      const person = profiles.find(p => String(p.id) === id);
+      if (!person) return;
+      const error = root.querySelector('.life-error');
+      if (sides.flat().some(member => member.id === id)) {
+        error.textContent = 'Questo profilo è già stato aggiunto.';
+        select.value = '';
+        return;
+      }
+      const member = {id, name:person.name, photo_url:person.photo_url || null};
+      if (form.elements.format.value === 'team') {
+        if (sides[i].length >= 6) {
+          error.textContent = 'La squadra ha già sei giocatori.';
+          select.value = '';
+          return;
+        }
+        sides[i].push(member);
+      } else {
+        sides[i] = [member];
+      }
+      error.textContent = '';
+      renderSides();
+      root.querySelector(`[data-profile="${i}"]`).focus();
+    });
     form.elements.life_mode.onchange = () => { root.querySelector('[data-common]').hidden=form.elements.life_mode.value!=='same'; renderSides(); };
     form.elements.format.onchange = () => { sides = [[], []]; renderSides(); };
     root.onclick = e => {
@@ -283,7 +309,6 @@
       if (b.hasAttribute('data-add-side')) sides.push([]);
       else if (b.hasAttribute('data-remove-side')) sides.splice(Number(b.dataset.removeSide), 1);
       else if (b.hasAttribute('data-remove-member')) { const [i,j] = b.dataset.removeMember.split(',').map(Number); sides[i].splice(j,1); }
-      else if (b.hasAttribute('data-add-profile')) { const i = Number(b.dataset.addProfile), id = root.querySelector(`[data-profile="${i}"]`).value, p = profiles.find(x => String(x.id) === id); if (!p) return; if (sides.flat().some(m => m.id === id)) { root.querySelector('.life-error').textContent = 'Questo profilo è già stato aggiunto.'; return; } sides[i].push({id,name:p.name,photo_url:p.photo_url||null}); }
       else if (b.hasAttribute('data-add-guest')) { const i = Number(b.dataset.addGuest), name = root.querySelector(`[data-guest="${i}"]`).value.trim(); if (!name) return; sides[i].push({name}); }
       else return;
       renderSides();
@@ -367,7 +392,42 @@
     return seats;
   }
 
+  let liveTimer, liveRequest;
+  const pendingLive = new Map();
+  function flushLive() {
+    if (liveRequest || !pendingLive.size || navigator.onLine === false) return;
+    const [id, snapshot] = pendingLive.entries().next().value;
+    pendingLive.delete(id);
+    const headers = {'X-Mana-Live':'1'};
+    if (snapshot) headers['Content-Type'] = 'application/json';
+    liveRequest = fetch('/api/life/live/' + encodeURIComponent(id), {
+      method: snapshot ? 'PUT' : 'DELETE', headers,
+      body: snapshot ? JSON.stringify(snapshot) : undefined,
+      signal: globalThis.AbortSignal?.timeout?.(7000)
+    }).catch(() => {}).finally(() => {
+      liveRequest = null;
+      flushLive();
+    });
+  }
+  function queueLive(active) {
+    pendingLive.set(game.session_id, active ? {
+      format: game.format, kind: game.kind,
+      sides: game.sides.map(({initial, life, members}) => ({
+        initial, life, members: members.map(({id, name}) => ({id, name}))
+      }))
+    } : null);
+    flushLive();
+  }
+  function scheduleLive(delay) {
+    clearTimeout(liveTimer);
+    liveTimer = setTimeout(() => {
+      queueLive(true);
+      scheduleLive(15000);
+    }, delay);
+  }
+
   function drawGame() {
+    scheduleLive(0);
     const seats = mobileSeats(game.sides, game.proposer || readRememberedPlayer());
     const topCount = game.sides.length === 2 ? 1 : 2;
     const seat = index => {
@@ -393,7 +453,7 @@
     const el=root.querySelector(`[data-feedback="${i}"]`);if(el){el.textContent=total>0?'+'+total:String(total);el.classList.add('is-visible');}
     const timer=setTimeout(()=>{tapFeedback.delete(i);const current=root.querySelector(`[data-feedback="${i}"]`);if(current)current.classList.remove('is-visible');},1100);tapFeedback.set(i,{total,timer});
   }
-  function change(i,delta,undo=false){ if(game.changes.length>=5000){root.querySelector('.life-error').textContent='Limite di 5000 variazioni raggiunto.';return;} const side=game.sides[i];side.life+=delta;game.changes.push({at:stamp(),player:side.name,delta,life:side.life,...(undo?{undo:true}:{})});root.querySelector(`[data-life="${i}"]`).textContent=side.life;showTapFeedback(i,delta);persist(); }
+  function change(i,delta,undo=false){ if(game.changes.length>=5000){root.querySelector('.life-error').textContent='Limite di 5000 variazioni raggiunto.';return;} const side=game.sides[i];side.life+=delta;game.changes.push({at:stamp(),player:side.name,delta,life:side.life,...(undo?{undo:true}:{})});root.querySelector(`[data-life="${i}"]`).textContent=side.life;showTapFeedback(i,delta);persist();if(game.session_id) scheduleLive(150); }
   function roll(i) {
     const r=game.rolls; if(r.done || !r.eligible.includes(i) || r.values[i]!==undefined)return;
     const value=crypto.getRandomValues(new Uint32Array(1))[0]%20+1; r.values[i]=value;
@@ -417,6 +477,8 @@
     faces.map((f,n)=>({f,n,z:f.reduce((sum,i)=>sum+p[i][2],0)})).sort((a,b)=>a.z-b.z).forEach(({f,n,z})=>{c.beginPath();f.forEach((i,j)=>{const [x,y]=p[i], X=75+x*26,Y=75+y*26-bounce;j?c.lineTo(X,Y):c.moveTo(X,Y)});c.closePath();c.fillStyle=`hsl(267 45% ${Math.max(28,Math.min(62,43+z*4))}%)`;c.fill();c.strokeStyle='#d9c8ff';c.lineWidth=1;c.stroke();if(z>1){const x=f.reduce((s,i)=>s+p[i][0],0)/3,y=f.reduce((s,i)=>s+p[i][1],0)/3;c.fillStyle='white';c.font='bold 11px sans-serif';c.textAlign='center';c.fillText(String(n+1),75+x*26,79+y*26-bounce);}});
   }
   function end(){
+    clearTimeout(liveTimer);
+    queueLive(false);
     root.classList.remove('life-playing');root.onkeydown=null;
     const max=Math.max(...game.sides.map(side=>side.life)), leaders=game.sides.filter(side=>side.life===max);
     let selected=leaders.length===1?game.sides.indexOf(leaders[0]):null;
@@ -441,6 +503,8 @@
     refreshQueueStatus();showPendingEloResults();drainOutbox();
   }
   window.addEventListener('online',async () => {
+    flushLive();
+    if (game && root.querySelector('.life-table')) scheduleLive(0);
     await drainOutbox();
     if (!game && root.querySelector('#life-setup')) loadTournamentMatches(sessionPlayer?.player_id);
   });

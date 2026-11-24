@@ -64,6 +64,7 @@ def test_life_game_creates_one_proposal_even_after_deletion(app_factory):
         with app.state.db.transaction() as conn:
             history=month_matches(conn,'2026-11-19 00:00:00','2026-11-20 00:00:00')
             assert history[0]['at']=='2026-11-19T12:02:00Z'
+            assert history[0]['elo_deltas'] == [[-20], [20]]
         assert next(p for p in admin.get('/api/public/ranking').json() if p['id']==people[1]['id'])['wins']==1
         assert admin.delete('/api/admin/friendlies/single/'+response['result_id'],headers=headers).status_code==200
         assert player.post('/api/life/games',json=raw,headers=token).json()['result_status']=='unavailable'

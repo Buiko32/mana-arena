@@ -99,13 +99,15 @@
   window.manaAdminRequest = request;
   function setView(view){
     const publicPage = view === 'public';
+    const liveOpen = publicPage && (location.hash === '#live' || location.hash.startsWith('#live/'));
     const historyOpen = publicPage && location.hash === '#history';
     if (publicPage && location.hash === '#life') {
       location.replace('/segnavita#life');
       return;
     }
     const ranking = publicPage && location.hash === '#global-ranking';
-    const home = publicPage && !ranking && !historyOpen;
+    const home = publicPage && !ranking && !historyOpen && !liveOpen;
+    $('#live').hidden = !liveOpen;
     $('#history').hidden = !historyOpen;
     $('#admin-view').hidden = publicPage;
     $('#public-view').hidden = !home && !ranking;
@@ -115,10 +117,11 @@
       const selected = a.dataset.viewLink === 'admin' ? !publicPage : home;
       a.setAttribute('aria-current', selected ? 'page' : 'false');
     });
-    for(const [selector, active] of [['[data-history-link]',historyOpen],['[data-ranking-link]',ranking]]){
+    for(const [selector, active] of [['[data-live-link]',liveOpen],['[data-history-link]',historyOpen],['[data-ranking-link]',ranking]]){
       $(selector).setAttribute('aria-current', active ? 'page' : 'false');
     }
-    if(historyOpen) window.openMatchHistory();
+    if(liveOpen) window.openLiveGames();
+    else if(historyOpen) window.openMatchHistory();
     else if(!publicPage) refreshAdmin().catch(e=>showError(e.message));
     else refreshPublic().catch(e=>showError(e.message,'#public-error'));
   }
@@ -195,11 +198,13 @@
   function closeReveal(){revealSession++;clearTimeout(revealTimer);const dialog=$('#reveal-dialog');if(dialog.open)dialog.close();}
   function renderStandings(rows,people,c,status){const tb=(rows||[]).map(r=>{const p=people.get(r.player_id)||{};return `<tr class="${r.player_id===savedPlayer()?'is-me':''} ${r.eliminated?'is-eliminated':''}"><td class="rank">${esc(r.rank)}</td><td>${esc(r.seed??'—')}</td><td><span class="player-chip">${avatar(p.name,p.photo_url,p.avatar_hue,p.avatar_color)} ${esc(p.name||'Giocatore')} ${status==='active'?`<span class="player-status ${r.eliminated?'eliminated':'in-play'}">${r.eliminated?'Eliminato':'In gioco'}</span>`:''}</span></td><td>${esc(r.points)}</td><td>${esc(r.wins)}–${esc(r.losses)}</td></tr>`;}).join('');return `<div class="mascot-section-heading"><h3>Classifica</h3></div><div class="table-wrap"><table><thead><tr><th>Pos.</th><th>Seed</th><th>Giocatore</th><th>Punti</th><th>V–S</th></tr></thead><tbody>${tb||'<tr><td colspan="5">Classifica non ancora disponibile.</td></tr>'}</tbody></table></div>`;}
   function isVoid(match){return Boolean(match.void)||match.result==='void';}
-  function renderMatchCard({label, kind, sides, winner, score, status, action = ''}) {
-    const teams = sides.map((side,index) => `<div class="match-card-team${winner === index ? ' match-card-winner' : ''}">${side.map(player => {
+  function renderMatchCard({label, kind, sides, winner, score, status, elo_deltas, action = ''}) {
+    const teams = sides.map((side,index) => `<div class="match-card-team${winner === index ? ' match-card-winner' : ''}">${side.map((player, position) => {
       const name = typeof player === 'string' ? player : player.name;
       const photo = typeof player === 'string' ? '' : avatar(name,player.photo_url,player.avatar_hue,player.avatar_color);
-      return `<div class="match-card-player${player?.id===savedPlayer() ? ' match-card-you' : ''}">${photo}<span>${esc(name)}</span></div>`;
+      const elo = elo_deltas?.[index]?.[position];
+      const delta = Number.isInteger(elo) ? `<span class="match-card-elo" data-direction="${Math.sign(elo)}">${elo > 0 ? '+' : ''}${elo} Elo</span>` : '';
+      return `<div class="match-card-player${player?.id===savedPlayer() ? ' match-card-you' : ''}">${photo}<span>${esc(name)}</span>${delta}</div>`;
     }).join('')}${winner === index ? '<strong class="match-card-outcome">Vittoria</strong>' : ''}</div>`);
     return `<article class="match-card"><div class="match-card-heading"><strong>${kind === 'tournament' ? '<span aria-hidden="true">🏆</span> ' : ''}${esc(label)}</strong>${status ? `<span class="muted">${esc(status)}</span>` : ''}</div><div class="match-card-teams">${teams[0]}<span class="match-card-score" aria-label="${score ? 'Punteggio' : 'Contro'}">${score ? esc(score.join('–')) : 'VS'}</span>${teams[1]}</div>${action}</article>`;
   }
@@ -487,7 +492,7 @@
   function fillTie(order){const ol=$('#tiebreak-list');[...ol.children].sort((a,b)=>order.indexOf(a.dataset.tiebreak)-order.indexOf(b.dataset.tiebreak)).forEach(li=>ol.append(li));$$('#tiebreak-list li').forEach(li=>$('input[type=checkbox]',li).checked=order.includes(li.dataset.tiebreak));}
   async function exportCsv(){const kind=$('[data-export-kind]').value;const response=await request(`/api/admin/tournaments/${state.current.id}/export.csv?kind=${encodeURIComponent(kind)}`);const url=URL.createObjectURL(await response.blob());const a=document.createElement('a');a.href=url;a.download=`mana-arena-${kind}.csv`;document.body.append(a);a.click();a.remove();URL.revokeObjectURL(url);}
   async function clickHandler(e){const target=e.target.closest('button,summary[data-round-disclosure],[data-public-open],[data-photo],[data-seed-player]');if(!target)return;
-    if(target.matches('[data-view-link]')){e.preventDefault();setView(target.dataset.viewLink);history.replaceState(null,'',`#${target.dataset.viewLink}-view`);return;}
+    if(target.matches('[data-view-link]')){e.preventDefault();history.replaceState(null,'',`#${target.dataset.viewLink}-view`);setView(target.dataset.viewLink);return;}
     if(target.matches('[data-personal-result]')){
       document.dispatchEvent(new CustomEvent('player-result-open',{detail:target.dataset.personalResult}));
       return;

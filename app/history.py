@@ -1,11 +1,16 @@
 """Public history of played matches, grouped by the client in local time."""
 import json
 
+from .service import match_elo_deltas
+
 
 def month_matches(conn, start, end):
     names = {r["id"]: r["name"] for r in conn.execute("SELECT id,name FROM players")}
     games = []
-    def add(stamp, label, left, right, winner, kind="friendly", score=None):
+    participants = {}
+
+    def add(match_id, stamp, label, left, right, winner, kind="friendly", score=None):
+        participants[match_id] = (len(games), (left, right))
         games.append({"at": stamp.replace(" ", "T") + "Z", "label": label, "kind": kind,
                       "sides": [[names.get(p, "Giocatore") for p in side] for side in (left, right)],
                       "winner": winner, "score": score})
@@ -15,7 +20,7 @@ def month_matches(conn, start, end):
             SELECT tournament_id, json_extract(detail_json,'$.match_id') AS mid, MAX(created_at) AS stamp
             FROM audit WHERE action='match_result_recorded' GROUP BY tournament_id, mid
         )
-        SELECT m.data_json, t.config_json, m.round_no, COALESCE(p.stamp,r.stamp,t.created_at) AS stamp
+        SELECT m.id, m.data_json, t.config_json, m.round_no, COALESCE(p.stamp,r.stamp,t.created_at) AS stamp
         FROM matches m LEFT JOIN recorded r ON m.id=r.mid AND m.tournament_id=r.tournament_id
         LEFT JOIN (SELECT tournament_id,match_id,MAX(created_at) AS stamp FROM result_proposals WHERE status='confirmed' GROUP BY tournament_id,match_id) p ON p.tournament_id=m.tournament_id AND p.match_id=m.id
         JOIN tournaments t ON t.id=m.tournament_id WHERE COALESCE(p.stamp,r.stamp,t.created_at)>=? AND COALESCE(p.stamp,r.stamp,t.created_at)<?
@@ -27,12 +32,12 @@ def month_matches(conn, start, end):
             score = [m.get("p1_games"), m.get("p2_games")]
             if m.get("score_unknown") or any(value is None for value in score):
                 score = None
-            add(row["stamp"], label, [m["p1"]], [m["p2"]], {"p1_win": 0, "p2_win": 1}.get(outcome),
+            add(row["id"], row["stamp"], label, [m["p1"]], [m["p2"]], {"p1_win": 0, "p2_win": 1}.get(outcome),
                 kind="tournament", score=score)
 
     for r in conn.execute("""SELECT * FROM result_proposals WHERE status='confirmed'
             AND tournament_id IS NULL AND created_at>=? AND created_at<?""", (start, end)):
-        add(r["created_at"], "Amichevole", [r["proposer_id"]], [r["opponent_id"]],
+        add(r["id"], r["created_at"], "Amichevole", [r["proposer_id"]], [r["opponent_id"]],
             0 if r["winner_id"] == r["proposer_id"] else 1)
 
     teams = {}
@@ -42,6 +47,11 @@ def month_matches(conn, start, end):
             ORDER BY r.id,p.team,p.player_id""", (start, end)):
         stamp, winner, sides = teams.setdefault(r["id"], (r["created_at"], r["winning_team"], {"a": [], "b": []}))
         sides[r["team"]].append(r["player_id"])
-    for stamp, winner, sides in teams.values():
-        add(stamp, "Amichevole", sides["a"], sides["b"], 0 if winner == "a" else 1)
+    for match_id, (stamp, winner, sides) in teams.items():
+        add(match_id, stamp, "Amichevole", sides["a"], sides["b"], 0 if winner == "a" else 1)
+    if participants:
+        deltas = match_elo_deltas(conn, participants)
+        for match_id, (index, sides) in participants.items():
+            changes = deltas.get(match_id, {})
+            games[index]["elo_deltas"] = [[changes.get(pid, 0) for pid in side] for side in sides]
     return sorted(games, key=lambda game: game["at"], reverse=True)

@@ -160,7 +160,22 @@ def _elo_inputs(conn):
         key=(row['created_at'], event[1] if event else 0, row['id'])
         matches.append((key,match))
     matches.sort(key=lambda item: item[0])
-    return players, [{**match, 'elo_date': key[0]} for key, match in matches]
+    return players, [{**match, 'elo_date': key[0], 'elo_match_id': key[2]} for key, match in matches]
+
+
+def match_elo_deltas(conn, ids):
+    players, matches = _elo_inputs(conn)
+    deltas = {}
+
+    def record_day_match(_rows, match, updates):
+        if match["elo_match_id"] in ids:
+            deltas[match["elo_match_id"]] = {
+                row["id"]: round(row["rating"]) - round(row["rating"] - change)
+                for row, change, *_ in updates
+            }
+
+    calculate_global_elo(players, matches, on_game=record_day_match)
+    return deltas
 
 
 def global_elo_from_db(conn, *, include_movement=False):

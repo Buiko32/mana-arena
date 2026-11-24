@@ -24,6 +24,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 from datetime import datetime, timezone, timedelta
 from .life import router as life_router
+from .live import LiveGames, router as live_router
 from .history import month_matches
 from .tournament_results import _advance_completed_round, _bump, _finalize_if_done, _persist_match_rows, record_tournament_winner
 from . import engine
@@ -126,6 +127,8 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
     application = FastAPI(title="Mana Arena", version="1.0.0", lifespan=lifespan)
     application.state.db = db
     application.include_router(life_router)
+    application.state.live_games = LiveGames()
+    application.include_router(live_router)
 
     @application.middleware("http")
     async def require_device_access(request: Request, call_next):
@@ -397,7 +400,7 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
         index = Path(__file__).parent / "static" / "index.html"
         if index.is_file():
             html = index.read_text(encoding="utf-8")
-            for asset in ("mana-arena-mark.svg", "style.css", "taste/motion.css", "taste/motion.js", "brackets.js", "reveal.js", "player-avatar.js", "result-celebration.js", "app.js", "player-results.js", "history.js", "admin-friendlies.js"):
+            for asset in ("mana-arena-mark.svg", "style.css", "taste/motion.css", "taste/motion.js", "brackets.js", "reveal.js", "player-avatar.js", "result-celebration.js", "app.js", "player-results.js", "history.js", "live.js", "admin-friendlies.js"):
                 version = hashlib.sha256((index.parent / asset).read_bytes()).hexdigest()[:12]
                 html = html.replace(f'/static/{asset}"', f'/static/{asset}?v={version}"')
             return HTMLResponse(html, headers={"Cache-Control": "no-store"})

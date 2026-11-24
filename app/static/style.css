@@ -523,3 +523,19 @@ footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:va
 .profile-back{display:inline-block;color:var(--amber-bright);margin-bottom:.5rem}
 .profile-back:hover,.global-table .ranking-player:hover .ranking-name{text-decoration:underline}
 .player-profile-page .profile-metrics{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+
+#live, #history{padding-block:1.5rem}
+#live-games{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:.8rem}
+#live-games h2{margin:0;font-size:1rem}
+.live-sides{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem}
+.live-side{align-content:start;overflow-wrap:anywhere}
+.live-total{color:var(--amber-bright);font-size:1.5rem;font-variant-numeric:tabular-nums}
+.match-card-elo{color:var(--muted);font-size:.78rem;white-space:nowrap;margin-inline-start:auto}
+.match-card-elo[data-direction="1"]{color:#a7e8bb}
+.match-card-elo[data-direction="-1"]{color:#ffb1a9}
+.topbar .main-nav:has([data-live-link]:not([hidden])){flex-wrap:wrap;height:auto}
+#live-back{display:inline-block;margin-bottom:1rem}
+.live-summary:hover,.live-summary:focus-visible{border-color:var(--amber)}
+.live-detail{grid-column:1/-1}
+.live-detail>p{margin:0}
+.live-odds{color:var(--amber-bright)}

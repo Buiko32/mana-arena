@@ -98,8 +98,6 @@
 .life-other-results { margin-top:1.25rem; color:#c5b8d5; }
 .life-other-results summary { cursor:pointer; }
 .life-other-results div { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:.5rem; }
-.life-profile-preview:empty { display:none; }
-.life-profile-preview { flex:0 0 auto; display:inline-flex; }
 
 @media (max-height:450px) and (orientation:landscape) {
   .life-dice-overlay { padding:.35rem; }
