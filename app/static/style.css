@@ -403,3 +403,34 @@ footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:va
   .match-card{padding:.55rem}
   .match-card-player{flex-wrap:wrap}
 }
+
+
+.brand-logo{display:block;width:36px;height:36px;flex:none}
+.life-site-header{position:sticky;top:0;z-index:10;display:flex;padding:.35rem 5vw;background:var(--bg);border-bottom:1px solid var(--line)}
+.life-page:has(#life.life-playing) .life-site-header{position:fixed;top:max(.5rem,env(safe-area-inset-top));left:max(.5rem,env(safe-area-inset-left));z-index:101;padding:0;background:transparent;border:0}
+.life-page:has(#life.life-playing) .life-site-header .brand{min-width:44px;justify-content:center}
+.life-page:has(#life.life-playing) .life-site-header .brand-name{display:none}
+
+.global-table td{height:56px;padding-block:0;vertical-align:middle}
+.global-table tbody tr:last-child td{border-bottom:1px solid transparent}
+.global-table .ranking-player{display:flex;align-items:center;gap:.55rem;min-width:0}
+.global-table .ranking-player .avatar{width:34px;height:34px;flex:0 0 34px}
+.global-table .ranking-player .avatar>img{display:block;width:100%;height:100%;object-fit:cover}
+.global-table .ranking-name{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+@media(max-width:650px){
+  .arena-page .topbar{padding-top:calc(.65rem + env(safe-area-inset-top,0px));padding-inline:max(5vw,env(safe-area-inset-left,0px)) max(5vw,env(safe-area-inset-right,0px))}
+  .arena-page{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
+  .results-fab-group{inset-inline:0;width:100%;max-width:none;transform:none;border-inline:0;border-radius:0;grid-template-columns:repeat(2,minmax(0,100px));justify-content:center;gap:12px;padding:8px max(14px,env(safe-area-inset-right,0px)) calc(12px + env(safe-area-inset-bottom,0px)) max(14px,env(safe-area-inset-left,0px))}
+  .results-fab-group .player-action{min-width:0}
+}
+@media(max-width:540px){
+  .brand-logo{width:30px;height:30px}
+  .global-table{table-layout:fixed}
+  .global-table th:nth-child(1){width:13%}
+  .global-table th:nth-child(3){width:13%}
+  .global-table th:nth-child(4){width:18%}
+  .global-table th:nth-child(5){width:13%}
+  .global-table .ranking-player{gap:.35rem}
+  .global-table .ranking-player .avatar{width:30px;height:30px;flex-basis:30px}
+}

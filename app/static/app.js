@@ -17,10 +17,13 @@
   const identityKey='mana-arena-player-id';
   function savedPlayer(){try{return localStorage.getItem(identityKey)||'';}catch{return '';}}
   function savePlayer(id){try{if(id)localStorage.setItem(identityKey,id);else localStorage.removeItem(identityKey);}catch{}}
-  let publicRanking = [];
+  let publicRanking = [], rankingSnapshot = null, profileSnapshot = null;
   function renderProfileButton(rows) {
     const button = $('#profile-open');
     const player = rows.find(person => person.id === savedPlayer());
+    const snapshot = JSON.stringify(player ? [player.id,player.name,player.photo_url,player.avatar_hue,player.avatar_color] : null);
+    if (snapshot === profileSnapshot) return;
+    profileSnapshot = snapshot;
     button.innerHTML = player ? avatar(player.name,player.photo_url,player.avatar_hue,player.avatar_color) : 'Profilo';
     const label = player ? `Modifica il profilo di ${player.name}` : 'Modifica il tuo profilo';
     button.setAttribute('aria-label',label);
@@ -31,7 +34,10 @@
     renderProfileButton(rows);
     const select=$('#player-identity'),current=savedPlayer(),active=document.activeElement===select;
     if(!active){select.innerHTML='<option value="">Seleziona il tuo nome</option>'+rows.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');select.value=rows.some(p=>p.id===current)?current:'';}
-    $('#ranking-list').innerHTML=rows.length?`<div class="table-wrap"><table class="global-table"><thead><tr><th>Pos.</th><th>Giocatore</th><th>Elo</th><th>Partite</th><th>V–S</th></tr></thead><tbody>${rows.map(p=>`<tr><td class="rank">${p.rank}</td><td><span class="ranking-player">${avatar(p.name,p.photo_url,p.avatar_hue,p.avatar_color)} ${esc(p.name)}</span></td><td><strong>${p.rating}</strong></td><td>${p.matches}</td><td>${p.wins}–${p.losses}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">La classifica apparirà dopo l’aggiunta dei giocatori.</p>';
+    const snapshot = JSON.stringify(rows);
+    if (snapshot === rankingSnapshot) return;
+    rankingSnapshot = snapshot;
+    $('#ranking-list').innerHTML=rows.length?`<div class="table-wrap"><table class="global-table"><thead><tr><th>Pos.</th><th>Giocatore</th><th>Elo</th><th>Partite</th><th>V–S</th></tr></thead><tbody>${rows.map(p=>`<tr><td class="rank">${p.rank}</td><td><span class="ranking-player">${avatar(p.name,p.photo_url,p.avatar_hue,p.avatar_color)}<span class="ranking-name" title="${esc(p.name)}">${esc(p.name)}</span></span></td><td><strong>${p.rating}</strong></td><td>${p.matches}</td><td>${p.wins}–${p.losses}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">La classifica apparirà dopo l’aggiunta dei giocatori.</p>';
   }
   const errorBox = id => $(id);
   function message(text, kind='success') { const node=document.createElement('div');node.className=`toast ${kind==='error'?'error':''}`;node.textContent=text;$('#toast-region').append(node);setTimeout(()=>node.remove(),4200); }

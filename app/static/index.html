@@ -2,12 +2,13 @@
 <html lang="it" data-type="software">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="page-type" content="software">
   <meta name="site-kind" content="software">
   <meta name="theme-color" content="#0c1320">
   <meta name="description" content="Mana Arena — tornei Magic: The Gathering">
   <title>Mana Arena — Tornei Magic</title>
+  <link rel="icon" type="image/svg+xml" href="/static/mana-arena-mark.svg">
   <link rel="stylesheet" href="/static/style.css">
   <link rel="stylesheet" href="/static/taste/motion.css">
   <script>document.documentElement.classList.add('m-enter');setTimeout(()=>document.documentElement.classList.add('m-enter-done'),700)</script>
@@ -19,11 +20,11 @@
   <script src="/static/app.js" defer></script>
   <script src="/static/player-results.js" defer></script>
 </head>
-<body>
+<body class="arena-page">
   <a class="skip-link" href="#main-content">Salta al contenuto</a>
   <header class="topbar">
-    <a class="brand" href="#public-view" aria-label="Mana Arena, home">
-      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+    <a class="brand" href="/" aria-label="Mana Arena · Torna alla home">
+      <img class="brand-logo" src="/static/mana-arena-mark.svg" width="40" height="40" alt="">
       <span class="brand-name">MANA ARENA</span>
     </a>
     <nav aria-label="Navigazione principale" class="main-nav">

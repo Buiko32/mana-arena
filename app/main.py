@@ -324,13 +324,13 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
         index = Path(__file__).parent / "static" / "index.html"
         if index.is_file():
             html = index.read_text(encoding="utf-8")
-            for asset in ("style.css", "taste/motion.css", "taste/motion.js", "brackets.js", "reveal.js", "app.js", "player-results.js", "history.js", "admin-friendlies.js"):
+            for asset in ("mana-arena-mark.svg", "style.css", "taste/motion.css", "taste/motion.js", "brackets.js", "reveal.js", "app.js", "player-results.js", "history.js", "admin-friendlies.js"):
                 version = hashlib.sha256((index.parent / asset).read_bytes()).hexdigest()[:12]
                 html = html.replace(f'/static/{asset}"', f'/static/{asset}?v={version}"')
             return HTMLResponse(html, headers={"Cache-Control": "no-store"})
         return HTMLResponse("<!doctype html><html lang='it'><meta charset='utf-8'><title>Mana Arena</title><body><main><h1>Mana Arena</h1><p>Interfaccia in preparazione.</p></main></body></html>")
 
-    life_assets = ("style.css", "life.css", "life.js", "life-entry.js")
+    life_assets = ("mana-arena-mark.svg", "style.css", "life.css", "life.js", "life-entry.js")
 
     def offline_shell():
         folder = Path(__file__).parent / "static"
