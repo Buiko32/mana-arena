@@ -106,7 +106,7 @@
       windowData=model;
       graphMarkup=renderProgressionGraph(model,tournament,scope,people,selectedPlayerId);
     }
-    const showPlayerPath=structure!=='single_elim'&&entrants.length>0;
+    const showPlayerPath=view==='graph'&&structure!=='single_elim'&&entrants.length>0;
     const controls=`<div class="round-panel-controls"><div class="round-view-switch" role="group" aria-label="Vista dei turni"><button type="button" data-round-view="graph" data-round-scope="${scope}" aria-pressed="${view==='graph'}">Tabellone</button><button type="button" data-round-view="list" data-round-scope="${scope}" aria-pressed="${view==='list'}">Elenco</button></div>${showPlayerPath?`<label class="round-player-select">Percorso<select data-round-player data-round-scope="${scope}" aria-label="Evidenzia il percorso di un giocatore"><option value="">Tutti</option>${entrants.map(player=>`<option value="${esc(player.id)}" ${player.id===selectedPlayerId?'selected':''}>${esc(player.name)}</option>`).join('')}</select></label>`:''}${view==='graph'&&windowData&&windowData.totalRounds>4?`<div class="round-window-controls"><button type="button" class="button quiet small-button" data-round-window="prev" data-round-scope="${scope}" ${windowData.previousOffset===null?'disabled':''}>← Precedenti</button><span>Turni ${windowData.rounds[0]?.round??0}–${windowData.rounds.at(-1)?.round??0} di ${windowData.totalRounds}</span><button type="button" class="button quiet small-button" data-round-window="next" data-round-scope="${scope}" ${windowData.nextOffset===null?'disabled':''}>Successivi →</button></div>`:''}</div>`;
     return `<section class="round-panel">${controls}${view==='graph'?graphMarkup:listMarkup}</section>`;
   }
