@@ -40,3 +40,55 @@
   .life-die-wrap { height:60px; width:80px; }
 }
 #life [hidden] { display:none !important; }
+/* Table: leave the whole screen to the players. */
+#life.life-playing { padding:0; }
+.life-playing .life-table-shell { position:fixed; inset:0; z-index:100; width:100%; height:100vh; height:100dvh; max-width:none; background:#100c18; overflow:hidden; }
+.life-playing .life-table { height:100%; width:100%; gap:2px; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:repeat(2,minmax(0,1fr)); }
+.life-playing .life-table-2 { grid-template-columns:1fr; grid-template-rows:repeat(2,minmax(0,1fr)); }
+.life-playing .life-table-3 .life-side-2 { grid-column:1 / -1; }
+.life-playing .life-side { border:0; border-radius:0; min-height:0; padding:.5rem; display:flex; align-items:stretch; justify-content:center; }
+.life-playing .life-side-inner { width:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:0; }
+.life-playing .life-side-0 .life-side-inner,.life-playing .life-side-1 .life-side-inner { transform:rotate(180deg); }
+.life-playing .life-table-2 .life-side-1 .life-side-inner { transform:none; }
+.life-playing .life-side-heading { display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:.3rem .65rem; width:100%; font-size:clamp(.75rem,2.2vh,1.05rem); font-weight:700; line-height:1.15; }
+.life-person { display:inline-flex; align-items:center; gap:.4rem; min-width:0; }
+.life-person > span:last-child { overflow-wrap:anywhere; }
+.life-avatar { display:inline-grid; place-items:center; position:relative; flex:0 0 auto; width:2.25rem; height:2.25rem; overflow:hidden; border-radius:50%; color:#fff; background:#685184; font-size:.75rem; font-weight:700; }
+.life-avatar img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.life-playing .life-avatar { width:clamp(1.4rem,4vh,2rem); height:clamp(1.4rem,4vh,2rem); }
+.life-playing .life-counter { flex:1 1 auto; width:100%; min-height:0; gap:.25rem; }
+.life-playing .life-counter .life-total { flex:1; min-width:0; position:relative; display:flex; justify-content:center; align-items:center; }
+.life-playing .life-counter strong { font-size:clamp(3.5rem,20vw,13rem); line-height:.9; min-width:0; letter-spacing:-.06em; }
+.life-playing .life-table-2 .life-counter strong { font-size:clamp(5rem,30vw,18rem); }
+#life.life-playing .life-counter button { width:clamp(44px,13vw,90px); height:clamp(55px,20vh,160px); flex:0 0 auto; font-size:clamp(2rem,7vw,4rem); background:#ffffff0b; border:0; touch-action:manipulation; }
+.life-change { position:absolute; left:50%; top:0; transform:translate(-50%,-45%); font-size:clamp(1.5rem,6vw,3rem); font-weight:800; color:#fff; opacity:0; pointer-events:none; text-shadow:0 2px 12px #000; transition:opacity .25s; }
+.life-change.is-visible { opacity:.7; }
+#life.life-playing .life-undo { min-height:32px; min-width:0; padding:.2rem .7rem; font-size:.8rem; background:#0003; border:0; }
+.life-floating-controls { position:absolute; z-index:3; top:max(.5rem,env(safe-area-inset-top)); right:max(.5rem,env(safe-area-inset-right)); display:flex; align-items:center; gap:.4rem; }
+#life .life-floating-controls button { background:#181222df; border:1px solid #ffffff50; border-radius:99px; }
+#life .life-floating-controls [data-dice-open] { font-size:1.6rem; }
+.life-playing .life-error { position:absolute; z-index:4; left:.5rem; bottom:max(.5rem,env(safe-area-inset-bottom)); margin:0; background:#20121a; }
+.life-dice-overlay { position:absolute; inset:0; z-index:5; display:flex; justify-content:center; align-items:center; padding:1rem; background:#08060bd9; }
+.life-dice-dialog { width:min(100%,620px); max-height:90%; overflow:auto; padding:1rem; border:1px solid #655777; border-radius:1rem; background:#1d1729; }
+.life-dice-header { display:flex; align-items:center; justify-content:space-between; }
+.life-dice-header h2 { margin:0; }
+.life-dice-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.6rem; }
+.life-dice-player { text-align:center; border-radius:.6rem; padding:.5rem; background:#ffffff0a; }
+.life-dice-name { display:flex; flex-wrap:wrap; justify-content:center; gap:.25rem; font-size:.8rem; }
+.life-dice-player .life-die-wrap { height:90px; width:110px; }
+.life-winner-options { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:.6rem; margin:1rem 0; }
+#life .life-winner-option { display:flex; flex-direction:column; align-items:flex-start; gap:.5rem; text-align:left; padding:1rem; background:#282037; }
+#life .life-winner-option[aria-pressed="true"] { border:2px solid #d8b8ff; background:#53406c; }
+.life-winner-option strong { color:#d6cbe7; }
+@media (max-width:700px) and (max-height:650px) { .life-playing .life-counter strong { font-size:clamp(3rem,14vh,7rem); } .life-playing .life-table-2 .life-counter strong { font-size:clamp(4rem,25vh,11rem); } }
+.life-winner { max-width:580px; }
+.life-winner-options { grid-template-columns:repeat(2,minmax(0,1fr)); }
+#life .life-winner-option { min-height:135px; align-items:center; justify-content:center; text-align:center; font-size:1.1rem; }
+.life-winner-option .life-person { flex-direction:column; }
+.life-winner-option .life-avatar { width:3.5rem; height:3.5rem; }
+.life-confirm { width:100%; min-height:52px; }
+.life-other-results { margin-top:1.25rem; color:#c5b8d5; }
+.life-other-results summary { cursor:pointer; }
+.life-other-results div { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:.5rem; }
+.life-profile-preview:empty { display:none; }
+.life-profile-preview { flex:0 0 auto; display:inline-flex; }

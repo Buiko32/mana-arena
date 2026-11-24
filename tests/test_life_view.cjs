@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const source=fs.readFileSync('app/static/life.js','utf8').replace('  window.openLifeCounter =','  globalThis.viewTest={avatar,change,end,get:()=>game,set:x=>game=x};\n  window.openLifeCounter =');
+const nodes=new Map(),store=new Map();const mk=()=>({textContent:'',classList:{add(){},remove(){}},setAttribute(){},disabled:false});
+const root={addEventListener(){},classList:{add(){},remove(){}},querySelector:s=>{if(!nodes.has(s))nodes.set(s,mk());return nodes.get(s)},querySelectorAll:()=>[]};
+const ctx={document:{querySelector:()=>root,addEventListener(){},visibilityState:'hidden'},window:{addEventListener(){}},location:{hash:'#life',pathname:'/'},navigator:{onLine:false},localStorage:{getItem:k=>store.get(k)??null,setItem:(k,v)=>store.set(k,v)},setTimeout:()=>1,clearTimeout(){},crypto:{},fetch:()=>{throw Error('offline')},console};
+vm.runInNewContext(source,ctx);const t=ctx.viewTest;
+assert.match(t.avatar({name:'Ada Rossi',photo_url:'/api/players/1/photo'}),/>AR</);assert.match(t.avatar({name:'Ada',photo_url:'/api/players/1/photo'}),/<img /);assert.doesNotMatch(t.avatar({name:'Ada',photo_url:'//evil.test/a'}),/<img /);
+t.set({session_id:'test',started_at:new Date().toISOString(),format:'duel',kind:'friendly',sides:[{name:'Ada',initial:20,life:20,members:[{id:'a',name:'Ada',photo_url:'/api/players/1/photo'}]},{name:'Bob',initial:20,life:20,members:[{id:'b',name:'Bob'}]}],changes:[]});
+t.change(0,-1);t.change(0,-1);assert.equal(nodes.get('[data-feedback="0"]').textContent,'-2');t.end();assert.match(root.innerHTML,/Chi ha vinto/);assert.match(root.innerHTML,/data-winner="-1"/);
+const click=(attrs)=>root.onclick({target:{closest:()=>({hasAttribute:n=>attrs[n]!==undefined,dataset:{winner:attrs['data-winner']}})}});click({'data-winner':'0'});click({'data-confirm':''});const queued=JSON.parse(store.get('mana-life-outbox-v1'));assert.equal(queued[0].winner,'Ada');assert.equal(queued[0].players[0].members[0].photo_url,undefined);console.log('avatars, tap feedback, visual winner and payload passed');
