@@ -105,3 +105,24 @@ def test_withdrawal_does_not_create_unconfirmed_forfeit(tmp_path):
         response=client.post(f'/api/admin/tournaments/{tid}/withdrawals',json={'player_id':people[0]['id']},headers=headers)
         assert response.status_code==403
         assert client.get(f'/api/public/tournaments/{tid}').json()['matches'][0].get('result') is None
+
+
+def test_player_selects_identity_without_a_code(app_factory):
+    app = app_factory()
+    with TestClient(app) as admin, TestClient(app) as first, TestClient(app) as second:
+        headers = admin_headers(admin)
+        _, people = tournament_with_players(admin, headers)
+        sessions = [client.post('/api/player/login', json={'player_id': person['id']}) for client, person in zip((first, second), people)]
+        assert all(response.status_code == 200 for response in sessions)
+        tokens = [{'X-Player-CSRF': response.json()['csrf_token']} for response in sessions]
+        proposed = first.post('/api/player/results', headers=tokens[0], json={'opponent_id':people[1]['id'], 'winner_id':people[0]['id']})
+        assert proposed.status_code == 201
+        assert second.post(f"/api/player/results/{proposed.json()['id']}/confirm", headers=tokens[1]).status_code == 200
+
+
+def test_new_players_receive_distinct_available_colors(app_factory):
+    from test_api import player
+    with TestClient(app_factory()) as client:
+        headers = admin_headers(client)
+        players = [player(client, headers, f'Colore {i}') for i in range(8)]
+        assert len({p['avatar_hue'] for p in players}) == len(players)
