@@ -75,6 +75,14 @@ class Database:
                     action TEXT NOT NULL, detail_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
             """)
+            conn.executescript("""
+                CREATE TABLE IF NOT EXISTS player_credentials (player_id TEXT PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE, salt BLOB NOT NULL, password_hash BLOB NOT NULL);
+                CREATE TABLE IF NOT EXISTS player_sessions (token_hash TEXT PRIMARY KEY, player_id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE, csrf TEXT NOT NULL, expires_at INTEGER NOT NULL);
+                CREATE TABLE IF NOT EXISTS result_proposals (id TEXT PRIMARY KEY, proposer_id TEXT NOT NULL REFERENCES players(id), opponent_id TEXT NOT NULL REFERENCES players(id), tournament_id TEXT REFERENCES tournaments(id) ON DELETE CASCADE, match_id TEXT, winner_id TEXT NOT NULL REFERENCES players(id), status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+            """)
+            player_columns = {row[1] for row in conn.execute("PRAGMA table_info(players)")}
+            if "avatar_hue" not in player_columns:
+                conn.execute("ALTER TABLE players ADD COLUMN avatar_hue INTEGER NOT NULL DEFAULT 215")
             columns = {row[1] for row in conn.execute("PRAGMA table_info(tournaments)")}
             if "archived_from" not in columns:
                 conn.execute("ALTER TABLE tournaments ADD COLUMN archived_from TEXT")
@@ -115,7 +123,7 @@ class Database:
 
     @staticmethod
     def public_player(row):
-        return {"id": row["id"], "name": row["name"], "photo_url": f"/photos/{row['photo']}" if row["photo"] else None}
+        return {"id": row["id"], "name": row["name"], "photo_url": f"/photos/{row['photo']}" if row["photo"] else None, "avatar_hue": row["avatar_hue"]}
 
     @staticmethod
     def player(row):
@@ -134,8 +142,8 @@ class Database:
 
     @staticmethod
     def get_entrants(conn, tid):
-        rows = conn.execute("SELECT e.*,p.name,p.photo,p.active FROM entrants e JOIN players p ON p.id=e.player_id WHERE e.tournament_id=? ORDER BY e.seed,e.player_id", (tid,)).fetchall()
-        return [{"id": r["player_id"], "seed": r["seed"], "withdrawn": bool(r["withdrawn"]), "name": r["name"], "photo_url": f"/photos/{r['photo']}" if r["photo"] else None} for r in rows]
+        rows = conn.execute("SELECT e.*,p.name,p.photo,p.active,p.avatar_hue FROM entrants e JOIN players p ON p.id=e.player_id WHERE e.tournament_id=? ORDER BY e.seed,e.player_id", (tid,)).fetchall()
+        return [{"id": r["player_id"], "seed": r["seed"], "withdrawn": bool(r["withdrawn"]), "avatar_hue": r["avatar_hue"], "name": r["name"], "photo_url": f"/photos/{r['photo']}" if r["photo"] else None} for r in rows]
 
     @staticmethod
     def get_matches(conn, tid):

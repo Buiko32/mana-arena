@@ -85,11 +85,11 @@ def calculate_global_elo(players: list[dict], matches: list[dict]) -> list[dict]
 
 def global_elo_from_db(conn):
     import json
-    players = [dict(row) for row in conn.execute('SELECT id,name,active,photo FROM players')]
+    players = [dict(row) for row in conn.execute('SELECT id,name,active,photo,avatar_hue FROM players')]
     # The audit id is the stable order in which results were recorded; use the latest
     # matching event after a rollback. Old backups without events have a deterministic fallback.
     events = {}
-    for row in conn.execute("SELECT id,detail_json FROM audit WHERE action='match_result_recorded' ORDER BY id"):
+    for row in conn.execute("SELECT id,detail_json FROM audit WHERE action IN ('match_result_recorded','friendly_result_recorded') ORDER BY id"):
         detail = json.loads(row['detail_json'])
         if detail.get('match_id'):
             events[detail['match_id']] = row['id']
@@ -98,6 +98,11 @@ def global_elo_from_db(conn):
         match = json.loads(row['data_json'])
         event = events.get(row['id'])
         key = (1, event) if event is not None else (0, row['created_at'], row['tid'], row['round_no'], row['table_no'], row['id'])
+        matches.append((key, match))
+    for row in conn.execute("SELECT id,proposer_id,opponent_id,winner_id,created_at FROM result_proposals WHERE tournament_id IS NULL AND status='confirmed'"):
+        match = {'p1':row['proposer_id'], 'p2':row['opponent_id'], 'result':'p1_win' if row['winner_id']==row['proposer_id'] else 'p2_win'}
+        event = events.get(row['id'])
+        key = (1, event) if event is not None else (0, row['created_at'], '', 0, 0, row['id'])
         matches.append((key, match))
     matches.sort(key=lambda item: item[0])
     return [row for row in calculate_global_elo(players, [item[1] for item in matches]) if row['active']]

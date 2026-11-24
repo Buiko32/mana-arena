@@ -127,7 +127,15 @@ def _validate_database(path: Path) -> None:
             raise ValueError("Il database del backup non supera la verifica schema/integrità.")
         for table, expected in SCHEMA_COLUMNS.items():
             columns = {row[1] for row in check.execute(f"PRAGMA table_info({table})")}
-            if columns != expected:
+            if columns != expected and not (table == "players" and columns == expected | {"avatar_hue"}):
+                raise ValueError(f"Schema del backup non compatibile: tabella {table}.")
+        optional_tables = {
+            "player_credentials": {"player_id", "salt", "password_hash"},
+            "player_sessions": {"token_hash", "player_id", "csrf", "expires_at"},
+            "result_proposals": {"id", "proposer_id", "opponent_id", "tournament_id", "match_id", "winner_id", "status", "created_at"},
+        }
+        for table, expected in optional_tables.items():
+            if table in tables and {row[1] for row in check.execute(f"PRAGMA table_info({table})")} != expected:
                 raise ValueError(f"Schema del backup non compatibile: tabella {table}.")
         if check.execute("PRAGMA foreign_key_check").fetchone():
             raise ValueError("Il database del backup contiene riferimenti non validi.")
@@ -169,6 +177,7 @@ def restore_backup(database, blob: bytes, after_install=None) -> list[str]:
         staged_database.initialize()
         with staged_database.transaction() as conn:
             conn.execute("DELETE FROM sessions")
+            conn.execute("DELETE FROM player_sessions")
         _validate_database(staged_db)
         check = sqlite3.connect(staged_db)
         try:

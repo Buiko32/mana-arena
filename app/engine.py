@@ -163,11 +163,12 @@ def _standing_order(config: dict, entrants: list[dict], matches: list[dict]) -> 
     for pid, stat in stats.items():
         opponent_pcts = [points_pct[opp] for opp in stat["opponents"] if opp in points_pct]
         stat["omw"] = sum(opponent_pcts) / len(opponent_pcts) if opponent_pcts else 0.0
+    game_diff_available = not any(m.get("score_unknown") and m.get("result") in ("p1_win", "p2_win") for m in matches)
     def key(person: dict) -> tuple:
         stat = stats[person["id"]]
         values = [stat["points"]]
         for tie in config["tiebreakers"]:
-            values.append(stat[tie])
+            values.append(0 if tie == "game_diff" and not game_diff_available else stat[tie])
         values.append(-(person.get("seed") if person.get("seed") is not None else 10**9))
         return tuple(values)
     ordered = sorted(entrants, key=key, reverse=True)
@@ -391,7 +392,8 @@ def _finalize_bye(config: dict, round_number: int, table: int, bracket_slot: int
 
 def _finalize_forfeit(config: dict, round_number: int, table: int, bracket_slot: int, p1: str, p2: str, outcome: str) -> dict:
     match = _match_template(round_number, table + 1, p1, p2)
-    return {**apply_result(config, match, {"result": outcome, "p1_games": 0, "p2_games": 0}), "bracket_slot": bracket_slot}
+    survivor = p2 if outcome == "p1_forfeit" else p1
+    return _finalize_bye(config, round_number, table, bracket_slot, survivor)
 
 
 def make_schedule(config: dict, entrants: list[dict]) -> dict:
@@ -557,10 +559,10 @@ def calculate_standings(config: dict, entrants: list[dict], matches: list[dict])
         rows.append({
             "player_id": entrant["id"], "seed": entrant.get("seed"),
             "points": s["points"], "wins": s["wins"], "draws": s["draws"],
-            "losses": s["losses"], "byes": s["byes"], "game_diff": s["game_diff"],
+            "losses": s["losses"], "byes": s["byes"], "game_diff": None if any(m.get("score_unknown") and m.get("result") in ("p1_win", "p2_win") for m in matches) else s["game_diff"],
             "omw": entry["omw"], "rank": rank,
             "eliminated": bool(entrant.get("withdrawn")) or (
-                config["structure"] == "adapted" and s["losses"] >= config["loss_threshold"]
+                (config["structure"] == "adapted" and s["losses"] >= config["loss_threshold"]) or (config["structure"] == "single_elim" and s["losses"] > 0)
             ),
         })
     return rows

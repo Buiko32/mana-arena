@@ -321,8 +321,8 @@ def test_single_elimination_withdrawals_forfeit_in_place_and_propagate_empty_slo
     field[6]["withdrawn"] = True
     initial = make_schedule(cfg, field)["matches"]
     slot = {m["bracket_slot"]: m for m in initial}
-    assert (slot[0]["p1"], slot[0]["p2"], slot[0]["result"]) == ("p1", "p8", "p1_forfeit")
-    assert (slot[1]["p1"], slot[1]["p2"], slot[1]["result"]) == ("p4", "p5", "p1_forfeit")
+    assert (slot[0]["p1"], slot[0]["p2"], slot[0]["result"]) == ("p8", None, "bye")
+    assert (slot[1]["p1"], slot[1]["p2"], slot[1]["result"]) == ("p5", None, "bye")
     assert slot[2]["p1"] is None and slot[2]["p2"] is None and slot[2]["result"] == "void"
     completed = [slot[0], slot[1], slot[2], apply_result(cfg, slot[3], {"result": "p1_win", "p1_games": 1, "p2_games": 0})]
     following = make_round(cfg, field, completed, 2)["matches"]
@@ -434,3 +434,25 @@ def test_empty_and_completed_round_requests_return_empty_matches():
     complete = [played(cfg, 1, m["table"], m["p1"], m["p2"]) for m in first["matches"]]
     assert make_round(cfg, field, complete, 1)["matches"] == []
 
+
+
+def test_single_elimination_loser_is_marked_eliminated():
+    cfg = config(structure='single_elim', rounds=None)
+    field = entrants(2)
+    match = make_schedule(cfg, field)['matches'][0]
+    result = apply_result(cfg, match, {'result':'p1_win', 'p1_games':1, 'p2_games':0})
+    rows = {r['player_id']:r for r in calculate_standings(cfg, field, [result])}
+    assert rows[match['p1']]['eliminated'] is False
+    assert rows[match['p2']]['eliminated'] is True
+
+
+def test_unknown_score_disables_game_difference_for_every_player():
+    cfg = config(tiebreakers=['game_diff'])
+    field = entrants(4)
+    played = [
+        apply_result(cfg, {'round':1,'table':1,'p1':'p1','p2':'p2'}, {'result':'p1_win','p1_games':1,'p2_games':0}),
+        {**apply_result(cfg, {'round':1,'table':2,'p1':'p3','p2':'p4'}, {'result':'p1_win','p1_games':1,'p2_games':0}), 'score_unknown':True, 'p1_games':None, 'p2_games':None},
+    ]
+    rows = calculate_standings(cfg, field, played)
+    assert all(row['game_diff'] is None for row in rows)
+    assert [row['player_id'] for row in rows[:2]] == ['p1','p3']

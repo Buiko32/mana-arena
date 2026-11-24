@@ -29,6 +29,7 @@ def app_factory(tmp_path):
             session_secret=SECRET,
             cookie_secure=False,
             login_limit=3,
+            allow_admin_result_override=True,
         )
 
     return make
@@ -201,7 +202,7 @@ def test_public_active_entrants_include_seed_and_withdrawal_only(client):
     start(client, tid, headers)
     assert client.post("/api/admin/tournaments/" + tid + "/withdrawals", json={"player_id":people[0]["id"]}, headers=headers).status_code == 200
     public = client.get("/api/public/tournaments/" + tid).json()
-    assert all(set(person) == {"id", "name", "photo_url", "seed", "withdrawn"} for person in public["entrants"])
+    assert all(set(person) == {"id", "name", "photo_url", "avatar_hue", "seed", "withdrawn"} for person in public["entrants"])
     by_id = {person["id"]:person for person in public["entrants"]}
     assert by_id[people[0]["id"]]["seed"] == 1 and by_id[people[0]["id"]]["withdrawn"] is True
     assert by_id[people[1]["id"]]["seed"] == 2 and by_id[people[1]["id"]]["withdrawn"] is False
@@ -637,3 +638,18 @@ def test_global_reset_requires_admin_and_csrf(client):
     headers = admin_headers(client)
     assert client.post('/api/admin/reset-data', json={'scope':'all','confirmation':'ELIMINA'}).status_code == 403
     assert client.post('/api/admin/reset-data', json={'scope':'other','confirmation':'ELIMINA'}, headers=headers).status_code == 422
+
+
+def test_player_placeholder_color_persists_and_is_public(client):
+    headers = admin_headers(client)
+    tid, people = tournament_with_players(client, headers)
+    person = people[0]
+    assert person['avatar_hue'] == 215
+    response = client.patch(f"/api/admin/players/{person['id']}", json={'avatar_hue': 120}, headers=headers)
+    assert response.status_code == 200
+    assert response.json()['avatar_hue'] == 120
+    assert client.patch(f"/api/admin/players/{person['id']}", json={'avatar_hue': 361}, headers=headers).status_code == 422
+    assert start(client, tid, headers).status_code == 200
+    public = client.get(f'/api/public/tournaments/{tid}').json()
+    assert next(p for p in public['entrants'] if p['id'] == person['id'])['avatar_hue'] == 120
+    assert next(p for p in client.get('/api/public/ranking').json() if p['id'] == person['id'])['avatar_hue'] == 120

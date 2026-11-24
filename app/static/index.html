@@ -15,6 +15,7 @@
   <script src="/static/brackets.js" defer></script>
   <script src="/static/reveal.js" defer></script>
   <script src="/static/app.js" defer></script>
+  <script src="/static/player-results.js" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main-content">Salta al contenuto</a>
@@ -28,28 +29,28 @@
       <a href="#global-ranking" data-ranking-link aria-current="false">Classifica globale</a>
       <a href="#admin-view" data-view-link="admin">Organizza</a>
     </nav>
-    <div class="session-area" id="session-area"><span class="status-dot"></span><span>Solo lettura</span></div>
+    <div class="session-area" id="session-area"><label class="visually-hidden" for="player-identity">Il tuo nome</label><select id="player-identity"><option value="">Scegli il tuo nome</option></select></div>
   </header>
   <main id="main-content" class="shell">
     <div id="public-view" class="view" aria-labelledby="public-title">
-      <section class="hero" data-enter>
+      <div id="tournament-home"><section class="hero" data-enter>
         <div class="wrap hero-wrap">
-        <div class="hero-copy"><p class="hero-kicker">MAGIC: THE GATHERING / TORNEI</p><h1 id="public-title">Tornei Magic</h1><p class="hero-description">Il tuo spazio per i tornei. Segui turni, classifiche e risultati, partita dopo partita.</p><a class="hero-link" href="#tournament-list">Esplora i tornei <span aria-hidden="true">↗</span></a></div>
+        <div class="hero-copy"><p class="hero-kicker">MAGIC: THE GATHERING / TORNEI</p><h1 id="public-title">Tornei Magic</h1><a class="hero-link" href="#tournament-list">Esplora i tornei <span aria-hidden="true">↗</span></a></div>
         <div class="hero-mascots" aria-hidden="true"><img id="arena-mascot" class="arena-mascot" alt="" width="288" height="288" decoding="async" hidden></div>
         </div>
       </section>
-      <div class="identity-bar"><label for="player-identity">Il tuo profilo giocatore</label><select id="player-identity"><option value="">Seleziona il tuo nome</option></select><span class="identity-note">Memorizzato solo in questo browser.</span></div>
+
       <section class="tournaments-section wrap" aria-labelledby="tournaments-title">
       <div class="section-heading public-heading"><div><p class="section-kicker">IN DIRETTA DALL’ARENA</p><h2 id="tournaments-title">Tornei</h2></div><span class="tournament-count-label">Tornei disponibili <span id="tournament-count" class="count-pill">—</span></span></div>
       <div id="public-error" class="notice error" role="alert" hidden></div>
       <div id="tournament-list" class="tournament-grid" aria-live="polite"><div class="loading-card">Caricamento tornei…</div></div>
       <section id="public-detail" class="detail-panel" aria-live="polite" hidden></section>
       </section>
-      <section id="global-ranking" class="ranking-section wrap" aria-labelledby="ranking-title"><div class="section-heading"><div><p class="section-kicker">TUTTI I TORNEI</p><h2 id="ranking-title">Classifica globale</h2></div></div><p class="muted">Elo interno: 1500 iniziali; K 40 nelle prime 30 partite, poi 20 o 10 dopo 2400. Bye e forfait esclusi. Non è un rating FIDE ufficiale.</p><div id="ranking-list" aria-live="polite"><p class="muted">Caricamento classifica…</p></div></section>
+      </div><section id="global-ranking" class="ranking-section wrap" aria-labelledby="ranking-title"><div class="section-heading"><div><p class="section-kicker">TUTTI I TORNEI</p><h2 id="ranking-title">Classifica globale</h2></div></div><div id="ranking-list" aria-live="polite"><p class="muted">Caricamento classifica…</p></div></section>
     </div>
 
     <section id="admin-view" class="view" aria-labelledby="admin-title" hidden>
-      <div class="hero admin-hero" data-enter><div><p class="hero-kicker">AREA ORGANIZZATORE</p><h1 id="admin-title">Gestione</h1><p class="hero-description">Organizza i tornei e segui ogni turno.</p></div></div>
+      <div class="hero admin-hero" data-enter><div><p class="hero-kicker">AREA ORGANIZZATORE</p><h1 id="admin-title">Gestione</h1></div></div>
       <div id="admin-error" class="notice error" role="alert" hidden></div>
       <div id="login-panel" class="login-card">
         <div class="card-icon" aria-hidden="true">✦</div><div><h2>Accesso organizzatore</h2></div>
@@ -106,6 +107,8 @@
     <div id="reveal-stage" class="reveal-stage" hidden><div class="reveal-card" aria-hidden="true"><span>✦</span><small>IL TUO INCONTRO</small></div><div id="reveal-result" class="reveal-result" role="status" aria-live="polite"></div></div>
   </dialog>
   <dialog id="confirm-dialog" aria-labelledby="confirm-title"><button type="button" class="dialog-close" data-dialog-close aria-label="Chiudi">×</button><h2 id="confirm-title">Conferma</h2><p id="confirm-message" class="muted"></p><div id="confirm-impact" class="impact-list"></div><div class="dialog-actions"><button id="confirm-cancel" class="button quiet" type="button">Annulla</button><button id="confirm-ok" class="button danger" type="button">Conferma</button></div></dialog>
+  <button id="results-open" class="results-fab" type="button" aria-label="Inserisci o conferma un risultato">+</button>
+  <dialog id="player-results-dialog" aria-labelledby="player-results-title"><button type="button" class="dialog-close" id="player-results-close" aria-label="Chiudi">×</button><h2 id="player-results-title">Risultati</h2><div id="player-results-content"></div></dialog>
   <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
 </body>
 </html>
