@@ -310,3 +310,12 @@ footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:va
 .result-pending .confirmation-winner{display:inline-flex;margin:.8rem 0;color:#b1ffb5;background:#184b35;border-radius:5px;padding:.45rem .65rem;font-weight:800}
 
 .crystal-label{margin:0 0 .9rem;color:var(--text);font-weight:700;font-size:1.1rem;text-align:center}
+
+/* Selezione squadre: profilo a sinistra, scelta a destra. */
+.team-choices{display:grid;gap:.45rem}
+.results-panel .team-choice{display:flex;align-items:center;justify-content:space-between;gap:1rem;min-height:56px;padding:.55rem .75rem;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.team-choice-person{display:flex;align-items:center;gap:.65rem;min-width:0;overflow-wrap:anywhere}
+.team-choice-person .avatar{width:38px;height:38px;flex:0 0 38px}
+.results-panel .team-choice input{flex:0 0 auto;width:20px;height:20px;min-height:0;margin:0;accent-color:var(--amber)}
+.team-choice.is-unavailable{opacity:.5}
+.team-choice:has(input:focus-visible){outline:2px solid var(--amber-bright);outline-offset:2px}
