@@ -20,7 +20,22 @@
   function restore(){return read(key,null);}
   function outbox(){try{const raw=localStorage.getItem(outboxKey),value=raw===null?[]:JSON.parse(raw);if(!Array.isArray(value))throw Error();return value;}catch(_){reportStorage('Coda locale illeggibile: non chiudere questa pagina.');return null;}}
   function enqueue(payload){const items=outbox();if(!items)return false;const existing=items.find(item=>item.session_id===payload.session_id);if(existing){if(JSON.stringify(existing)===JSON.stringify(payload))return true;reportStorage('La partita è già presente con dati diversi: impossibile sovrascriverla.');return false;}return write(outboxKey,[...items,payload]);}
-  function refreshQueueStatus(){const el=root.querySelector('[data-queue-status]');if(!el)return;const items=outbox();const login=root.querySelector('[data-queue-login]');if(login){login.hidden=!items?.[0]?.result_target;const proposer=items?.[0]?.players?.flatMap(p=>p.members).find(m=>m.id===items?.[0]?.result_target?.proposer_id);if(proposer)login.textContent='Accedi come '+proposer.name+' e sincronizza';}el.textContent=items===null?'Coda locale non disponibile.':items.length?`${items.length} partite in attesa di sincronizzazione. ${queueMessage}`:(queueMessage||'Tutte le partite sono sincronizzate.');}
+  function refreshQueueStatus() {
+    const status = root.querySelector('[data-queue-status]');
+    if (!status) return;
+    const items = outbox(), first = items?.[0];
+    const retry = root.querySelector('[data-queue-retry]');
+    if (retry) retry.hidden = !first;
+    const login = root.querySelector('[data-queue-login]');
+    if (login) {
+      login.hidden = !first?.result_target;
+      const proposer = first?.players?.flatMap(player => player.members || []).find(member => member.id === first.result_target?.proposer_id);
+      if (proposer) login.textContent = 'Accedi come ' + proposer.name + ' e sincronizza';
+    }
+    status.textContent = items === null ? 'Coda locale non disponibile.' :
+      first ? `${items.length} ${items.length === 1 ? 'partita' : 'partite'} in attesa di sincronizzazione. ${queueMessage}` :
+        (queueMessage || 'Tutte le partite sono sincronizzate.');
+  }
   async function loginAndDrain(){const item=outbox()?.[0];if(!item?.result_target)return;try{const response=await fetch('/api/player/login',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({player_id:item.result_target.proposer_id})});if(!response.ok)throw Error('Accesso non riuscito.');document.dispatchEvent(new Event('player-identity-changed'));await drainOutbox();}catch(error){queueMessage=error.message;refreshQueueStatus();}}
   async function proposalHeaders(target) {
     const headers = {'Content-Type':'application/json'};
@@ -88,13 +103,25 @@
   }
   const stamp = () => new Date().toISOString();
   const uuid = () => crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const n = crypto.getRandomValues(new Uint8Array(1))[0] & 15; return (c === 'x' ? n : (n & 3) | 8).toString(16); });
+  let matchRequest = 0, matchLoading = false, matchError = '', profileLoads = Promise.resolve();
+  function useMatchCache(data, playerId = null) {
+    const cachedPlayer = data?.player;
+    sessionPlayer = cachedPlayer?.player_id && (!playerId || playerId === cachedPlayer.player_id)
+      ? {player_id:cachedPlayer.player_id,name:cachedPlayer.name}
+      : playerId ? {player_id:playerId} : null;
+    cachedMatches = sessionPlayer && Array.isArray(data?.matches)
+      ? data.matches.filter(match => match.p1 && match.p2 && [match.p1,match.p2].includes(sessionPlayer.player_id))
+      : [];
+  }
   function setup() {
-    const generation=++setupGeneration;
-    const cached=read(rosterKey,[]);profiles=Array.isArray(cached)?cached:[];
-    const matchCache=read('mana-life-matches-v1',null);if(matchCache?.player?.csrf_token){matchCache.player={player_id:matchCache.player.player_id,name:matchCache.player.name};write('mana-life-matches-v1',matchCache);}sessionPlayer=matchCache?.player||null;cachedMatches=Array.isArray(matchCache?.matches)?matchCache.matches:[];
-    drawSetup();refreshQueueStatus();
-    if(navigator.onLine===false)return;
-    fetch('/api/player/session',{credentials:'same-origin'}).then(async r=>{if(!r.ok || generation!==setupGeneration || game)return null;const rawPlayer=await r.json();const player={player_id:rawPlayer.player_id,name:rawPlayer.name};if(generation!==setupGeneration || game)return null;const mr=await fetch('/api/player/matches',{credentials:'same-origin'});if(!mr.ok)return null;return {player,matches:await mr.json()};}).then(data=>{if(!data || !Array.isArray(data.matches))return;write('mana-life-matches-v1',data);if(generation!==setupGeneration||game||!root.querySelector('#life-setup'))return;sessionPlayer=data.player;cachedMatches=data.matches;write('mana-life-matches-'+data.player.player_id,data);updateTournamentPlayers();updateMatchChoices();}).catch(()=>{});
+    const generation = ++setupGeneration;
+    const cached = read(rosterKey,[]);
+    profiles = Array.isArray(cached) ? cached : [];
+    useMatchCache(read('mana-life-matches-v1',null));
+    drawSetup();
+    refreshQueueStatus();
+    loadTournamentMatches();
+    if (navigator.onLine === false) return;
     fetch('/api/public/ranking').then(r=>r.ok?r.json():null).then(list=>{
       if(!Array.isArray(list))return;
       write(rosterKey,list);
@@ -103,58 +130,162 @@
       root.querySelectorAll('[data-profile]').forEach(select=>{const value=select.value;select.innerHTML='<option value="">Scegli profilo</option>'+profiles.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');select.value=value;});
     }).catch(()=>{});
   }
-  function updateTournamentPlayers(){const form=root.querySelector('#life-setup');if(!form)return;const el=form.elements.tournament_player, previous=el.value||sessionPlayer?.player_id||'';el.innerHTML='<option value="">Seleziona profilo</option>'+profiles.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');el.value=previous;}
-  async function loadMatchesForPlayer(id){
-    if(!id)return;const generation=setupGeneration, cached=read('mana-life-matches-'+id,null);if(cached?.player?.csrf_token){cached.player={player_id:cached.player.player_id,name:cached.player.name};write('mana-life-matches-'+id,cached);}sessionPlayer=cached?.player||{player_id:id};cachedMatches=Array.isArray(cached?.matches)?cached.matches:[];updateMatchChoices();
-    if(navigator.onLine===false)return;
-    try{const login=await fetch('/api/player/login',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({player_id:id})});if(!login.ok)throw Error('Accesso al profilo non riuscito.');const rawPlayer=await login.json();const player={player_id:rawPlayer.player_id,name:rawPlayer.name};if(generation!==setupGeneration||game)return;const response=await fetch('/api/player/matches',{credentials:'same-origin'});if(!response.ok)throw Error('Impossibile caricare gli abbinamenti.');const matches=await response.json();if(!Array.isArray(matches))throw Error('Abbinamenti non validi.');write('mana-life-matches-'+id,{player,matches});write('mana-life-matches-v1',{player,matches});if(generation!==setupGeneration||game||root.querySelector('#life-setup')?.elements.tournament_player.value!==id)return;sessionPlayer=player;cachedMatches=matches;updateMatchChoices();}catch(error){if(generation===setupGeneration&&!game){root.querySelector('[data-match-hint]').textContent=error.message+' Uso gli abbinamenti eventualmente salvati.';}}
+  function updateTournamentPlayers() {
+    const form = root.querySelector('#life-setup');
+    if (!form) return;
+    const select = form.elements.tournament_player;
+    const roster = [...profiles];
+    if (sessionPlayer && !roster.some(player => player.id === sessionPlayer.player_id)) {
+      roster.push({id:sessionPlayer.player_id,name:sessionPlayer.name || 'Profilo del torneo'});
+    }
+    select.innerHTML = '<option value="">Seleziona profilo</option>' +
+      roster.map(player => `<option value="${esc(player.id)}">${esc(player.name)}</option>`).join('');
+    select.value = sessionPlayer?.player_id || '';
   }
-  function updateMatchChoices(){
-    const form=root.querySelector('#life-setup');if(!form)return;const select=form.elements.match, current=select.value;
-    select.innerHTML='<option value="">Seleziona un abbinamento</option>'+cachedMatches.map((m,i)=>`<option value="${i}">🏆 ${esc(m.tournament?.config?.name||'Torneo')} · ${esc(profiles.find(p=>p.id===m.p1)?.name||m.p1)} – ${esc(profiles.find(p=>p.id===m.p2)?.name||m.p2)}</option>`).join('');select.value=current;
-    root.querySelector('[data-match-hint]').textContent=cachedMatches.length?'Scegli un incontro: i partecipanti sono precompilati.':'Nessun abbinamento salvato. Seleziona il tuo profilo e collegati per aggiornare il calendario.';
+  function loadTournamentMatches(playerId = null) {
+    const request = ++matchRequest, generation = setupGeneration;
+    const current = () => request === matchRequest && generation === setupGeneration && !game;
+    matchError = '';
+    matchLoading = navigator.onLine !== false;
+    updateMatchChoices();
+    if (!matchLoading) return;
+
+    profileLoads = profileLoads.then(async () => {
+      if (!current()) return;
+      try {
+        let response = await fetch('/api/player/session',{credentials:'same-origin'});
+        let player = response.ok ? await response.json() : null;
+        if (!current()) return;
+        if (playerId && player?.player_id !== playerId) {
+          response = await fetch('/api/player/login',{
+            method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({player_id:playerId}),
+          });
+          if (!response.ok) throw Error('Accesso al profilo non riuscito.');
+          player = await response.json();
+        }
+        if (!current()) return;
+        if (!player?.player_id) {
+          if (response.status !== 401) throw Error('Impossibile verificare il profilo.');
+          useMatchCache(null);
+          return;
+        }
+        if (sessionPlayer?.player_id !== player.player_id) {
+          useMatchCache(read('mana-life-matches-'+player.player_id,null),player.player_id);
+        }
+        const responseMatches = await fetch('/api/player/matches',{credentials:'same-origin'});
+        if (!responseMatches.ok) throw Error('Impossibile caricare gli abbinamenti.');
+        const matches = await responseMatches.json();
+        if (!Array.isArray(matches)) throw Error('Abbinamenti non validi.');
+        if (!current()) return;
+        const data = {player:{player_id:player.player_id,name:player.name},matches};
+        write('mana-life-matches-'+player.player_id,data);
+        write('mana-life-matches-v1',data);
+        useMatchCache(data);
+      } catch (error) {
+        if (current()) matchError = error.message || 'Impossibile caricare gli abbinamenti.';
+      } finally {
+        if (current()) {
+          matchLoading = false;
+          updateTournamentPlayers();
+          updateMatchChoices();
+        }
+      }
+    });
+    return profileLoads;
+  }
+  function updateMatchChoices() {
+    const form = root.querySelector('#life-setup');
+    if (!form || form.elements.kind.value !== 'tournament') return;
+    const select = form.elements.match, previous = select.value;
+    select.innerHTML = cachedMatches.length ? cachedMatches.map(match =>
+      `<option value="${esc(match.id)}">🏆 ${esc(match.tournament?.config?.name || 'Torneo')} · ${esc(profiles.find(p => p.id === match.p1)?.name || 'Giocatore')} – ${esc(profiles.find(p => p.id === match.p2)?.name || 'Giocatore')}</option>`
+    ).join('') : '<option value="">Nessun abbinamento disponibile</option>';
+    select.value = cachedMatches.some(match => match.id === previous) ? previous : cachedMatches[0]?.id || '';
+    select.disabled = matchLoading || !cachedMatches.length;
+    root.querySelector('[data-match-hint]').textContent = matchLoading ? 'Caricamento incontro…' :
+      matchError ? (cachedMatches.length ? 'Mostro gli ultimi abbinamenti salvati.' : matchError) :
+      !sessionPlayer ? 'Seleziona il tuo profilo per trovare il tuo incontro.' :
+      !cachedMatches.length ? 'Nessun incontro di torneo da giocare.' : '';
+    form.querySelector('button[type="submit"]').disabled = matchLoading || !select.value;
+    select.onchange();
   }
   function drawSetup() {
-    root.innerHTML = `<div class="life-shell"><header><p class="life-kicker">MANA ARENA · AL TAVOLO</p><h1>Segnapunti vita</h1><p>Un telefono al centro del tavolo, un contatore per ogni lato.</p></header><form id="life-setup"><label>Tipo partita<select name="kind"><option value="friendly">Amichevole</option><option value="tournament">🏆 Partita di torneo</option></select></label><label data-tournament-player hidden>Partecipante<select name="tournament_player"><option value="">Seleziona profilo</option></select></label><button type="button" class="button secondary" data-load-matches hidden>Carica abbinamenti del profilo</button><label data-match-label hidden>Incontro<select name="match"><option value="">Nessun abbinamento disponibile</option></select></label><p data-match-hint hidden>Seleziona il tuo profilo e carica i tuoi abbinamenti quando sei online. Offline sono disponibili gli ultimi abbinamenti salvati.</p><label>Formato<select name="format"><option value="duel">Duello</option><option value="team">Squadre</option><option value="ffa">Tutti contro tutti</option></select></label><label>Vita iniziale<select name="life_mode"><option value="same">Uguale per tutti</option><option value="different">Diversa per ogni lato</option></select></label><label data-common>Vita iniziale comune<input type="number" name="common_life" min="1" max="999" value="20" required></label><div class="life-setup-sides"></div><div class="life-setup-actions"><button type="button" class="button secondary" data-add-side hidden>Aggiungi lato</button><button type="submit" class="button primary">Inizia partita</button></div><p>I risultati con un vincitore e da uno a tre giocatori con profilo per lato vengono registrati alla sincronizzazione. Avviando un’amichevole autorizzi l’accesso come primo giocatore del primo lato, anche alla riconnessione; per un torneo si usa il partecipante scelto. Ospiti, tutti contro tutti e pareggi restano nel solo archivio.</p><p data-queue-status role="status"></p><button type="button" class="button secondary" data-queue-retry>Riprova sincronizzazione</button><button type="button" class="button secondary" data-queue-login hidden>Accedi come proponente e sincronizza</button><p class="life-error" role="alert"></p></form></div>`;
+    root.innerHTML = `<div class="life-shell"><header><p class="life-kicker">MANA ARENA · AL TAVOLO</p><h1>Segnapunti vita</h1><p>Un telefono al centro del tavolo, un contatore per ogni lato.</p></header><form id="life-setup"><label>Tipo partita<select name="kind"><option value="friendly">Amichevole</option><option value="tournament">🏆 Partita di torneo</option></select></label><label data-tournament-player hidden>Il tuo profilo<select name="tournament_player"><option value="">Seleziona profilo</option></select></label><label data-match-label hidden>Incontro<select name="match"><option value="">Nessun abbinamento disponibile</option></select></label><p data-match-hint role="status" hidden></p><label data-friendly-format>Formato<select name="format"><option value="duel">Duello</option><option value="team">Squadre</option><option value="ffa">Tutti contro tutti</option></select></label><label>Vita iniziale<select name="life_mode"><option value="same">Uguale per tutti</option><option value="different">Diversa per ogni lato</option></select></label><label data-common>Vita iniziale comune<input type="number" name="common_life" min="1" max="999" value="20" required></label><div class="life-setup-sides"></div><div class="life-setup-actions"><button type="button" class="button secondary" data-add-side hidden>Aggiungi lato</button><button type="submit" class="button primary">Inizia partita</button></div><p data-queue-status role="status"></p><button type="button" class="button secondary" data-queue-retry hidden>Riprova sincronizzazione</button><button type="button" class="button secondary" data-queue-login hidden>Accedi come proponente e sincronizza</button><p class="life-error" role="alert"></p></form></div>`;
     const form = root.querySelector('form');
     function renderSides() {
+      const editable = form.elements.kind.value !== 'tournament';
       const format = form.elements.format.value;
-      root.querySelector('[data-add-side]').hidden = format !== 'ffa' || sides.length >= 4;
-      root.querySelector('.life-setup-sides').innerHTML = sides.map((members, i) => `<fieldset><legend>${format === 'team' ? 'Squadra' : 'Lato'} ${i + 1}</legend><div class="life-members">${members.map((m, j) => `<div class="life-member"><span class="life-person">${avatar(m)}<span>${esc(m.name)}</span></span><button type="button" data-remove-member="${i},${j}" aria-label="Rimuovi ${esc(m.name)}">×</button></div>`).join('')}</div><div class="life-add-member"><span data-profile-preview="${i}" class="life-profile-preview" aria-hidden="true"></span><select aria-label="Profilo lato ${i+1}" data-profile="${i}"><option value="">Scegli profilo</option>${profiles.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select><button type="button" data-add-profile="${i}">Aggiungi</button></div><div class="life-add-member"><input data-guest="${i}" maxlength="60" placeholder="Nome ospite" aria-label="Nome ospite lato ${i+1}"><button type="button" data-add-guest="${i}">Aggiungi</button></div><label ${form.elements.life_mode.value === "same" ? "hidden" : ""}>Vita iniziale<input type="number" data-initial="${i}" min="1" max="999" value="20" required></label>${format === 'ffa' && sides.length > 2 ? `<button type="button" data-remove-side="${i}">Rimuovi lato</button>` : ''}</fieldset>`).join('');
-      if(form.elements.kind.value==='tournament')root.querySelectorAll('.life-setup-sides button, .life-setup-sides select, .life-setup-sides input[data-guest]').forEach(el=>{el.disabled=true;});
+      const initial = [...root.querySelectorAll('[data-initial]')].map(input => input.value);
+      root.querySelector('[data-add-side]').hidden = !editable || format !== 'ffa' || sides.length >= 4;
+      root.querySelector('.life-setup-sides').innerHTML = sides.map((members, i) => {
+        if (!editable && !members.length) return '';
+        const controls = editable ? `<div class="life-add-member"><span data-profile-preview="${i}" class="life-profile-preview" aria-hidden="true"></span><select aria-label="Profilo lato ${i+1}" data-profile="${i}"><option value="">Scegli profilo</option>${profiles.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select><button type="button" data-add-profile="${i}">Aggiungi</button></div><div class="life-add-member"><input data-guest="${i}" maxlength="60" placeholder="Nome ospite" aria-label="Nome ospite lato ${i+1}"><button type="button" data-add-guest="${i}">Aggiungi</button></div>` : '';
+        return `<fieldset><legend>${format === 'team' ? 'Squadra' : 'Lato'} ${i + 1}</legend><div class="life-members">${members.map((m, j) => `<div class="life-member"><span class="life-person">${avatar(m)}<span>${esc(m.name)}</span></span>${editable ? `<button type="button" data-remove-member="${i},${j}" aria-label="Rimuovi ${esc(m.name)}">×</button>` : ''}</div>`).join('')}</div>${controls}<label ${form.elements.life_mode.value === 'same' ? 'hidden' : ''}>Vita iniziale<input type="number" data-initial="${i}" min="1" max="999" value="${esc(initial[i] ?? 20)}" required></label>${editable && format === 'ffa' && sides.length > 2 ? `<button type="button" data-remove-side="${i}">Rimuovi lato</button>` : ''}</fieldset>`;
+      }).join('');
     }
-    updateTournamentPlayers();updateMatchChoices();
-    form.elements.tournament_player.onchange=()=>{const id=form.elements.tournament_player.value;const cached=read('mana-life-matches-'+id,null);sessionPlayer=id?(cached?.player||{player_id:id}):null;cachedMatches=Array.isArray(cached?.matches)?cached.matches:[];sides=[[],[]];renderSides();updateMatchChoices();};
-    form.elements.kind.onchange=()=>{const tournament=form.elements.kind.value==='tournament';root.querySelector('[data-tournament-player]').hidden=!tournament;root.querySelector('[data-load-matches]').hidden=!tournament;root.querySelector('[data-match-label]').hidden=!tournament;root.querySelector('[data-match-hint]').hidden=!tournament;form.elements.format.disabled=tournament;if(tournament){form.elements.format.value='duel';sides=[[],[]];}renderSides();};
-    form.elements.match.onchange=()=>{const m=cachedMatches[Number(form.elements.match.value)];if(form.elements.match.value===''||!m)return;sides=[m.p1,m.p2].map(id=>{const p=profiles.find(p=>p.id===id);return [{id,name:p?.name||id,photo_url:p?.photo_url||null}];});renderSides();};
+    updateTournamentPlayers();
+    form.elements.tournament_player.onchange = () => {
+      const id = form.elements.tournament_player.value;
+      // Invalidate pending responses even when the profile is cleared.
+      if (!id) {
+        ++matchRequest;
+        matchLoading = false;
+        matchError = '';
+        useMatchCache(null);
+        updateMatchChoices();
+        return;
+      }
+      useMatchCache(read('mana-life-matches-'+id,null),id);
+      form.elements.match.value = '';
+      loadTournamentMatches(id);
+    };
+    form.elements.kind.onchange = () => {
+      const tournament = form.elements.kind.value === 'tournament';
+      root.querySelector('[data-tournament-player]').hidden = !tournament;
+      root.querySelector('[data-match-label]').hidden = !tournament;
+      root.querySelector('[data-match-hint]').hidden = !tournament;
+      root.querySelector('[data-friendly-format]').hidden = tournament;
+      form.elements.format.value = 'duel';
+      sides = [[],[]];
+      if (tournament) updateMatchChoices();
+      else {
+        form.querySelector('button[type="submit"]').disabled = false;
+        renderSides();
+      }
+    };
+    form.elements.match.onchange = () => {
+      const match = cachedMatches.find(item => item.id === form.elements.match.value);
+      sides = match ? [match.p1,match.p2].map((id,index) => {
+        const profile = profiles.find(p => p.id === id);
+        return [{id,name:profile?.name || (id === sessionPlayer?.player_id ? sessionPlayer.name : '') || `Giocatore ${index + 1}`,photo_url:profile?.photo_url || null}];
+      }) : [[],[]];
+      renderSides();
+    };
     form.addEventListener('change',event=>{const select=event.target;if(!select.matches('[data-profile]'))return;const person=profiles.find(p=>String(p.id)===select.value);root.querySelector(`[data-profile-preview="${select.dataset.profile}"]`).innerHTML=person?avatar(person):'';});
     form.elements.life_mode.onchange = () => { root.querySelector('[data-common]').hidden=form.elements.life_mode.value!=='same'; renderSides(); };
     form.elements.format.onchange = () => { sides = [[], []]; renderSides(); };
     root.onclick = e => {
       const b = e.target.closest('button'); if (!b) return;
-      if (b.hasAttribute('data-load-matches')) {
-        loadMatchesForPlayer(form.elements.tournament_player.value);
-        return;
-      }
       if (b.hasAttribute('data-queue-retry')) { drainOutbox(); return; }
       if (b.hasAttribute('data-queue-login')) { loginAndDrain(); return; }
-      const preserve = [...root.querySelectorAll('[data-initial]')].map(x => x.value);
+      if (form.elements.kind.value === 'tournament') return;
       if (b.hasAttribute('data-add-side')) sides.push([]);
       else if (b.hasAttribute('data-remove-side')) sides.splice(Number(b.dataset.removeSide), 1);
       else if (b.hasAttribute('data-remove-member')) { const [i,j] = b.dataset.removeMember.split(',').map(Number); sides[i].splice(j,1); }
       else if (b.hasAttribute('data-add-profile')) { const i = Number(b.dataset.addProfile), id = root.querySelector(`[data-profile="${i}"]`).value, p = profiles.find(x => String(x.id) === id); if (!p) return; if (sides.flat().some(m => m.id === id)) { root.querySelector('.life-error').textContent = 'Questo profilo è già stato aggiunto.'; return; } sides[i].push({id,name:p.name,photo_url:p.photo_url||null}); }
       else if (b.hasAttribute('data-add-guest')) { const i = Number(b.dataset.addGuest), name = root.querySelector(`[data-guest="${i}"]`).value.trim(); if (!name) return; sides[i].push({name}); }
       else return;
-      renderSides(); root.querySelectorAll('[data-initial]').forEach((x,i) => { if (preserve[i] !== undefined) x.value = preserve[i]; });
+      renderSides();
     };
     form.onsubmit = async e => {
       e.preventDefault(); if (busy || game) return; const format = form.elements.format.value, kind=form.elements.kind.value;
-      if(kind==='tournament' && (form.elements.match.value==='' || !sessionPlayer)){root.querySelector('.life-error').textContent='Seleziona un abbinamento disponibile.';return;}
+      const match = kind === 'tournament' ? cachedMatches.find(item => item.id === form.elements.match.value) : null;
+      if (kind === 'tournament' && (matchLoading || !match || !sessionPlayer)) return;
       if (sides.some(s => !s.length || s.length > 6 || (format !== 'team' && s.length !== 1))) { root.querySelector('.life-error').textContent = format === 'team' ? 'Aggiungi da uno a sei giocatori per squadra.' : 'Aggiungi un solo giocatore per ogni lato.'; return; }
       const names = sides.map(s => s.map(m => m.name).join(' + '));
       if (names.some(n => n.length > 160)) { root.querySelector('.life-error').textContent = 'Il nome di un lato è troppo lungo (massimo 160 caratteri).'; return; }
       if (new Set(names.map(n => n.toLocaleLowerCase())).size !== names.length) { root.querySelector('.life-error').textContent = 'I lati devono avere nomi diversi.'; return; }
-      const match=kind==='tournament'?cachedMatches[Number(form.elements.match.value)]:null;
       game = {session_id:uuid(), started_at:stamp(), format, kind, match, proposer:sessionPlayer?.player_id, sides:sides.map((members,i) => ({name:names[i], members, initial:Number(form.elements.life_mode.value==='same'?form.elements.common_life.value:root.querySelector(`[data-initial="${i}"]`).value), life:Number(form.elements.life_mode.value==='same'?form.elements.common_life.value:root.querySelector(`[data-initial="${i}"]`).value)})), changes:[], rolls:{eligible:sides.map((_,i)=>i), values:{}, done:false}};
       if (!persist()) { game=null; return; }
       ++setupGeneration;busy=true;
@@ -276,11 +407,14 @@
   }
   function savePending(){
     const finished=game;
-    root.innerHTML='<div class="life-shell"><h1>Archivio segnavita</h1><p data-status>Partita conservata su questo dispositivo.</p><p data-queue-status role="status"></p><p class="life-error" role="alert"></p><div class="life-setup-actions"><button type="button" class="button secondary" data-retry>Riprova sincronizzazione</button><button type="button" class="button secondary" data-queue-login hidden>Accedi come proponente e sincronizza</button><button type="button" class="button secondary" data-new>Nuova partita</button></div></div>';
-    root.onclick=e=>{if(e.target.closest('[data-retry]'))drainOutbox();if(e.target.closest('[data-queue-login]'))loginAndDrain();if(e.target.closest('[data-new]')){try{localStorage.removeItem(key);}catch(_){reportStorage('Impossibile aggiornare la memoria locale.');return;}sides=[[],[]];game=null;setup();}};
+    root.innerHTML='<div class="life-shell"><h1>Archivio segnavita</h1><p data-status>Partita conservata su questo dispositivo.</p><p data-queue-status role="status"></p><p class="life-error" role="alert"></p><div class="life-setup-actions"><button type="button" class="button secondary" data-queue-retry hidden>Riprova sincronizzazione</button><button type="button" class="button secondary" data-queue-login hidden>Accedi come proponente e sincronizza</button><button type="button" class="button secondary" data-new>Nuova partita</button></div></div>';
+    root.onclick=e=>{if(e.target.closest('[data-queue-retry]'))drainOutbox();if(e.target.closest('[data-queue-login]'))loginAndDrain();if(e.target.closest('[data-new]')){try{localStorage.removeItem(key);}catch(_){reportStorage('Impossibile aggiornare la memoria locale.');return;}sides=[[],[]];game=null;setup();}};
     if(finished.payload.result_target)root.querySelector('[data-status]').textContent+=' Il risultato verrà registrato alla sincronizzazione.';
     refreshQueueStatus();drainOutbox();
   }
-  window.addEventListener('online',()=>drainOutbox());
+  window.addEventListener('online',async () => {
+    await drainOutbox();
+    if (!game && root.querySelector('#life-setup')) loadTournamentMatches(sessionPlayer?.player_id);
+  });
   window.openLifeCounter = () => { if (!root.firstElementChild) { game=restore(); if(game?.payload){savePending();} else if(game?.sides && game?.rolls)drawGame(); else setup(); } drainOutbox(); };
 })();
