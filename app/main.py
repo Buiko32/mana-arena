@@ -1177,7 +1177,9 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
     @application.get("/api/public/ranking")
     def public_ranking():
         with db.transaction() as conn:
-            return [ranking_player(row, rank) for rank, row in enumerate(global_elo_from_db(conn), 1)]
+            rows = global_elo_from_db(conn, include_movement=True)
+            return [{**ranking_player(row, rank), "movement": row["movement"]}
+                    for rank, row in enumerate(rows, 1)]
 
     @application.get("/api/public/players/{player_id}/statistics")
     def public_player_statistics(player_id: str):

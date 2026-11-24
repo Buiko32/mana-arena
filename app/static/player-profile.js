@@ -64,16 +64,33 @@
     const line = history.slice(1).map(point => `L${x(point)} ${y(point)}`).join(' ');
     return `<figure class="profile-chart"><figcaption>${title}</figcaption>
       <div class="profile-chart-body"><div class="profile-chart-scale"><span>${top}</span>${top === bottom ? '' : `<span>${bottom}</span>`}</div>
-      <svg viewBox="0 0 300 100" preserveAspectRatio="none" aria-hidden="true">
+      <svg viewBox="0 0 300 100" preserveAspectRatio="none" role="group" aria-label="${title}">
         <path class="profile-chart-grid" d="M0 7H300 M0 50H300 M0 93H300"/>
         <path class="profile-chart-line" d="M${x(history[0])} ${y(history[0])} ${line}"/>
-        ${history.length <= 31 ? history.map(point => `<circle cx="${x(point)}" cy="${y(point)}" r="2.5"/>`).join('') : ''}
+        ${history.map(point => {
+          const value = key === 'rank' ? 'Posizione #' + point.rank : point.rating + ' Elo';
+          const label = `${value} · ${labelDate(point.date)}`;
+          return `<circle cx="${x(point)}" cy="${y(point)}" r="2.5" tabindex="0" role="img" aria-label="${esc(label)}"><title>${esc(label)}</title></circle>`;
+        }).join('')}
       </svg></div>
       <div class="profile-chart-dates"><span>${labelDate(history[0].date)}</span>${start === end ? '' : `<span>${labelDate(history.at(-1).date)}</span>`}</div></figure>`;
   }
 
+  function opponentList(opponents) {
+    return opponents.map(player => `<span class="profile-opponent">${window.renderPlayerAvatar(player)}<strong>${esc(player.name)}</strong></span>`).join('');
+  }
+
+  function recentResult(match, index) {
+    const won = match.result === 'win';
+    const label = won ? 'Vittoria' : 'Sconfitta';
+    const tooltip = `profile-result-${index}`;
+    return `<li><button type="button" class="${match.result}" aria-label="${label}" aria-describedby="${tooltip}">${won ? 'V' : 'S'}</button>
+      <div class="profile-result-tooltip" id="${tooltip}" role="tooltip"><strong>${won ? 'Vittoria contro' : 'Sconfitta contro'}</strong>
+      ${opponentList(match.opponents)}</div></li>`;
+  }
+
   function renderStatistics(stats) {
-    const {player,history,best_win:bestWin,recent_form:form} = stats;
+    const {player,history,best_win:bestWin,recent_results:results} = stats;
     const winRate = player.matches ? `${new Intl.NumberFormat('it-IT',{style:'percent',maximumFractionDigits:1}).format(player.wins/player.matches)}` : '—';
     const metrics = [
       ['Elo', player.rating], ['Posizione', `#${player.rank}`],
@@ -84,7 +101,6 @@
     const daily = dailyClosingValues(history);
     const historyContent = daily.length ? `
       <div class="profile-charts">${profileChart(daily,'rating','Elo nel tempo')}${profileChart(daily,'rank','Posizione nel tempo')}</div>
-      <p class="muted">I grafici mostrano l’ultimo valore di ogni giornata (ora italiana). La posizione è calcolata sui profili attivi oggi.</p>
       <details class="profile-history"><summary>Variazioni durante la giornata</summary>
         <div class="table-wrap"><table><thead><tr><th>Data e ora</th><th>Elo</th><th>Posizione</th></tr></thead><tbody>
         ${history.slice().reverse().map(point=>`<tr><td>${historyDate.format(utcTime(point.date))}</td><td>${point.rating}</td><td>#${point.rank}</td></tr>`).join('')}</tbody></table></div>
@@ -94,8 +110,15 @@
     $('#profile-summary').innerHTML = `
       <dl class="profile-metrics">${metrics.map(([label,value])=>`<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')}</dl>
       ${historyContent}
-      ${form.length ? `<h3>Ultime partite</h3><ol class="profile-form-results">${form.map(result=>`<li class="${result}" aria-label="${result==='win'?'Vittoria':'Sconfitta'}">${result==='win'?'V':'S'}</li>`).join('')}</ol>` : ''}
-      ${bestWin ? `<h3>Miglior vittoria</h3><p class="profile-best-win"><strong>${bestWin.opponents.map(esc).join(' e ')}</strong> · ${labelDate(bestWin.date)}<br><span class="muted">+${bestWin.gain} Elo guadagnati · divario prima della partita ${bestWin.gap>0?'+':''}${bestWin.gap} Elo</span></p>` : ''}`;
+      ${results?.length ? `<h3>Ultime partite</h3><ol class="profile-form-results">${results.map(recentResult).join('')}</ol>` : ''}
+      ${bestWin ? `<section class="profile-best-win"><div><h3>Miglior vittoria</h3>
+        <div class="profile-best-opponents">${bestWin.opponent_profiles ? opponentList(bestWin.opponent_profiles) : esc(bestWin.opponents.join(' e '))}</div></div>
+        <strong class="profile-best-gain">+${bestWin.gain} Elo</strong></section>` : ''}`;
+    const recent = $('.profile-form-results');
+    recent?.addEventListener('click', event => event.target.closest('button')?.focus());
+    recent?.addEventListener('keydown', event => {
+      if (event.key === 'Escape') event.target.blur();
+    });
   }
 
   async function refreshEditedProfile(notice) {

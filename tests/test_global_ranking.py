@@ -118,9 +118,41 @@ def test_player_statistics_track_rank_changes_and_only_count_confirmed_games(tmp
         assert [point['rank'] for point in points] == [1, 2, 1]
         assert points[0]['rating'] == points[1]['rating'] == 1520
         assert stats['recent_form'] == ['win', 'win']
+        assert stats['recent_results'][0]['opponents'][0]['name'] == 'd'
         assert stats['win_streak'] == stats['longest_win_streak'] == 2
         assert stats['best_win']['opponents'] == ['b']
         assert stats['best_win']['gap'] > 0
         assert stats['peak_rating'] == points[-1]['rating']
         assert stats['player']['rating'] == global_elo_from_db(conn)[0]['rating']
         assert player_statistics(conn, 'missing') is None
+
+
+def test_ranking_movement_uses_latest_played_day_in_rome(tmp_path):
+    from app.db import Database
+    from app.service import global_elo_from_db, player_statistics
+
+    db = Database(tmp_path)
+    db.initialize()
+    with db.transaction() as conn:
+        for pid in 'abcde':
+            conn.execute('INSERT INTO players(id,name) VALUES (?,?)', (pid, pid))
+        conn.execute("UPDATE players SET photo='abcd.jpg' WHERE id='b'")
+        games = [
+            ('1', 'a', 'b', 'b', 'confirmed', '2026-07-01 22:30:00'),
+            ('2', 'a', 'b', 'b', 'confirmed', '2026-07-02 12:00:00'),
+            ('3', 'c', 'd', 'c', 'confirmed', '2026-07-05 12:00:00'),
+            ('4', 'c', 'd', 'c', 'confirmed', '2026-07-05 13:00:00'),
+            ('5', 'c', 'd', 'c', 'confirmed', '2026-07-05 14:00:00'),
+            ('6', 'a', 'e', 'e', 'pending', '2026-07-06 12:00:00'),
+        ]
+        conn.executemany("INSERT INTO result_proposals(id,proposer_id,opponent_id,winner_id,status,created_at) VALUES (?,?,?,?,?,?)", games)
+        ranking = {row['id']: row for row in global_elo_from_db(conn, include_movement=True)}
+
+        assert ranking['b']['rank'] == 2
+        assert ranking['b']['movement'] == {'date': '2026-07-02', 'rank': 1, 'rating': 38}
+        assert ranking['a']['movement'] == {'date': '2026-07-02', 'rank': -4, 'rating': -38}
+        assert ranking['c']['movement']['date'] == '2026-07-05'
+        assert ranking['e']['movement'] is None
+        stats = player_statistics(conn, 'a')
+        assert stats['recent_results'][1]['result'] == 'loss'
+        assert stats['recent_results'][1]['opponents'][0]['photo_url'] == '/photos/abcd.jpg'

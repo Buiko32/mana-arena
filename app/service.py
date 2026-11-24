@@ -1,6 +1,9 @@
 """Rules-to-storage adapters shared by API workflows."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
 from .engine import calculate_standings
 
 
@@ -55,13 +58,15 @@ def _elo_order(row):
 
 
 # Internal Elo inspired by FIDE K thresholds, not an official FIDE rating.
-def calculate_global_elo(players: list[dict], matches: list[dict], *, on_game=None) -> list[dict]:
+def calculate_global_elo(players: list[dict], matches: list[dict], *, on_game=None, before_game=None) -> list[dict]:
     rows = {p['id']: {**p, 'rating': 1500.0, 'matches': 0, 'wins': 0, 'draws': 0, 'losses': 0, 'peak_2400': False} for p in players}
     for match in matches:
         if match.get('team_a') and match.get('team_b'):
             teams = [[rows.get(pid) for pid in match[key]] for key in ('team_a','team_b')]
             if any(not row for team in teams for row in team) or match.get('winner') not in ('a','b'):
                 continue
+            if before_game:
+                before_game(rows, match)
             averages = [sum(row['rating'] for row in team)/len(team) for team in teams]
             updates = []
             for index, team in enumerate(teams):
@@ -69,7 +74,7 @@ def calculate_global_elo(players: list[dict], matches: list[dict], *, on_game=No
                 # every player is compared using their own pre-match rating.
                 opponent_strength = averages[1-index] + 150 * (len(teams[1-index]) - len(team))
                 won = match['winner'] == ('a' if index == 0 else 'b')
-                opponents = [row['name'] for row in teams[1-index]] if on_game else None
+                opponents = teams[1-index] if on_game else None
                 for row in team:
                     diff = opponent_strength - row['rating']
                     if row['rating'] < 2650:
@@ -89,6 +94,8 @@ def calculate_global_elo(players: list[dict], matches: list[dict], *, on_game=No
         a, b = rows.get(match.get('p1')), rows.get(match.get('p2'))
         if result not in ('p1_win', 'p2_win') or not a or not b or a is b or match.get('bye') or match.get('void'):
             continue
+        if before_game:
+            before_game(rows, match)
         score_a = {'p1_win': 1.0, 'p2_win': 0.0}[result]
         ra, rb = a['rating'], b['rating']
         def expected(own, other):
@@ -107,8 +114,8 @@ def calculate_global_elo(players: list[dict], matches: list[dict], *, on_game=No
         elif score_a == 0: b['wins'] += 1; a['losses'] += 1
         if on_game:
             on_game(rows, match, [
-                (a, a['rating'] - ra, score_a == 1, rb, [b['name']]),
-                (b, b['rating'] - rb, score_a == 0, ra, [a['name']]),
+                (a, a['rating'] - ra, score_a == 1, rb, [b]),
+                (b, b['rating'] - rb, score_a == 0, ra, [a]),
             ])
     result = sorted(rows.values(), key=_elo_order)
     for position, row in enumerate(result, 1):
@@ -156,9 +163,60 @@ def _elo_inputs(conn):
     return players, [{**match, 'elo_date': key[0]} for key, match in matches]
 
 
-def global_elo_from_db(conn):
+def global_elo_from_db(conn, *, include_movement=False):
     players, matches = _elo_inputs(conn)
-    return [row for row in calculate_global_elo(players, matches) if row['active']]
+    if not include_movement:
+        return [row for row in calculate_global_elo(players, matches) if row['active']]
+
+    rome = ZoneInfo('Europe/Rome')
+    day = None
+    opening = {}
+    played = set()
+    movement = {}
+
+    def standings(rows):
+        active = sorted((row for row in rows if row['active']), key=_elo_order)
+        return {row['id']: (rank, round(row['rating'])) for rank, row in enumerate(active, 1)}
+
+    def close_day(closing):
+        for pid in played:
+            if pid in closing:
+                start_rank, start_rating = opening[pid]
+                end_rank, end_rating = closing[pid]
+                movement[pid] = {
+                    'date': day.isoformat(),
+                    'rank': start_rank - end_rank,
+                    'rating': end_rating - start_rating,
+                }
+        played.clear()
+
+    def before_game(rows, match):
+        nonlocal day, opening
+        timestamp = datetime.fromisoformat(match['elo_date'])
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
+        match_day = timestamp.astimezone(rome).date()
+        if match_day != day:
+            opening_next = standings(rows.values())
+            close_day(opening_next)
+            opening, day = opening_next, match_day
+
+    def after_game(rows, match, updates):
+        played.update(row['id'] for row, *_ in updates)
+
+    rows = calculate_global_elo(players, matches, before_game=before_game, on_game=after_game)
+    active = [row for row in rows if row['active']]
+    close_day({row['id']: (rank, row['rating']) for rank, row in enumerate(active, 1)})
+    return [{**row, 'movement': movement.get(row['id'])} for row in active]
+
+
+def _opponent_profile(row):
+    return {
+        'name': row['name'],
+        'photo_url': f"/photos/{row['photo']}" if row['photo'] else None,
+        'avatar_hue': row['avatar_hue'],
+        'avatar_color': row['avatar_color'],
+    }
 
 
 def elo_snapshot(conn, player_ids):
@@ -188,7 +246,7 @@ def player_statistics(conn, player_id):
         return None
 
     history = []
-    recent_form = []
+    recent_results = []
     streak = longest_streak = 0
     best_win = None
     best_gap = float('-inf')
@@ -205,15 +263,17 @@ def player_statistics(conn, player_id):
             history.append({'date': date, 'rating': rating, 'rank': rank})
         if own:
             _, change, won, opponent_rating, opponents = own
-            recent_form.append('win' if won else 'loss')
-            if len(recent_form) > 5:
-                recent_form.pop(0)
+            profiles = [_opponent_profile(opponent) for opponent in opponents]
+            recent_results.append({'result': 'win' if won else 'loss', 'opponents': profiles})
+            if len(recent_results) > 5:
+                recent_results.pop(0)
             streak = streak + 1 if won else 0
             longest_streak = max(longest_streak, streak)
             gap = opponent_rating - (player['rating'] - change)
             if won and gap > best_gap:
                 best_gap = gap
-                best_win = {'date': date, 'opponents': opponents, 'gap': round(gap), 'gain': round(change)}
+                best_win = {'date': date, 'opponents': [profile['name'] for profile in profiles],
+                            'opponent_profiles': profiles, 'gap': round(gap), 'gain': round(change)}
 
     rows = calculate_global_elo(players, matches, on_game=after_game)
     active = [row for row in rows if row['active']]
@@ -224,5 +284,6 @@ def player_statistics(conn, player_id):
         'peak_rating': max(1500, max((point['rating'] for point in history), default=1500)),
         'best_rank': min((point['rank'] for point in history), default=rank),
         'win_streak': streak, 'longest_win_streak': longest_streak,
-        'recent_form': recent_form, 'best_win': best_win,
+        'recent_form': [match['result'] for match in recent_results],
+        'recent_results': recent_results, 'best_win': best_win,
     }

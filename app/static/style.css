@@ -427,8 +427,8 @@ footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:va
 @media(max-width:540px){
   .brand-logo{width:30px;height:30px}
   .global-table{table-layout:fixed}
-  .global-table th:nth-child(1){width:13%}
-  .global-table th:nth-child(3){width:13%}
+  .global-table th:nth-child(1){width:15%}
+  .global-table th:nth-child(3){width:20%}
   .global-table th:nth-child(4){width:18%}
   .global-table th:nth-child(5){width:13%}
   .global-table .ranking-player{gap:.35rem}
@@ -444,11 +444,22 @@ footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:va
 .profile-metrics div{padding:.65rem;background:var(--panel-2);border:1px solid var(--line);border-radius:.65rem}
 .profile-metrics dt{font-size:.77rem;color:var(--muted)}
 .profile-metrics dd{margin:.25rem 0 0;font-weight:700;font-variant-numeric:tabular-nums}
-.profile-form-results{display:flex;gap:.4rem;padding:0;list-style:none;margin:0 0 1rem}
-.profile-form-results li{width:2rem;height:2rem;display:grid;place-items:center;border:1px solid currentColor;border-radius:.45rem;font-weight:700}
+.profile-form-results{position:relative;display:flex;gap:.4rem;padding:0;list-style:none;margin:0 0 1rem}
+.profile-form-results button{width:2rem;height:2rem;display:grid;place-items:center;border:1px solid currentColor;border-radius:.45rem;font-weight:700;background:var(--bg);cursor:pointer}
 .profile-form-results .win{color:var(--green)}
 .profile-form-results .loss{color:var(--red)}
-.profile-best-win{line-height:1.5}
+.profile-result-tooltip{display:none;position:absolute;z-index:2;inset:auto auto calc(100% + .35rem) 0;max-width:100%;padding:.65rem .8rem;border:1px solid var(--line);border-radius:.55rem;background:var(--bg);box-shadow:0 6px 20px #0006;color:var(--text)}
+.profile-form-results li:focus-within .profile-result-tooltip{display:grid;gap:.35rem}
+@media (hover:hover){
+  .profile-form-results:has(li:hover) .profile-result-tooltip{display:none}
+  .profile-form-results li:hover .profile-result-tooltip{display:grid;gap:.35rem}
+}
+.profile-opponent{display:inline-flex;align-items:center;gap:.4rem;min-width:0;overflow-wrap:anywhere}
+.profile-opponent .avatar{width:28px;height:28px;flex:0 0 28px}
+.profile-best-win{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.65rem 1rem;margin:1rem 0;padding:.8rem 1rem;border:1px solid var(--line);border-inline-start:3px solid var(--green);border-radius:.55rem;background:#112722}
+.profile-best-win h3{margin:0 0 .45rem}
+.profile-best-opponents{display:flex;flex-wrap:wrap;gap:.35rem .7rem}
+.profile-best-gain{color:var(--green);font-size:1.2rem;white-space:nowrap}
 .profile-charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,235px),1fr));gap:.75rem;margin:.9rem 0}
 .profile-chart{margin:0;padding:.7rem;border:1px solid var(--line);border-radius:.65rem}
 .profile-chart figcaption{font-weight:700;margin-bottom:.5rem}
@@ -457,7 +468,15 @@ footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:va
 .profile-chart-scale:has(span:only-child){justify-content:center}
 .profile-chart-scale,.profile-chart-dates{font-size:.73rem;color:var(--muted)}
 .profile-chart-body svg{height:clamp(130px,24vw,200px);width:100%;min-width:0;color:var(--amber-bright)}
-.profile-chart-body circle{fill:currentColor}
+.profile-chart-body circle{fill:currentColor;stroke:transparent;stroke-width:7;vector-effect:non-scaling-stroke;cursor:help}
+.profile-chart-body circle:is(:hover,:focus-visible){stroke:currentColor;stroke-width:3}
+.global-table td:nth-child(1),.global-table td:nth-child(3){white-space:nowrap}
+.ranking-movement{font-size:.76rem;font-weight:700}
+.ranking-movement.is-up{color:var(--green)}
+.ranking-movement.is-down{color:var(--red)}
+@media(max-width:540px){
+  .global-table td:nth-child(1),.global-table td:nth-child(3){padding-inline:.25rem}
+}
 .profile-chart-grid,.profile-chart-line{fill:none;stroke-width:1;vector-effect:non-scaling-stroke}
 .profile-chart-grid{stroke:var(--line)}
 .profile-chart-line{stroke:currentColor;stroke-width:2}

@@ -30,6 +30,16 @@
     button.setAttribute('aria-label',label);
     button.title = label;
   }
+  function rankingMovement(movement, key) {
+    const change = movement?.[key];
+    if (!change) return '';
+    const up = change > 0;
+    const magnitude = Math.abs(change);
+    const unit = key === 'rating' ? 'Elo' : magnitude === 1 ? 'posizione' : 'posizioni';
+    const label = `${up ? '+' : '−'}${magnitude} ${unit} · ${movement.date}`;
+    return ` <span class="ranking-movement ${up ? 'is-up' : 'is-down'}" role="img" aria-label="${esc(label)}" title="${esc(label)}"><span aria-hidden="true">${up ? '↑' : '↓'}</span>${magnitude}</span>`;
+  }
+
   function renderRanking(rows){
     publicRanking = rows;
     renderProfileButton(rows);
@@ -38,7 +48,7 @@
     const snapshot = JSON.stringify(rows);
     if (snapshot === rankingSnapshot) return;
     rankingSnapshot = snapshot;
-    $('#ranking-list').innerHTML=rows.length?`<div class="table-wrap"><table class="global-table"><thead><tr><th>Pos.</th><th>Giocatore</th><th>Elo</th><th>Partite</th><th>V–S</th></tr></thead><tbody>${rows.map(p=>`<tr><td class="rank">${p.rank}</td><td><a class="ranking-player" href="/profilo/${encodeURIComponent(p.id)}" aria-label="Apri profilo di ${esc(p.name)}">${avatar(p.name,p.photo_url,p.avatar_hue,p.avatar_color)}<span class="ranking-name" title="${esc(p.name)}">${esc(p.name)}</span></a></td><td><strong>${p.rating}</strong></td><td>${p.matches}</td><td>${p.wins}–${p.losses}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">La classifica apparirà dopo l’aggiunta dei giocatori.</p>';
+    $('#ranking-list').innerHTML=rows.length?`<div class="table-wrap"><table class="global-table"><thead><tr><th>Pos.</th><th>Giocatore</th><th>Elo</th><th>Partite</th><th>V–S</th></tr></thead><tbody>${rows.map(p=>`<tr><td class="rank">${p.rank}${rankingMovement(p.movement, 'rank')}</td><td><a class="ranking-player" href="/profilo/${encodeURIComponent(p.id)}" aria-label="Apri profilo di ${esc(p.name)}">${avatar(p.name,p.photo_url,p.avatar_hue,p.avatar_color)}<span class="ranking-name" title="${esc(p.name)}">${esc(p.name)}</span></a></td><td><strong>${p.rating}</strong>${rankingMovement(p.movement, 'rating')}</td><td>${p.matches}</td><td>${p.wins}–${p.losses}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">La classifica apparirà dopo l’aggiunta dei giocatori.</p>';
   }
   const errorBox = id => $(id);
   function message(text, kind='success') { const node=document.createElement('div');node.className=`toast ${kind==='error'?'error':''}`;node.textContent=text;$('#toast-region').append(node);setTimeout(()=>node.remove(),4200); }
