@@ -244,3 +244,54 @@ def test_completed_final_hides_champion_until_reveal(app_factory):
         assert player.get('/api/public/tournaments').json()[0]['champion_id'] is None
         assert player.post(f'/api/player/tournaments/{tid}/reveal',headers={'X-Player-CSRF':session['csrf_token']}).status_code==200
         assert player.get(f'/api/public/tournaments/{tid}').json()['champion_id']==match['p1']
+
+
+def test_player_can_update_own_avatar_color_and_photo(app_factory):
+    from io import BytesIO
+    from PIL import Image
+    from test_api import player
+    app=app_factory()
+    with TestClient(app) as admin, TestClient(app) as user:
+        headers=admin_headers(admin)
+        alice=player(admin,headers,'Alice')
+        bob=player(admin,headers,'Bob')
+        session=user.post('/api/player/login',json={'player_id':alice['id']}).json()
+        csrf={'X-Player-CSRF':session['csrf_token']}
+        assert user.patch('/api/player/profile',json={'avatar_color':'#FF8800'}).status_code==403
+        changed=user.patch('/api/player/profile',headers=csrf,json={'avatar_color':'#FF8800'})
+        assert changed.status_code==200 and changed.json()['avatar_color']=='#ff8800'
+        assert user.patch('/api/player/profile',headers=csrf,json={'avatar_color':'red'}).status_code==422
+        assert user.patch('/api/player/profile',headers=csrf,json={'player_id':bob['id'],'avatar_color':'#00ff00'}).status_code==422
+        photo=BytesIO();Image.new('RGB',(8,8),'red').save(photo,format='PNG')
+        uploaded=user.post('/api/player/profile/photo',headers=csrf,files={'file':('avatar.png',photo.getvalue(),'image/png')})
+        assert uploaded.status_code==200
+        assert user.get(uploaded.json()['photo_url']).status_code==200
+        assert user.delete('/api/player/profile/photo',headers=csrf).status_code==200
+        ranking={p['id']:p for p in user.get('/api/public/ranking').json()}
+        assert ranking[alice['id']]['avatar_color']=='#ff8800' and ranking[alice['id']]['photo_url'] is None
+        assert ranking[bob['id']]['avatar_color'] is None
+
+
+def test_invalid_profile_photo_preserves_previous_image_and_backup_restores_color(app_factory):
+    from io import BytesIO
+    from PIL import Image
+    from test_api import player
+    app=app_factory()
+    with TestClient(app) as admin, TestClient(app) as user:
+        headers=admin_headers(admin)
+        person=player(admin,headers,'Alice')
+        session=user.post('/api/player/login',json={'player_id':person['id']}).json()
+        csrf={'X-Player-CSRF':session['csrf_token']}
+        assert user.patch('/api/player/profile',headers=csrf,json={'avatar_color':'#123456'}).status_code==200
+        photo=BytesIO();Image.new('RGB',(8,8),'green').save(photo,format='PNG')
+        url=user.post('/api/player/profile/photo',headers=csrf,files={'file':('ok.png',photo.getvalue(),'image/png')}).json()['photo_url']
+        assert user.post('/api/player/profile/photo',headers=csrf,files={'file':('bad.png',b'bad','image/png')}).status_code==422
+        assert user.get('/api/player/profile').json()['photo_url']==url
+        archive=admin.get('/api/admin/backup',headers=headers).content
+        assert user.patch('/api/player/profile',headers=csrf,json={'avatar_color':'#ffffff'}).status_code==200
+        restored=admin.post('/api/admin/restore?confirm=true',headers=headers,files={'file':('backup.zip',archive,'application/zip')})
+        assert restored.status_code==200
+        assert user.get('/api/player/profile').status_code==401
+        user.post('/api/player/login',json={'player_id':person['id']})
+        profile=user.get('/api/player/profile').json()
+        assert profile['avatar_color']=='#123456' and profile['photo_url']==url

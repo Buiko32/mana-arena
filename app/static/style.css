@@ -241,3 +241,13 @@ tr.is-me td{background:#173b55}
 .player-strip .player-chip .avatar{flex:0 0 34px}
 .player-strip .player-chip>span:not(.avatar):not(.player-status):not(.badge){min-width:0;overflow-wrap:anywhere}
 .player-strip .player-status,.player-strip .badge{flex-shrink:0}
+/* Active tournaments use a violet and gold aura, distinct from player and action colours. */
+.tournament-card.is-active-tournament{border:1px solid #d8aaef;background:linear-gradient(145deg,#2c1c3a,#171822);box-shadow:inset 0 0 0 1px #c98bea,0 0 22px #a05ff466;animation:active-violet-aura 3s ease-in-out infinite alternate}
+.tournament-card.is-active-tournament .state-tag{color:#f8c86a}
+.tournament-card.is-active-tournament::after{color:#ffdf8c;text-shadow:0 0 10px #ffbb4c;animation:arena-sparkle 2s ease-in-out infinite alternate}
+@keyframes active-violet-aura{from{box-shadow:inset 0 0 0 1px #c98bea,0 0 12px #a05ff455}to{box-shadow:inset 0 0 0 1px #ebc2ff,0 0 30px #aa6aff99}}
+@media(prefers-reduced-motion:reduce){.tournament-card.is-active-tournament,.tournament-card.is-active-tournament::after{animation:none}}
+#profile-open{min-width:42px;min-height:42px;padding:.45rem;flex:none}.profile-panel,.profile-form{display:grid;gap:.7rem}.profile-panel{max-height:65vh;overflow:auto}.profile-name{font-weight:700;margin:0}.profile-preview{display:flex;justify-content:center}.profile-preview img,.profile-color-preview{width:100px;height:100px;border:2px solid #a4c9d4;border-radius:50%;object-fit:cover}.profile-form label{display:grid;gap:.35rem}.profile-form input[type=color]{width:72px;padding:.2rem;cursor:pointer}.profile-form input[type=file]{max-width:100%}#profile-status{margin:0;color:#b9f4df}
+
+.profile-preview{gap:1.5rem}.profile-preview>div{display:grid;justify-items:center;gap:.35rem;font-size:.8rem;color:var(--muted)}.profile-preview .avatar{width:100px;height:100px;border:2px solid #a4c9d4}#profile-avatar-preview{display:block}
+@media(max-width:650px){.topbar .session-area{flex-basis:80px}.topbar .session-area select{font-size:.75rem}}
