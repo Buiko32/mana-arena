@@ -172,6 +172,14 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
     application = FastAPI(title="Mana Arena", version="1.0.0", lifespan=lifespan)
     application.state.db = db
 
+    @application.middleware("http")
+    async def private_player_data(request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith(('/api/player/', '/api/public/tournaments/')):
+            response.headers['Cache-Control'] = 'private, no-store'
+            response.headers['Vary'] = 'Cookie'
+        return response
+
     def admin_session(request: Request):
         auth: AuthManager = request.app.state.auth
         token = request.cookies.get(SESSION_COOKIE)
@@ -243,7 +251,15 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
     def player_results(session=Depends(player_session)):
         with db.transaction() as conn:
             rows = conn.execute("SELECT r.*,a.name AS proposer_name,b.name AS opponent_name,w.name AS winner_name FROM result_proposals r JOIN players a ON a.id=r.proposer_id JOIN players b ON b.id=r.opponent_id JOIN players w ON w.id=r.winner_id WHERE (r.proposer_id=? OR r.opponent_id=?) AND (r.status='pending' OR r.id IN (SELECT id FROM result_proposals WHERE (proposer_id=? OR opponent_id=?) AND status='confirmed' ORDER BY created_at DESC LIMIT 100)) ORDER BY r.created_at DESC", (session['player_id'],session['player_id'],session['player_id'],session['player_id'])).fetchall()
-            return [dict(row) for row in rows]
+            visible = []
+            for row in rows:
+                if row['tournament_id'] and row['status']=='pending':
+                    matches = Database.get_matches(conn, row['tournament_id'])
+                    current, revealed = reveal_state(conn, row['tournament_id'], matches, session['player_id'])
+                    match = next((m for m in matches if m['id']==row['match_id']),None)
+                    if match and current is not None and match['round']>=current and not revealed: continue
+                visible.append(dict(row))
+            return visible
 
     @application.post('/api/player/results', status_code=201)
     async def propose_result(request: Request, session=Depends(player_write)):
@@ -252,7 +268,10 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             if tid:
                 tournament=_row_tournament(conn,tid)
                 if tournament['status']!='active': _detail(409,'Il torneo non è attivo.')
-                match=next((m for m in Database.get_matches(conn,tid) if m['id']==mid),None)
+                matches = Database.get_matches(conn,tid)
+                current, revealed = reveal_state(conn,tid,matches,player)
+                if not revealed: _detail(403,'Scopri prima il tuo incontro.')
+                match=next((m for m in matches if m['id']==mid and m['round']==current),None)
                 if not match or player not in (match.get('p1'),match.get('p2')) or match.get('bye') or match.get('result') or match.get('void'): _detail(409,'Incontro non disponibile.')
                 opponent=match['p2'] if match['p1']==player else match['p1']
                 if conn.execute("SELECT 1 FROM result_proposals WHERE tournament_id=? AND match_id=? AND status='pending'",(tid,mid)).fetchone(): _detail(409,'Esiste già una proposta per questo incontro.')
@@ -272,6 +291,8 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             if proposal['opponent_id']!=session['player_id']: _detail(403,'Solo l’avversario può confermare.')
             if proposal['status']!='pending': _detail(409,'Proposta già gestita.')
             if proposal['tournament_id']:
+                current, revealed = reveal_state(conn,proposal['tournament_id'],Database.get_matches(conn,proposal['tournament_id']),session['player_id'])
+                if not revealed: _detail(403,'Scopri prima il tuo incontro.')
                 tid=proposal['tournament_id']; tournament=_row_tournament(conn,tid)
                 if tournament['status']!='active': _detail(409,'Il torneo non è attivo.')
                 matches=Database.get_matches(conn,tid); match=next((m for m in matches if m['id']==proposal['match_id']),None)
@@ -942,13 +963,40 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
                      "matches": row["matches"], "wins": row["wins"], "draws": row["draws"], "losses": row["losses"],
                      "photo_url": f"/photos/{row['photo']}" if row.get("photo") else None, "avatar_hue": row["avatar_hue"]} for i, row in enumerate(rows, 1)]
 
+    def reveal_state(conn, tid, matches, pid):
+        pending = [m['round'] for m in matches if not m.get('result') and not m.get('void')]
+        if not matches: return None, True
+        current = min(pending) if pending else max(m['round'] for m in matches)
+        round_matches = [m for m in matches if m['round'] == current]
+        data = [[m['id'], m.get('p1'), m.get('p2')] for m in round_matches]
+        fingerprint = hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
+        row = conn.execute('SELECT fingerprint FROM round_reveals WHERE tournament_id=? AND player_id=? AND round_no=?', (tid,pid,current)).fetchone() if pid else None
+        return current, bool(row and row['fingerprint'] == fingerprint)
+
+    @application.post('/api/player/tournaments/{tid}/reveal')
+    def reveal_round(tid: str, session=Depends(player_write)):
+        with MUTATION_LOCK, db.transaction() as conn:
+            tournament = _row_tournament(conn, tid)
+            if tournament['status'] not in ('active', 'completed'): _detail(409, 'Nessun turno disponibile.')
+            matches = Database.get_matches(conn, tid)
+            current, _ = reveal_state(conn, tid, matches, session['player_id'])
+            if current is None: _detail(409, 'Nessun incontro disponibile.')
+            match = next((m for m in matches if m['round']==current and session['player_id'] in (m.get('p1'),m.get('p2'))),None)
+            round_matches = [m for m in matches if m['round']==current]
+            data = [[m['id'], m.get('p1'), m.get('p2')] for m in round_matches]
+            fingerprint = hashlib.sha256(json.dumps(data,sort_keys=True).encode()).hexdigest()
+            conn.execute('INSERT OR REPLACE INTO round_reveals VALUES(?,?,?,?)',(tid,session['player_id'],current,fingerprint))
+            other = (match.get('p2') if match.get('p1')==session['player_id'] else match.get('p1')) if match else None
+            person = conn.execute('SELECT * FROM players WHERE id=?',(other,)).fetchone() if other else None
+            return {'round':current,'opponent':Database.public_player(person) if person else None,'bye':bool(match and match.get('bye')),'unpaired':match is None}
+
     @application.get("/api/public/tournaments")
     def public_tournaments():
         with db.transaction() as conn:
             rows = conn.execute("SELECT * FROM tournaments WHERE status IN ('active','completed') ORDER BY created_at DESC,id").fetchall()
-            return [{"id": row["id"], "config": json.loads(row["frozen_config_json"] or row["config_json"]), "status": row["status"], "champion_id": row["champion_id"]} for row in rows]
+            return [{"id": row["id"], "config": json.loads(row["frozen_config_json"] or row["config_json"]), "status": row["status"], "champion_id": None} for row in rows]
 
-    def public_detail(tid):
+    def public_detail(tid, request: Request):
         with db.transaction() as conn:
             tournament = _row_tournament(conn, tid)
             if tournament["status"] not in ("active", "completed"):
@@ -956,22 +1004,27 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             entrants = Database.get_entrants(conn, tid)
             matches = Database.get_matches(conn, tid)
             cfg = tournament["frozen_config"] or tournament["config"]
+            token = request.cookies.get('mana_player_session', '')
+            token_hash = hashlib.sha256(token.encode()).hexdigest()
+            active = conn.execute("SELECT player_id FROM player_sessions WHERE token_hash=? AND expires_at>strftime('%s','now')", (token_hash,)).fetchone()
+            current, revealed = reveal_state(conn, tid, matches, active['player_id'] if active else None)
+            shown = matches if current is None else [m for m in matches if m['round'] < current or (revealed and m['round'] == current)]
             public_entrants = [{"id": p["id"], "name": p["name"], "photo_url": p["photo_url"], "avatar_hue": p["avatar_hue"], "seed": p["seed"], "withdrawn": p["withdrawn"]} for p in entrants]
             return {"id": tid, "config": cfg, "status": tournament["status"], "entrants": public_entrants,
-                    "matches": matches, "rounds": public_rounds(matches), "standings": engine.calculate_standings(cfg, entrants, matches),
-                    "champion_id": tournament["champion_id"], "warnings": tournament["warnings"]}
+                    "matches": shown, "rounds": public_rounds(shown), "reveal_available": current is not None, "reveal_locked": current is not None and not revealed, "standings": engine.calculate_standings(cfg, entrants, shown),
+                    "champion_id": tournament["champion_id"] if revealed else None, "warnings": tournament["warnings"] if revealed else []}
 
     @application.get("/api/public/tournaments/{tid}")
-    def public_tournament(tid: str):
-        return public_detail(tid)
+    def public_tournament(tid: str, request: Request):
+        return public_detail(tid, request)
 
     @application.get("/api/public/tournaments/{tid}/standings")
-    def public_standings(tid: str):
-        return public_detail(tid)["standings"]
+    def public_standings(tid: str, request: Request):
+        return public_detail(tid, request)["standings"]
 
     @application.get("/api/public/tournaments/{tid}/rounds")
-    def public_tournament_rounds(tid: str):
-        return public_detail(tid)["rounds"]
+    def public_tournament_rounds(tid: str, request: Request):
+        return public_detail(tid, request)["rounds"]
 
     return application
 

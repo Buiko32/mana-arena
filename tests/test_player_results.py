@@ -9,7 +9,7 @@ def test_players_confirm_results_and_cannot_confirm_their_own(app_factory):
         tid, players = tournament_with_players(admin, headers)
         assert start(admin, tid, headers).status_code == 200
         assert admin.post(f'/api/admin/tournaments/{tid}/rounds/next', json={}, headers=headers).status_code == 200
-        match = admin.get(f'/api/public/tournaments/{tid}').json()['matches'][0]
+        match = admin.get(f'/api/admin/tournaments/{tid}',headers=headers).json()['matches'][0]
         tokens = []
         for client, person in zip((a, b), players):
             credential = admin.post(f"/api/admin/players/{person['id']}/credential", headers=headers)
@@ -17,13 +17,14 @@ def test_players_confirm_results_and_cannot_confirm_their_own(app_factory):
             response = client.post('/api/player/login', json={'player_id': person['id'], 'password': credential.json()['password']})
             assert response.status_code == 200
             tokens.append({'X-Player-CSRF': response.json()['csrf_token']})
+            assert client.post(f'/api/player/tournaments/{tid}/reveal', headers=tokens[-1]).status_code == 200
         proposal = a.post('/api/player/results', headers=tokens[0], json={'tournament_id': tid, 'match_id': match['id'], 'winner_id': players[0]['id']})
         assert proposal.status_code == 201
         pid = proposal.json()['id']
         assert a.post(f'/api/player/results/{pid}/confirm', headers=tokens[0]).status_code == 403
-        assert admin.get(f'/api/public/tournaments/{tid}').json()['matches'][0].get('result') is None
+        assert admin.get(f'/api/admin/tournaments/{tid}',headers=headers).json()['matches'][0].get('result') is None
         assert b.post(f'/api/player/results/{pid}/confirm', headers=tokens[1]).status_code == 200
-        assert admin.get(f'/api/public/tournaments/{tid}').json()['matches'][0]['result'] in ('p1_win', 'p2_win')
+        assert admin.get(f'/api/admin/tournaments/{tid}',headers=headers).json()['matches'][0]['result'] in ('p1_win', 'p2_win')
 
 
 def test_friendly_requires_auth_csrf_and_opponent_confirmation(app_factory):
@@ -88,6 +89,7 @@ def test_rollback_invalidates_pending_proposal(app_factory):
         for client, person in zip((a,b),people):
             password=admin.post(f"/api/admin/players/{person['id']}/credential", headers=headers).json()['password']
             tokens.append({'X-Player-CSRF':client.post('/api/player/login',json={'player_id':person['id'],'password':password}).json()['csrf_token']})
+            assert client.post(f'/api/player/tournaments/{tid}/reveal',headers=tokens[-1]).status_code==200
         rid=a.post('/api/player/results',headers=tokens[0],json={'tournament_id':tid,'match_id':match['id'],'winner_id':people[0]['id']}).json()['id']
         assert admin.post(f'/api/admin/tournaments/{tid}/rollback',headers=headers,json={'match_id':match['id'],'confirm':True}).status_code==200
         assert b.post(f'/api/player/results/{rid}/confirm',headers=tokens[1]).status_code==409
@@ -104,7 +106,7 @@ def test_withdrawal_does_not_create_unconfirmed_forfeit(tmp_path):
         match=client.post(f'/api/admin/tournaments/{tid}/rounds/next',json={},headers=headers).json()['matches'][0]
         response=client.post(f'/api/admin/tournaments/{tid}/withdrawals',json={'player_id':people[0]['id']},headers=headers)
         assert response.status_code==403
-        assert client.get(f'/api/public/tournaments/{tid}').json()['matches'][0].get('result') is None
+        assert client.get(f'/api/admin/tournaments/{tid}',headers=headers).json()['matches'][0].get('result') is None
 
 
 def test_player_selects_identity_without_a_code(app_factory):
@@ -126,3 +128,119 @@ def test_new_players_receive_distinct_available_colors(app_factory):
         headers = admin_headers(client)
         players = [player(client, headers, f'Colore {i}') for i in range(8)]
         assert len({p['avatar_hue'] for p in players}) == len(players)
+
+
+def test_next_round_hidden_until_player_reveals(app_factory):
+    app = app_factory()
+    with TestClient(app) as admin, TestClient(app) as a, TestClient(app) as b:
+        headers=admin_headers(admin)
+        tid, people=tournament_with_players(admin, headers)
+        assert start(admin, tid, headers).status_code==200
+        assert admin.post(f'/api/admin/tournaments/{tid}/rounds/next',headers=headers,json={}).status_code==200
+        for client,person in zip((a,b),people):
+            login=client.post('/api/player/login',json={'player_id':person['id']})
+            assert login.status_code==200
+        assert a.get(f'/api/public/tournaments/{tid}').json()['matches']==[]
+        session=a.get('/api/player/session').json()
+        reveal=a.post(f'/api/player/tournaments/{tid}/reveal',headers={'X-Player-CSRF':session['csrf_token']})
+        assert reveal.status_code==200
+        assert reveal.json()['opponent']['id']==people[1]['id']
+        assert len(a.get(f'/api/public/tournaments/{tid}').json()['matches'])==1
+        assert b.get(f'/api/public/tournaments/{tid}').json()['matches']==[]
+
+
+def test_future_league_rounds_stay_hidden_after_reveal(app_factory):
+    from test_api import config
+    app=app_factory()
+    with TestClient(app) as admin, TestClient(app) as player:
+        headers=admin_headers(admin)
+        tid, people=tournament_with_players(admin,headers,4,config(structure='league',rounds=None,league_mode='single'))
+        assert start(admin,tid,headers).status_code==200
+        session=player.post('/api/player/login',json={'player_id':people[0]['id']}).json()
+        assert player.get(f'/api/public/tournaments/{tid}').json()['matches']==[]
+        assert player.post(f'/api/player/tournaments/{tid}/reveal',headers={'X-Player-CSRF':session['csrf_token']}).status_code==200
+        shown=player.get(f'/api/public/tournaments/{tid}').json()['matches']
+        assert shown and {m['round'] for m in shown}=={1}
+
+
+def test_player_responses_are_not_cacheable(app_factory):
+    app=app_factory()
+    with TestClient(app) as client:
+        headers=admin_headers(client)
+        tid, people=tournament_with_players(client,headers)
+        start(client,tid,headers)
+        client.post(f'/api/admin/tournaments/{tid}/rounds/next',headers=headers,json={})
+        client.post('/api/player/login',json={'player_id':people[0]['id']})
+        for path in (f'/api/public/tournaments/{tid}',f'/api/public/tournaments/{tid}/rounds','/api/player/results'):
+            response=client.get(path)
+            assert 'no-store' in response.headers['cache-control']
+            assert 'Cookie' in response.headers['vary']
+
+
+def test_unrevealed_player_cannot_see_pending_confirmation(app_factory):
+    app=app_factory()
+    with TestClient(app) as admin, TestClient(app) as a, TestClient(app) as b:
+        headers=admin_headers(admin)
+        tid, people=tournament_with_players(admin,headers)
+        start(admin,tid,headers)
+        match=admin.post(f'/api/admin/tournaments/{tid}/rounds/next',headers=headers,json={}).json()['matches'][0]
+        tokens=[]
+        for client, person in zip((a,b),people):
+            login=client.post('/api/player/login',json={'player_id':person['id']}).json()
+            tokens.append({'X-Player-CSRF':login['csrf_token']})
+        body={'tournament_id':tid,'match_id':match['id'],'winner_id':people[0]['id']}
+        assert a.post('/api/player/results',json=body,headers=tokens[0]).status_code==403
+        assert a.post(f'/api/player/tournaments/{tid}/reveal',headers=tokens[0]).status_code==200
+        assert a.post('/api/player/results',json=body,headers=tokens[0]).status_code==201
+        assert b.get('/api/player/results').json()==[]
+        assert b.post(f'/api/player/tournaments/{tid}/reveal',headers=tokens[1]).status_code==200
+        assert len(b.get('/api/player/results').json())==1
+
+
+def test_completed_round_is_hidden_until_bye_player_reveals(app_factory):
+    app=app_factory()
+    with TestClient(app) as admin, TestClient(app) as bye_player:
+        headers=admin_headers(admin)
+        tid,people=tournament_with_players(admin,headers,3)
+        start(admin,tid,headers)
+        matches=admin.post(f'/api/admin/tournaments/{tid}/rounds/next',headers=headers,json={}).json()['matches']
+        bye=next(m for m in matches if m.get('bye'))
+        played=next(m for m in matches if not m.get('bye'))
+        session=bye_player.post('/api/player/login',json={'player_id':bye['p1']}).json()
+        assert admin.put(f"/api/admin/tournaments/{tid}/matches/{played['id']}/result",headers=headers,json={'result':'p1_win','p1_games':1,'p2_games':0}).status_code==200
+        assert bye_player.get(f'/api/public/tournaments/{tid}').json()['matches']==[]
+        response=bye_player.post(f'/api/player/tournaments/{tid}/reveal',headers={'X-Player-CSRF':session['csrf_token']})
+        assert response.status_code==200 and response.json()['bye'] is True
+
+
+def test_player_without_match_can_unlock_view(app_factory):
+    from test_api import player
+    app=app_factory()
+    with TestClient(app) as admin, TestClient(app) as spectator:
+        headers=admin_headers(admin)
+        tid, _=tournament_with_players(admin,headers)
+        observer=player(admin,headers,'Spettatore')
+        start(admin,tid,headers)
+        admin.post(f'/api/admin/tournaments/{tid}/rounds/next',headers=headers,json={})
+        login=spectator.post('/api/player/login',json={'player_id':observer['id']}).json()
+        assert spectator.get(f'/api/public/tournaments/{tid}').json()['matches']==[]
+        response=spectator.post(f'/api/player/tournaments/{tid}/reveal',headers={'X-Player-CSRF':login['csrf_token']})
+        assert response.status_code==200 and response.json()['unpaired']
+        assert spectator.get(f'/api/public/tournaments/{tid}').json()['matches']
+
+
+def test_completed_final_hides_champion_until_reveal(app_factory):
+    from test_api import config
+    app=app_factory()
+    with TestClient(app) as admin, TestClient(app) as player:
+        headers=admin_headers(admin)
+        tid, people=tournament_with_players(admin,headers,2,config(rounds=1))
+        start(admin,tid,headers)
+        match=admin.post(f'/api/admin/tournaments/{tid}/rounds/next',headers=headers,json={}).json()['matches'][0]
+        assert admin.put(f"/api/admin/tournaments/{tid}/matches/{match['id']}/result",headers=headers,json={'result':'p1_win','p1_games':1,'p2_games':0}).status_code==200
+        session=player.post('/api/player/login',json={'player_id':people[0]['id']}).json()
+        detail=player.get(f'/api/public/tournaments/{tid}').json()
+        assert detail['matches']==[] and detail['champion_id'] is None
+        assert player.get('/api/public/tournaments').json()[0]['champion_id'] is None
+        assert player.post(f'/api/player/tournaments/{tid}/reveal',headers={'X-Player-CSRF':session['csrf_token']}).status_code==200
+        assert player.get(f'/api/public/tournaments/{tid}').json()['champion_id']==match['p1']

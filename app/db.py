@@ -78,6 +78,7 @@ class Database:
             conn.executescript("""
                 CREATE TABLE IF NOT EXISTS player_credentials (player_id TEXT PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE, salt BLOB NOT NULL, password_hash BLOB NOT NULL);
                 CREATE TABLE IF NOT EXISTS player_sessions (token_hash TEXT PRIMARY KEY, player_id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE, csrf TEXT NOT NULL, expires_at INTEGER NOT NULL);
+                CREATE TABLE IF NOT EXISTS round_reveals (tournament_id TEXT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE, player_id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE, round_no INTEGER NOT NULL, fingerprint TEXT NOT NULL, PRIMARY KEY(tournament_id,player_id,round_no));
                 CREATE TABLE IF NOT EXISTS result_proposals (id TEXT PRIMARY KEY, proposer_id TEXT NOT NULL REFERENCES players(id), opponent_id TEXT NOT NULL REFERENCES players(id), tournament_id TEXT REFERENCES tournaments(id) ON DELETE CASCADE, match_id TEXT, winner_id TEXT NOT NULL REFERENCES players(id), status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
             """)
             player_columns = {row[1] for row in conn.execute("PRAGMA table_info(players)")}

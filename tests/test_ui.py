@@ -143,9 +143,9 @@ def test_public_pairing_reveal_uses_accessible_dialog_and_local_script(tmp_path)
         helper = client.get("/static/reveal.js")
     assert helper.status_code == 200
     assert page.index('/static/reveal.js') < page.index('/static/app.js')
-    for marker in ('id="reveal-dialog"', 'id="reveal-player"', 'id="reveal-round"', 'aria-live="polite"'):
+    for marker in ('id="reveal-dialog"', 'class="crystal-ball"', 'id="reveal-result"', 'aria-live="polite"'):
         assert marker in page
-    assert 'data-reveal-open' in js and 'ManaReveal.findPairing' in js
+    assert 'data-reveal-open' in js and '/reveal' in js
     assert 'prefers-reduced-motion: reduce' in js
 
 
