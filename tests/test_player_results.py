@@ -177,7 +177,7 @@ def test_player_responses_are_not_cacheable(app_factory):
             assert 'Cookie' in response.headers['vary']
 
 
-def test_unrevealed_player_cannot_see_pending_confirmation(app_factory):
+def test_unrevealed_players_can_propose_and_confirm(app_factory):
     app=app_factory()
     with TestClient(app) as admin, TestClient(app) as a, TestClient(app) as b:
         headers=admin_headers(admin)
@@ -189,15 +189,16 @@ def test_unrevealed_player_cannot_see_pending_confirmation(app_factory):
             login=client.post('/api/player/login',json={'player_id':person['id']}).json()
             tokens.append({'X-Player-CSRF':login['csrf_token']})
         body={'tournament_id':tid,'match_id':match['id'],'winner_id':people[0]['id']}
-        assert a.post('/api/player/results',json=body,headers=tokens[0]).status_code==403
-        assert a.post(f'/api/player/tournaments/{tid}/reveal',headers=tokens[0]).status_code==200
-        assert a.post('/api/player/results',json=body,headers=tokens[0]).status_code==201
-        assert b.get('/api/player/results').json()==[]
-        assert b.post(f'/api/player/tournaments/{tid}/reveal',headers=tokens[1]).status_code==200
+        assert len(a.get('/api/player/matches').json()) == 1
+        proposal = a.post('/api/player/results',json=body,headers=tokens[0])
+        assert proposal.status_code==201
         assert len(b.get('/api/player/results').json())==1
+        assert b.post(f"/api/player/results/{proposal.json()['id']}/confirm",headers=tokens[1]).status_code==200
+        tournament = admin.get(f'/api/admin/tournaments/{tid}',headers=headers).json()
+        assert max(m['round'] for m in tournament['matches']) == 2
 
 
-def test_completed_round_is_hidden_until_bye_player_reveals(app_factory):
+def test_new_round_is_hidden_until_bye_player_reveals(app_factory):
     app=app_factory()
     with TestClient(app) as admin, TestClient(app) as bye_player:
         headers=admin_headers(admin)
@@ -208,9 +209,10 @@ def test_completed_round_is_hidden_until_bye_player_reveals(app_factory):
         played=next(m for m in matches if not m.get('bye'))
         session=bye_player.post('/api/player/login',json={'player_id':bye['p1']}).json()
         assert admin.put(f"/api/admin/tournaments/{tid}/matches/{played['id']}/result",headers=headers,json={'result':'p1_win','p1_games':1,'p2_games':0}).status_code==200
-        assert bye_player.get(f'/api/public/tournaments/{tid}').json()['matches']==[]
+        visible = bye_player.get(f'/api/public/tournaments/{tid}').json()['matches']
+        assert visible and all(m['round'] == 1 for m in visible)
         response=bye_player.post(f'/api/player/tournaments/{tid}/reveal',headers={'X-Player-CSRF':session['csrf_token']})
-        assert response.status_code==200 and response.json()['bye'] is True
+        assert response.status_code==200 and response.json()['round'] == 2
 
 
 def test_player_without_match_can_unlock_view(app_factory):

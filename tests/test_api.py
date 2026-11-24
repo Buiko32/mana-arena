@@ -316,9 +316,8 @@ def test_result_and_round_persistence_and_duplicate_guard(client):
     assert client.put(f"/api/admin/tournaments/{tid}/matches/{match['id']}/result", json={"result": "p2_win", "p1_games": 0, "p2_games": 1}, headers=headers).status_code == 409
     other = next(m for m in round1["matches"] if m["id"] != match["id"])
     assert client.put(f"/api/admin/tournaments/{tid}/matches/{other['id']}/result", json={"result": "p1_win", "p1_games": 1, "p2_games": 0}, headers=headers).status_code == 200
-    round2 = client.post(f"/api/admin/tournaments/{tid}/rounds/next", json={}, headers=headers)
-    assert round2.status_code == 200
-    assert round2.json()["round"] == 2
+    all_matches = client.get(f"/api/admin/tournaments/{tid}", headers=headers).json()["matches"]
+    assert len([m for m in all_matches if m["round"] == 2]) == 2
     assert client.post(f"/api/admin/tournaments/{tid}/rounds/next", json={}, headers=headers).status_code == 409
     persisted = client.get(f"/api/public/tournaments/{tid}/rounds").json()
     assert len(persisted) == 1
@@ -461,8 +460,8 @@ def test_rollback_restores_withdrawal_state_and_swiss_regeneration(client):
     first = client.post(f"/api/admin/tournaments/{tid}/rounds/next", json={}, headers=headers).json()
     for match in first["matches"]:
         assert client.put(f"/api/admin/tournaments/{tid}/matches/{match['id']}/result", json={"result":"p1_win","p1_games":1,"p2_games":0}, headers=headers).status_code == 200
-    second = client.post(f"/api/admin/tournaments/{tid}/rounds/next", json={}, headers=headers).json()
-    withdrawn_id = second["matches"][0]["p1"]
+    second = [m for m in client.get(f"/api/admin/tournaments/{tid}", headers=headers).json()["matches"] if m["round"] == 2]
+    withdrawn_id = second[0]["p1"]
     outcome = client.post(f"/api/admin/tournaments/{tid}/withdrawals", json={"player_id":withdrawn_id}, headers=headers)
     assert outcome.status_code == 200
     assert outcome.json()["effective_round"] == 2
@@ -475,7 +474,7 @@ def test_rollback_restores_withdrawal_state_and_swiss_regeneration(client):
     assert any(withdrawn_id in (match["p1"],match["p2"]) for match in regenerated.json()["matches"])
 
 
-def test_swiss_withdrawal_uses_next_round_when_no_round_is_open(client):
+def test_swiss_withdrawal_forfeits_the_automatically_created_round(client):
     headers = admin_headers(client)
     tid, people = tournament_with_players(client, headers, 4, config(rounds=3))
     start(client, tid, headers)
@@ -484,8 +483,9 @@ def test_swiss_withdrawal_uses_next_round_when_no_round_is_open(client):
         assert client.put(f"/api/admin/tournaments/{tid}/matches/{match['id']}/result", json={"result":"p1_win","p1_games":1,"p2_games":0}, headers=headers).status_code == 200
     response = client.post(f"/api/admin/tournaments/{tid}/withdrawals", json={"player_id":people[0]["id"]}, headers=headers)
     assert response.status_code == 200 and response.json()["effective_round"] == 2
-    next_round = client.post(f"/api/admin/tournaments/{tid}/rounds/next", json={}, headers=headers).json()
-    assert all(people[0]["id"] not in (match["p1"],match["p2"]) for match in next_round["matches"])
+    matches = client.get(f"/api/admin/tournaments/{tid}", headers=headers).json()["matches"]
+    withdrawn_match = next(m for m in matches if m["round"] == 2 and people[0]["id"] in (m["p1"], m["p2"]))
+    assert withdrawn_match["result"] in ("p1_forfeit", "p2_forfeit")
 
 
 def _zip_with_database(database_bytes):
@@ -537,7 +537,7 @@ def test_restore_rolls_back_files_if_post_validation_activation_fails(client, mo
     assert {"Dati precedenti","Solo nel DB attuale"}.issubset(names)
 
 
-def test_archive_reopen_restores_completed_state_without_champion(client):
+def test_archive_reopen_restores_automatically_completed_tournament(client):
     headers = admin_headers(client)
     cfg = config(structure="single_elim", rounds=None, loss_threshold=None)
     tid, people = tournament_with_players(client, headers, 4, cfg)
@@ -545,9 +545,12 @@ def test_archive_reopen_restores_completed_state_without_champion(client):
     first = client.get(f"/api/admin/tournaments/{tid}", headers=headers).json()["matches"]
     assert len(first) == 2
     for person in people:
+        current = client.get(f"/api/admin/tournaments/{tid}", headers=headers).json()
+        if current["status"] == "completed":
+            break
         assert client.post(f"/api/admin/tournaments/{tid}/withdrawals",json={"player_id":person["id"]},headers=headers).status_code == 200
     completed = client.get(f"/api/admin/tournaments/{tid}",headers=headers).json()
-    assert completed["status"] == "completed" and completed["champion_id"] is None
+    assert completed["status"] == "completed"
     archived = client.post(f"/api/admin/tournaments/{tid}/archive",headers=headers)
     assert archived.status_code == 200 and archived.json()["status"] == "archived"
     reopened = client.post(f"/api/admin/tournaments/{tid}/reopen",headers=headers)
