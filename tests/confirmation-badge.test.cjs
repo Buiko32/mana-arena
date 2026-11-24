@@ -6,9 +6,9 @@ test('badge counts only results awaiting the current player and refreshes', asyn
   const handlers = {}, elements = {};
   const make = id => elements[id] = {id, hidden:false, value:'', textContent:'', options:[], setAttribute(k,v){this[k]=v}, showModal(){this.open=true}, addEventListener(n,fn){handlers[id+':'+n]=fn}, add(o){this.options.push(o)}, querySelector(){return null}, querySelectorAll(){return []}};
   for(const id of ['player-results-dialog','player-results-content','player-identity','profile-dialog','profile-content','profile-open','profile-close','confirmations-dialog','confirmations-content','confirmations-open','confirmations-count','confirmations-close','results-open','player-results-close']) make(id);
-  let pending=[{status:'pending',opponent_id:'p1'},{status:'pending',opponent_id:'p2'},{status:'confirmed',opponent_id:'p1'}], tick;
+  let pending=[{status:'pending',opponent_id:'p1'},{status:'pending',opponent_id:'p2'},{status:'confirmed',opponent_id:'p1'}], teamPending=[], tick;
   const document={querySelector:s=>elements[s.slice(1)], addEventListener(){},dispatchEvent(){},visibilityState:'visible'};
-  const fetch=async path=>({ok:true,json:async()=>path==='/api/player/session'?{player_id:'p1',name:'Uno'}:path==='/api/public/ranking'?[{id:'p1',photo_url:'/photos/1.jpg'},{id:'p2',avatar_hue:120}]:pending});
+  const fetch=async path=>({ok:true,json:async()=>path==='/api/player/session'?{player_id:'p1',name:'Uno'}:path==='/api/public/ranking'?[{id:'p1',photo_url:'/photos/1.jpg'},{id:'p2',avatar_hue:120}]:path==='/api/player/team-results'?teamPending:pending});
   const context={document,fetch,Headers,Event,CustomEvent:class{},Option:class{constructor(text,value){this.text=text;this.value=value}},localStorage:{setItem(){},removeItem(){}},window:{manaPlayerAvatar:(name,url)=>`<i>${name}:${url||''}</i>`},setInterval(fn){tick=fn}};
   vm.runInNewContext(fs.readFileSync('app/static/player-results.js','utf8'),context);
   await new Promise(resolve=>setImmediate(resolve));
@@ -20,6 +20,8 @@ test('badge counts only results awaiting the current player and refreshes', asyn
   assert.match(elements['confirmations-content'].innerHTML,/Due.*vs.*Uno/s);
   assert.match(elements['confirmations-content'].innerHTML,/confirmation-winner[^>]*>Vince Uno/);
   assert.match(elements['confirmations-content'].innerHTML,/\/photos\/1.jpg/);
-  pending=[];tick();await new Promise(resolve=>setImmediate(resolve));
+  pending=[];teamPending=[{status:'pending',players:[{player_id:'p1',team:'b',confirmed:0}]}];tick();await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(elements['confirmations-count'].textContent,'1');
+  teamPending[0].players[0].confirmed=1;tick();await new Promise(resolve=>setImmediate(resolve));
   assert.equal(elements['confirmations-count'].hidden,true);
 });
