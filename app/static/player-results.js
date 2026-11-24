@@ -59,7 +59,40 @@
   $('#player-results-close').addEventListener('click',()=>dialog.close());
   dialog.addEventListener('close',()=>{const id=session?.player_id||'';select.value=id;try{if(id)localStorage.setItem('mana-arena-player-id',id);else localStorage.removeItem('mana-arena-player-id');}catch{}});
   select.addEventListener('change',async()=>{++confirmationRequest;showConfirmationCount(0);const id=select.value;document.dispatchEvent(new Event('player-identity-changing'));try{if(!id){if(session)await post('/api/player/logout');session=null;localStorage.removeItem('mana-arena-player-id');}else{session=await post('/api/player/login',{player_id:id});localStorage.setItem('mana-arena-player-id',id);}document.dispatchEvent(new Event('player-identity-changed'));await refreshConfirmationCount();}catch(err){select.value=session?.player_id||'';document.dispatchEvent(new Event('player-identity-changed'));await refreshConfirmationCount();window.alert(err.message);}});
-  getSession().then(refreshConfirmationCount).catch(()=>{});
+  const welcome=$('#identity-welcome'), welcomeForm=$('#identity-welcome-form'), welcomeSelect=$('#identity-welcome-select'), welcomeMessage=$('#identity-welcome-message'), welcomeSubmit=$('#identity-welcome-submit');
+  async function showIdentityWelcome(){
+    if(!welcome)return;
+    if(!welcome.open)welcome.showModal();
+    try{
+      const list=await api('/api/public/ranking');
+      welcomeSelect.innerHTML='<option value="">Seleziona il tuo nome</option>'+list.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+      welcomeSubmit.disabled=!list.length;
+      welcomeMessage.textContent=list.length?'':'Non ci sono ancora giocatori. Puoi proseguire e aggiungerli nell’area organizzatore.';
+    }catch{welcomeSelect.innerHTML='<option value="">Giocatori non disponibili</option>';welcomeSubmit.disabled=true;welcomeMessage.textContent='Impossibile caricare i giocatori. Riprova ricaricando la pagina o prosegui senza scegliere.';}
+  }
+  if(welcome){
+    $('#identity-welcome-skip').addEventListener('click',()=>welcome.close());
+    welcomeForm.addEventListener('submit',async event=>{
+      event.preventDefault();const id=welcomeSelect.value;if(!id)return;
+      welcomeSubmit.disabled=true;welcomeMessage.textContent='';
+      try{
+        document.dispatchEvent(new Event('player-identity-changing'));
+        session=await post('/api/player/login',{player_id:id});
+        try{localStorage.setItem('mana-arena-player-id',id);}catch{}
+        if(![...select.options].some(o=>o.value===id))select.add(new Option(session.name,id));
+        select.value=id;document.dispatchEvent(new Event('player-identity-changed'));
+        welcome.close();await refreshConfirmationCount();
+      }catch(err){document.dispatchEvent(new Event('player-identity-changed'));welcomeMessage.textContent=err.message||'Impossibile selezionare il giocatore.';}
+      finally{welcomeSubmit.disabled=false;}
+    });
+  }
+  let rememberedPlayer='';try{rememberedPlayer=localStorage.getItem('mana-arena-player-id')||'';}catch{}
+  getSession().then(async()=>{
+    if(!session&&rememberedPlayer){
+      try{session=await post('/api/player/login',{player_id:rememberedPlayer});try{localStorage.setItem('mana-arena-player-id',session.player_id);}catch{}if(![...select.options].some(o=>o.value===session.player_id))select.add(new Option(session.name,session.player_id));select.value=session.player_id;document.dispatchEvent(new Event('player-identity-changed'));}catch{}
+    }
+    if(session)await refreshConfirmationCount();else await showIdentityWelcome();
+  }).catch(()=>showIdentityWelcome());
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')refreshConfirmationCount();});
   setInterval(()=>{if(document.visibilityState==='visible')refreshConfirmationCount();},15000);
 })();

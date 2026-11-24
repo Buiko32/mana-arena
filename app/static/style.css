@@ -328,3 +328,13 @@ footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:va
 .confirmation-team-winner{color:#b1ffb5;font-size:.75rem;font-weight:700}
 .confirmation-team-players{display:grid;gap:.5rem}
 @media(max-width:420px){.confirmation-teams{grid-template-columns:1fr}}
+
+/* Scelta iniziale del profilo su un nuovo browser. */
+.identity-welcome{width:min(500px,calc(100% - 2rem));padding:clamp(1.5rem,5vw,2.5rem);border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--text)}
+.identity-welcome-kicker{margin:0 0 1rem;color:var(--amber-bright);font:700 .7rem/1 ui-monospace,monospace;letter-spacing:.12em}
+.identity-welcome h2{font-size:clamp(2.1rem,6vw,3rem);line-height:1.05;margin:0 0 1rem}
+.identity-welcome>p:not(.identity-welcome-kicker){color:var(--muted);line-height:1.5}
+.identity-welcome form{display:grid;gap:.65rem;margin-top:1.4rem}
+.identity-welcome form label{font-weight:700}
+.identity-welcome form select,.identity-welcome form button{width:100%;min-height:48px}
+.identity-welcome-message{min-height:1.2em;margin:0;color:var(--muted);font-size:.85rem}
