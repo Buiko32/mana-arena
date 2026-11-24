@@ -274,6 +274,53 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             rows = conn.execute("SELECT r.*,a.name AS proposer_name,b.name AS opponent_name,w.name AS winner_name FROM result_proposals r JOIN players a ON a.id=r.proposer_id JOIN players b ON b.id=r.opponent_id JOIN players w ON w.id=r.winner_id WHERE (r.proposer_id=? OR r.opponent_id=?) AND (r.status='pending' OR r.id IN (SELECT id FROM result_proposals WHERE (proposer_id=? OR opponent_id=?) AND status='confirmed' ORDER BY created_at DESC LIMIT 100)) ORDER BY r.created_at DESC", (session['player_id'],session['player_id'],session['player_id'],session['player_id'])).fetchall()
             return [dict(row) for row in rows]
 
+    @application.get('/api/player/team-results')
+    def list_team_results(session=Depends(player_session)):
+        with db.transaction() as conn:
+            rows=conn.execute("SELECT r.* FROM team_results r JOIN team_result_players me ON me.result_id=r.id WHERE me.player_id=? AND r.status='pending' ORDER BY r.created_at DESC",(session['player_id'],)).fetchall()
+            result=[]
+            for row in rows:
+                members=[dict(m) for m in conn.execute("SELECT m.player_id,m.team,m.confirmed,p.name,p.photo,p.avatar_hue,p.avatar_color FROM team_result_players m JOIN players p ON p.id=m.player_id WHERE m.result_id=? ORDER BY m.team,p.name",(row['id'],))]
+                result.append({**dict(row),'players':members})
+            return result
+
+    @application.post('/api/player/team-results',status_code=201)
+    async def create_team_result(request: Request, session=Depends(player_write)):
+        body=await _json(request); a=body.get('team_a'); b=body.get('team_b'); winner=body.get('winner')
+        if not isinstance(a,list) or not isinstance(b,list) or len(a) not in (2,3) or len(b) not in (2,3) or not all(isinstance(x,str) for x in a+b) or len(set(a+b))!=len(a+b) or session['player_id'] not in a or winner not in ('a','b'):
+            _detail(422,'Scegli due squadre da 2 o 3 giocatori distinti e il vincitore.')
+        with MUTATION_LOCK, db.transaction() as conn:
+            if any(not conn.execute('SELECT 1 FROM players WHERE id=? AND active=1',(pid,)).fetchone() for pid in a+b): _detail(422,'Seleziona giocatori attivi.')
+            rid=str(uuid.uuid4())
+            conn.execute('INSERT INTO team_results(id,proposer_id,winning_team) VALUES(?,?,?)',(rid,session['player_id'],winner))
+            conn.executemany('INSERT INTO team_result_players(result_id,player_id,team) VALUES(?,?,?)',[(rid,pid,team) for team,items in (('a',a),('b',b)) for pid in items])
+        return {'id':rid}
+
+    @application.post('/api/player/team-results/{result_id}/confirm')
+    def confirm_team_result(result_id: str, session=Depends(player_write)):
+        with MUTATION_LOCK, db.transaction() as conn:
+            row=conn.execute('SELECT * FROM team_results WHERE id=?',(result_id,)).fetchone()
+            if not row: _detail(404,'Proposta non trovata.')
+            member=conn.execute("SELECT * FROM team_result_players WHERE result_id=? AND player_id=?",(result_id,session['player_id'])).fetchone()
+            if not member or member['team']!='b': _detail(403,'Solo gli avversari possono confermare.')
+            if row['status']!='pending' or member['confirmed']: _detail(409,'Proposta già gestita.')
+            conn.execute('UPDATE team_result_players SET confirmed=1 WHERE result_id=? AND player_id=?',(result_id,session['player_id']))
+            if not conn.execute("SELECT 1 FROM team_result_players WHERE result_id=? AND team='b' AND confirmed=0",(result_id,)).fetchone():
+                conn.execute("UPDATE team_results SET status='confirmed' WHERE id=?",(result_id,))
+                Database.audit(conn,None,'team_friendly_result_recorded',{'match_id':result_id})
+        return {'ok':True}
+
+    @application.post('/api/player/team-results/{result_id}/reject')
+    def reject_team_result(result_id: str, session=Depends(player_write)):
+        with MUTATION_LOCK, db.transaction() as conn:
+            row=conn.execute('SELECT * FROM team_results WHERE id=?',(result_id,)).fetchone()
+            if not row: _detail(404,'Proposta non trovata.')
+            member=conn.execute('SELECT team FROM team_result_players WHERE result_id=? AND player_id=?',(result_id,session['player_id'])).fetchone()
+            if not member or (member['team']!='b' and session['player_id']!=row['proposer_id']): _detail(403,'Operazione non consentita.')
+            if row['status']!='pending': _detail(409,'Proposta già gestita.')
+            conn.execute("UPDATE team_results SET status='rejected' WHERE id=?",(result_id,))
+        return {'ok':True}
+
     @application.get('/api/player/matches')
     def player_matches(session=Depends(player_session)):
         with db.transaction() as conn:
@@ -972,15 +1019,17 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
                     photos = sorted(set(photos) | {p.name for p in db.photos_dir.iterdir() if re.fullmatch(r"[a-f0-9]{32}\.jpg", p.name)})
                 if scope == "results":
                     conn.execute("DELETE FROM result_proposals")
+                    conn.execute("DELETE FROM team_results")
                     conn.execute("DELETE FROM matches")
                     conn.execute("DELETE FROM withdrawals")
                     conn.execute("UPDATE entrants SET withdrawn=0")
-                    conn.execute("DELETE FROM audit WHERE action IN ('match_result_recorded','friendly_result_recorded','match_rollback','tournament_completed','player_withdrew')")
+                    conn.execute("DELETE FROM audit WHERE action IN ('match_result_recorded','friendly_result_recorded','team_friendly_result_recorded','match_rollback','tournament_completed','player_withdrew')")
                     conn.execute("UPDATE tournaments SET status='draft', archived_from=NULL, frozen_config_json=NULL, champion_id=NULL, warnings_json='[]', revision=revision+1, updated_at=CURRENT_TIMESTAMP")
                 else:
                     conn.execute("DELETE FROM tournaments")
                     if scope == "all":
                         conn.execute("DELETE FROM result_proposals")
+                        conn.execute("DELETE FROM team_results")
                         conn.execute("DELETE FROM players")
             for name in photos:
                 if not re.fullmatch(r"[a-f0-9]{32}\.jpg", name):

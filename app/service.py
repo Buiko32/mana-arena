@@ -54,6 +54,25 @@ def safe_csv(value) -> str:
 def calculate_global_elo(players: list[dict], matches: list[dict]) -> list[dict]:
     rows = {p['id']: {**p, 'rating': 1500.0, 'matches': 0, 'wins': 0, 'draws': 0, 'losses': 0, 'peak_2400': False} for p in players}
     for match in matches:
+        if match.get('team_a') and match.get('team_b'):
+            teams = [[rows.get(pid) for pid in match[key]] for key in ('team_a','team_b')]
+            if any(not row for team in teams for row in team) or match.get('winner') not in ('a','b'):
+                continue
+            averages = [sum(row['rating'] for row in team)/len(team) for team in teams]
+            updates = []
+            for index, team in enumerate(teams):
+                diff = max(-400, min(400, averages[1-index]-averages[index])) if averages[index] < 2650 else averages[1-index]-averages[index]
+                expected_score = 1/(1+10**(diff/400))
+                won = match['winner'] == ('a' if index == 0 else 'b')
+                for row in team:
+                    k = 40 if row['matches'] < 30 else 10 if row['peak_2400'] else 20
+                    updates.append((row, k*((1 if won else 0)-expected_score), won))
+            for row, change, won in updates:
+                row['rating'] += change
+                row['matches'] += 1
+                row['wins' if won else 'losses'] += 1
+                row['peak_2400'] |= row['rating'] >= 2400
+            continue
         result = match.get('result')
         a, b = rows.get(match.get('p1')), rows.get(match.get('p2'))
         if result not in ('p1_win', 'p2_win') or not a or not b or a is b or match.get('bye') or match.get('void'):
@@ -88,7 +107,7 @@ def global_elo_from_db(conn):
     # The audit id is the stable order in which results were recorded; use the latest
     # matching event after a rollback. Old backups without events have a deterministic fallback.
     events = {}
-    for row in conn.execute("SELECT id,detail_json FROM audit WHERE action IN ('match_result_recorded','friendly_result_recorded') ORDER BY id"):
+    for row in conn.execute("SELECT id,detail_json FROM audit WHERE action IN ('match_result_recorded','friendly_result_recorded','team_friendly_result_recorded') ORDER BY id"):
         detail = json.loads(row['detail_json'])
         if detail.get('match_id'):
             events[detail['match_id']] = row['id']
@@ -103,5 +122,11 @@ def global_elo_from_db(conn):
         event = events.get(row['id'])
         key = (1, event) if event is not None else (0, row['created_at'], '', 0, 0, row['id'])
         matches.append((key, match))
+    for row in conn.execute("SELECT id,winning_team,created_at FROM team_results WHERE status='confirmed'"):
+        members = list(conn.execute('SELECT player_id,team FROM team_result_players WHERE result_id=? ORDER BY player_id',(row['id'],)))
+        match = {'team_a':[m['player_id'] for m in members if m['team']=='a'], 'team_b':[m['player_id'] for m in members if m['team']=='b'], 'winner':row['winning_team']}
+        event=events.get(row['id'])
+        key=(1,event) if event is not None else (0,row['created_at'],'',0,0,row['id'])
+        matches.append((key,match))
     matches.sort(key=lambda item: item[0])
     return [row for row in calculate_global_elo(players, [item[1] for item in matches]) if row['active']]

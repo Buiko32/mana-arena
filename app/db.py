@@ -80,6 +80,8 @@ class Database:
                 CREATE TABLE IF NOT EXISTS player_sessions (token_hash TEXT PRIMARY KEY, player_id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE, csrf TEXT NOT NULL, expires_at INTEGER NOT NULL);
                 CREATE TABLE IF NOT EXISTS round_reveals (tournament_id TEXT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE, player_id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE, round_no INTEGER NOT NULL, fingerprint TEXT NOT NULL, PRIMARY KEY(tournament_id,player_id,round_no));
                 CREATE TABLE IF NOT EXISTS result_proposals (id TEXT PRIMARY KEY, proposer_id TEXT NOT NULL REFERENCES players(id), opponent_id TEXT NOT NULL REFERENCES players(id), tournament_id TEXT REFERENCES tournaments(id) ON DELETE CASCADE, match_id TEXT, winner_id TEXT NOT NULL REFERENCES players(id), status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+                CREATE TABLE IF NOT EXISTS team_results (id TEXT PRIMARY KEY, proposer_id TEXT NOT NULL REFERENCES players(id), winning_team TEXT NOT NULL CHECK(winning_team IN ('a','b')), status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+                CREATE TABLE IF NOT EXISTS team_result_players (result_id TEXT NOT NULL REFERENCES team_results(id) ON DELETE CASCADE, player_id TEXT NOT NULL REFERENCES players(id), team TEXT NOT NULL CHECK(team IN ('a','b')), confirmed INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(result_id,player_id));
             """)
             player_columns = {row[1] for row in conn.execute("PRAGMA table_info(players)")}
             if "avatar_hue" not in player_columns:

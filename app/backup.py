@@ -135,6 +135,7 @@ def _validate_database(path: Path) -> None:
             "player_sessions": {"token_hash", "player_id", "csrf", "expires_at"},
             "result_proposals": {"id", "proposer_id", "opponent_id", "tournament_id", "match_id", "winner_id", "status", "created_at"},
         }
+        optional_tables.update({"team_results": {"id", "proposer_id", "winning_team", "status", "created_at"}, "team_result_players": {"result_id", "player_id", "team", "confirmed"}})
         for table, expected in optional_tables.items():
             if table in tables and {row[1] for row in check.execute(f"PRAGMA table_info({table})")} != expected:
                 raise ValueError(f"Schema del backup non compatibile: tabella {table}.")
