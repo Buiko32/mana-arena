@@ -19,3 +19,4 @@ mana-arena-backup*.zip
 artifacts/
 node_modules/
 *.log
+life-stats/

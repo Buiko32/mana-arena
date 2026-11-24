@@ -70,3 +70,28 @@ def test_team_elo_lower_rated_player_loses_less_and_orientation_is_symmetric():
     assert before['1']['rating']-after['1']['rating'] < before['0']['rating']-after['0']['rating']
     reversed_game={'team_a':game['team_b'],'team_b':game['team_a'],'winner':'a'}
     assert calculate_global_elo(players,warmup+[game])==calculate_global_elo(players,warmup+[reversed_game])
+
+
+def test_database_ranking_replays_all_game_types_by_shared_dates(tmp_path):
+    from app.db import Database
+    from app.service import global_elo_from_db, calculate_global_elo
+    from app.history import month_matches
+    db = Database(tmp_path)
+    db.initialize()
+    with db.transaction() as conn:
+        for pid in 'abcd':
+            conn.execute('INSERT INTO players(id,name) VALUES (?,?)',(pid,pid))
+        conn.execute("INSERT INTO tournaments(id,config_json,status,created_at) VALUES ('t',?, 'active','2024-01-01 00:00:00')", ('{"name":"T"}',))
+        conn.execute("INSERT INTO matches(id,tournament_id,round_no,table_no,data_json) VALUES ('m','t',1,1,?)", ('{"p1":"a","p2":"b","result":"p1_win"}',))
+        conn.execute("INSERT INTO audit(tournament_id,action,detail_json,created_at) VALUES ('t','match_result_recorded',?, '2024-01-02 12:00:00')", ('{"match_id":"m"}',))
+        conn.execute("INSERT INTO result_proposals(id,proposer_id,opponent_id,winner_id,status,created_at) VALUES ('f','a','c','c','confirmed','2024-01-03 12:00:00')")
+        conn.execute("INSERT INTO team_results(id,proposer_id,winning_team,status,created_at) VALUES ('g','a','b','confirmed','2024-01-01 12:00:00')")
+        for pid, team in [('a','a'),('b','a'),('c','b'),('d','b')]:
+            conn.execute('INSERT INTO team_result_players(result_id,player_id,team) VALUES (?,?,?)',('g',pid,team))
+        actual={r['id']:r['rating'] for r in global_elo_from_db(conn)}
+        expected=calculate_global_elo([{'id':p,'name':p} for p in 'abcd'],[
+            {'team_a':['a','b'],'team_b':['c','d'],'winner':'b'},
+            {'p1':'a','p2':'b','result':'p1_win'}, {'p1':'a','p2':'c','result':'p2_win'}])
+        assert actual == {r['id']:r['rating'] for r in expected}
+        history=month_matches(conn,'2024-01-01 00:00:00','2024-02-01 00:00:00')
+        assert [g['at'] for g in history] == ['2024-01-03T12:00:00Z','2024-01-02T12:00:00Z','2024-01-01T12:00:00Z']

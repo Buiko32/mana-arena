@@ -109,29 +109,36 @@ def calculate_global_elo(players: list[dict], matches: list[dict]) -> list[dict]
 def global_elo_from_db(conn):
     import json
     players = [dict(row) for row in conn.execute('SELECT id,name,active,photo,avatar_hue,avatar_color FROM players')]
-    # The audit id is the stable order in which results were recorded; use the latest
-    # matching event after a rollback. Old backups without events have a deterministic fallback.
+    # Replay by match date. Audit sequence breaks ties when records share a second.
     events = {}
-    for row in conn.execute("SELECT id,detail_json FROM audit WHERE action IN ('match_result_recorded','friendly_result_recorded','team_friendly_result_recorded') ORDER BY id"):
+    for row in conn.execute("SELECT id,detail_json,created_at FROM audit WHERE action IN ('match_result_recorded','friendly_result_recorded','team_friendly_result_recorded') ORDER BY id"):
         detail = json.loads(row['detail_json'])
         if detail.get('match_id'):
-            events[detail['match_id']] = row['id']
+            events[detail['match_id']] = (row['created_at'], row['id'])
     matches = []
-    for row in conn.execute('SELECT m.id,m.data_json,m.round_no,m.table_no,t.created_at,t.id AS tid FROM matches m JOIN tournaments t ON t.id=m.tournament_id'):
+    for row in conn.execute("""
+        WITH proposals AS (
+            SELECT tournament_id, match_id, MAX(created_at) AS played_at FROM result_proposals
+            WHERE tournament_id IS NOT NULL AND status='confirmed' GROUP BY tournament_id, match_id
+        )
+        SELECT m.id, m.data_json, t.created_at, p.played_at AS proposal_at
+        FROM matches m JOIN tournaments t ON t.id=m.tournament_id
+        LEFT JOIN proposals p ON p.tournament_id=m.tournament_id AND p.match_id=m.id
+    """):
         match = json.loads(row['data_json'])
         event = events.get(row['id'])
-        key = (1, event) if event is not None else (0, row['created_at'], row['tid'], row['round_no'], row['table_no'], row['id'])
+        key = (row['proposal_at'] or (event[0] if event else row['created_at']), event[1] if event else 0, row['id'])
         matches.append((key, match))
     for row in conn.execute("SELECT id,proposer_id,opponent_id,winner_id,created_at FROM result_proposals WHERE tournament_id IS NULL AND status='confirmed'"):
         match = {'p1':row['proposer_id'], 'p2':row['opponent_id'], 'result':'p1_win' if row['winner_id']==row['proposer_id'] else 'p2_win'}
         event = events.get(row['id'])
-        key = (1, event) if event is not None else (0, row['created_at'], '', 0, 0, row['id'])
+        key = (row['created_at'], event[1] if event else 0, row['id'])
         matches.append((key, match))
     for row in conn.execute("SELECT id,winning_team,created_at FROM team_results WHERE status='confirmed'"):
         members = list(conn.execute('SELECT player_id,team FROM team_result_players WHERE result_id=? ORDER BY player_id',(row['id'],)))
         match = {'team_a':[m['player_id'] for m in members if m['team']=='a'], 'team_b':[m['player_id'] for m in members if m['team']=='b'], 'winner':row['winning_team']}
         event=events.get(row['id'])
-        key=(1,event) if event is not None else (0,row['created_at'],'',0,0,row['id'])
+        key=(row['created_at'], event[1] if event else 0, row['id'])
         matches.append((key,match))
     matches.sort(key=lambda item: item[0])
     return [row for row in calculate_global_elo(players, [item[1] for item in matches]) if row['active']]

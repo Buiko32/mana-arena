@@ -36,7 +36,7 @@ jobs:
           node --version
           node --check app/static/brackets.js
           node --check app/static/app.js
-          node --test tests/brackets.test.cjs tests/reveal.test.cjs tests/confirmation-badge.test.cjs tests/identity-welcome.test.cjs
+          node --test tests/*.cjs
 
   build-and-publish:
     if: ${{ github.event_name != 'pull_request' && !(github.event_name == 'workflow_dispatch' && inputs.verify_public_only) }}

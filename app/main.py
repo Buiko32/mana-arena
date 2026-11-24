@@ -19,6 +19,9 @@ from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps, UnidentifiedImageError
 
+from datetime import datetime, timezone, timedelta
+from .life import router as life_router
+from .history import month_matches
 from . import engine
 from .auth import AuthManager, hash_password, valid_bootstrap_password
 from .backup import create_backup, restore_backup
@@ -192,6 +195,7 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
 
     application = FastAPI(title="Mana Arena", version="1.0.0", lifespan=lifespan)
     application.state.db = db
+    application.include_router(life_router)
 
     @application.middleware("http")
     async def private_player_data(request: Request, call_next):
@@ -401,11 +405,38 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
         index = Path(__file__).parent / "static" / "index.html"
         if index.is_file():
             html = index.read_text(encoding="utf-8")
-            for asset in ("style.css", "taste/motion.css", "taste/motion.js", "brackets.js", "reveal.js", "app.js", "player-results.js"):
+            for asset in ("style.css", "taste/motion.css", "taste/motion.js", "brackets.js", "reveal.js", "app.js", "player-results.js", "history.js", "admin-friendlies.js"):
                 version = hashlib.sha256((index.parent / asset).read_bytes()).hexdigest()[:12]
                 html = html.replace(f'/static/{asset}"', f'/static/{asset}?v={version}"')
             return HTMLResponse(html, headers={"Cache-Control": "no-store"})
         return HTMLResponse("<!doctype html><html lang='it'><meta charset='utf-8'><title>Mana Arena</title><body><main><h1>Mana Arena</h1><p>Interfaccia in preparazione.</p></main></body></html>")
+
+    life_assets = ("style.css", "life.css", "life.js", "life-entry.js")
+
+    def offline_shell():
+        folder = Path(__file__).parent / "static"
+        html = (folder / "life.html").read_text(encoding="utf-8")
+        urls = []
+        for name in life_assets:
+            version = hashlib.sha256((folder / name).read_bytes()).hexdigest()[:12]
+            url = f"/static/{name}?v={version}"
+            html = html.replace(f'/static/{name}"', f'{url}"')
+            urls.append(url)
+        return html, urls
+
+    @application.get("/segnavita", response_class=HTMLResponse)
+    def life_page():
+        html, _ = offline_shell()
+        return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
+
+    @application.get("/life-worker.js")
+    def life_worker():
+        html, urls = offline_shell()
+        template = (Path(__file__).parent / "static/life-worker.js").read_text(encoding="utf-8")
+        revision = hashlib.sha256((html + template).encode()).hexdigest()[:16]
+        script = template.replace("__CACHE_NAME__", json.dumps("mana-life-shell-" + revision))
+        script = script.replace("__ASSETS__", json.dumps(urls))
+        return Response(script, media_type="application/javascript", headers={"Cache-Control": "no-cache"})
 
     @application.get("/photos/{filename}")
     def photo(filename: str):
@@ -1066,6 +1097,71 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
         response = Response(content=json.dumps({"ok": True, "restored_photos": len(restored_photos)}), media_type="application/json")
         response.delete_cookie(SESSION_COOKIE, path="/"); response.delete_cookie(CSRF_COOKIE, path="/")
         return response
+
+    @application.get("/api/public/history")
+    def public_history(start: datetime, end: datetime):
+        if not start.tzinfo or not end.tzinfo or not timedelta(0) < end - start <= timedelta(days=32):
+            _detail(422, "Intervallo del calendario non valido.")
+        bounds = [v.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S") for v in (start, end)]
+        with db.transaction() as conn:
+            return month_matches(conn, *bounds)
+
+    @application.get('/api/admin/friendlies')
+    def admin_friendlies(start: datetime, end: datetime, session=Depends(admin_session)):
+        with db.transaction() as conn:
+            if start.tzinfo is None or end.tzinfo is None or end <= start or end - start > timedelta(days=32): _detail(422, 'Intervallo non valido.')
+            bounds = tuple(d.astimezone(timezone.utc).strftime('%Y-%m-%d %H:%M:%S') for d in (start, end))
+            names = {r['id']: r['name'] for r in conn.execute('SELECT id,name FROM players')}
+            games = []
+            for row in conn.execute("SELECT * FROM result_proposals WHERE tournament_id IS NULL AND status IN ('confirmed','pending') AND created_at>=? AND created_at<?", bounds):
+                games.append({'id':row['id'], 'kind':'single', 'status':row['status'], 'at':row['created_at'].replace(' ','T')+'Z',
+                    'sides':[[{'id':pid,'name':names.get(pid,'Giocatore')}] for pid in (row['proposer_id'],row['opponent_id'])],
+                    'winner': 'a' if row['winner_id']==row['proposer_id'] else 'b'})
+            for row in conn.execute("SELECT * FROM team_results WHERE status IN ('confirmed','pending') AND created_at>=? AND created_at<?", bounds):
+                members = list(conn.execute('SELECT player_id,team FROM team_result_players WHERE result_id=? ORDER BY player_id',(row['id'],)))
+                games.append({'id':row['id'], 'kind':'team', 'status':row['status'], 'at':row['created_at'].replace(' ','T')+'Z',
+                    'sides':[[{'id':m['player_id'],'name':names.get(m['player_id'],'Giocatore')} for m in members if m['team']==side] for side in ('a','b')], 'winner':row['winning_team']})
+            return sorted(games, key=lambda g:(g['at'],g['id']), reverse=True)
+
+    @application.patch('/api/admin/friendlies/{kind}/{result_id}')
+    async def admin_edit_friendly(kind: str, result_id: str, request: Request, session=Depends(admin_write)):
+        body = await _json(request)
+        try:
+            stamp = datetime.fromisoformat(body['at'].replace('Z','+00:00'))
+            if stamp.tzinfo is None:
+                raise ValueError()
+            stamp = stamp.astimezone(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+        except (KeyError, ValueError, TypeError, AttributeError, OverflowError):
+            _detail(422, 'Data e ora non valide.')
+        if kind not in ('single','team'):
+            _detail(404, 'Amichevole non trovata.')
+        with MUTATION_LOCK, db.transaction() as conn:
+            if kind == 'single':
+                row = conn.execute("SELECT * FROM result_proposals WHERE id=? AND tournament_id IS NULL AND status='confirmed'",(result_id,)).fetchone()
+                if not row: _detail(404, 'Amichevole non trovata.')
+                winner = body.get('winner_id')
+                if winner not in (row['proposer_id'],row['opponent_id']): _detail(422, 'Vincitore non valido.')
+                conn.execute('UPDATE result_proposals SET created_at=?,winner_id=? WHERE id=?',(stamp,winner,result_id))
+            else:
+                row = conn.execute("SELECT * FROM team_results WHERE id=? AND status='confirmed'",(result_id,)).fetchone()
+                if not row: _detail(404, 'Amichevole non trovata.')
+                winner = body.get('winner')
+                if winner not in ('a','b'): _detail(422, 'Squadra vincitrice non valida.')
+                conn.execute('UPDATE team_results SET created_at=?,winning_team=? WHERE id=?',(stamp,winner,result_id))
+            Database.audit(conn,None,'friendly_admin_updated',{'match_id':result_id,'kind':kind})
+        return {'ok':True}
+
+    @application.delete('/api/admin/friendlies/{kind}/{result_id}')
+    def admin_delete_friendly(kind: str, result_id: str, session=Depends(admin_write)):
+        if kind not in ('single','team'): _detail(404, 'Amichevole non trovata.')
+        with MUTATION_LOCK, db.transaction() as conn:
+            if kind == 'single':
+                deleted = conn.execute("DELETE FROM result_proposals WHERE id=? AND tournament_id IS NULL AND status IN ('confirmed','pending')",(result_id,)).rowcount
+            else:
+                deleted = conn.execute("DELETE FROM team_results WHERE id=? AND status IN ('confirmed','pending')",(result_id,)).rowcount
+            if not deleted: _detail(404, 'Amichevole non trovata.')
+            Database.audit(conn,None,'friendly_admin_deleted',{'match_id':result_id,'kind':kind})
+        return {'ok':True}
 
     @application.get("/api/public/ranking")
     def public_ranking():
