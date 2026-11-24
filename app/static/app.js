@@ -73,7 +73,7 @@
   async function openReveal(){
     const t=state.publicDetailData, dialog=$('#reveal-dialog');if(!t)return;
     if(!savedPlayer()){message('Seleziona il tuo nome in alto.','error');return;}
-    const serial=++revealSession, output=$('#reveal-result'),stage=$('#reveal-stage');output.textContent='';stage.classList.remove('is-revealing');dialog.showModal();
+    const serial=++revealSession, output=$('#reveal-result'),stage=$('#reveal-stage'),label=$('#reveal-opponent-label');output.textContent='';label.hidden=true;stage.classList.remove('is-revealing');dialog.showModal();
     void stage.offsetWidth;stage.classList.add('is-revealing');
     const show=async()=>{try{
       if(!dialog.open||serial!==revealSession)return;
@@ -81,6 +81,7 @@
       if(!dialog.open||serial!==revealSession)return;
       const result=await request(`/api/player/tournaments/${encodeURIComponent(t.id)}/reveal`,{method:'POST',headers:{'X-Player-CSRF':player.csrf_token}});
       if(!dialog.open||serial!==revealSession)return;
+      label.hidden=!result.opponent;
       output.innerHTML=result.opponent?`${avatar(result.opponent.name,result.opponent.photo_url,result.opponent.avatar_hue,result.opponent.avatar_color)}<strong>${esc(result.opponent.name)}</strong>`:(result.bye?'<strong>Passi il turno</strong>':'<strong>Nessun incontro per questo turno</strong>');
       loadPublicDetail(t.id,true);
     }catch(e){if(dialog.open&&serial===revealSession)output.textContent=e.message;}};
