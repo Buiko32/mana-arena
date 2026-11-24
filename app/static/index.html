@@ -32,11 +32,16 @@
       <a href="#history" data-history-link>Storico</a>
       <a href="#admin-view" data-view-link="admin">Organizza</a>
     </nav>
-    <div class="session-area" id="session-area"><label class="visually-hidden" for="player-identity">Il tuo nome</label><select id="player-identity"><option value="">Scegli il tuo nome</option></select><button type="button" id="profile-open" class="button quiet" aria-label="Modifica il tuo profilo" title="Modifica il tuo profilo">👤</button></div>
+    <div class="session-area" id="session-area"><label class="visually-hidden" for="player-identity">Il tuo nome</label><select id="player-identity"><option value="">Scegli il tuo nome</option></select><button type="button" id="profile-open" class="button quiet" aria-label="Modifica il tuo profilo" title="Modifica il tuo profilo">Profilo</button></div>
   </header>
   <main id="main-content" class="shell">
     <div id="public-view" class="view" aria-labelledby="public-title">
-      <div id="tournament-home"><section class="hero" data-enter>
+      <div id="tournament-home">
+      <section id="personal-matches" class="wrap personal-matches" aria-labelledby="personal-matches-title" hidden>
+        <h2 id="personal-matches-title">Il tuo incontro</h2>
+        <div id="personal-match-list" aria-live="polite"></div>
+      </section>
+      <section class="hero" data-enter>
         <div class="wrap hero-wrap">
         <div class="hero-copy"><p class="hero-kicker">MAGIC: THE GATHERING / TORNEI</p><h1 id="public-title">Tornei Magic</h1><a class="hero-link" href="#tournament-list">Esplora i tornei <span aria-hidden="true">↗</span></a></div>
         <div class="hero-mascots" aria-hidden="true"><img id="arena-mascot" class="arena-mascot" alt="" width="288" height="288" decoding="async" hidden></div>
@@ -121,7 +126,7 @@
     <div id="reveal-stage" class="crystal-stage"><p id="reveal-opponent-label" class="crystal-label" hidden>Sfiderai:</p><div class="crystal-ball"><div class="crystal-shine"></div><div id="reveal-result" class="crystal-result" role="status" aria-live="polite"></div></div><div class="crystal-base"></div></div>
   </dialog>
   <dialog id="confirm-dialog" aria-labelledby="confirm-title"><button type="button" class="dialog-close" data-dialog-close aria-label="Chiudi">×</button><h2 id="confirm-title">Conferma</h2><p id="confirm-message" class="muted"></p><div id="confirm-impact" class="impact-list"></div><div class="dialog-actions"><button id="confirm-cancel" class="button quiet" type="button">Annulla</button><button id="confirm-ok" class="button danger" type="button">Conferma</button></div></dialog>
-  <div class="results-fab-group"><div class="player-action"><span>Inserisci</span><button id="results-open" class="results-fab" type="button" aria-label="Inserisci un risultato">+</button></div><div class="player-action"><span>Segnavita</span><a class="results-fab life-dock-link" href="/segnavita#life" aria-label="Apri segnavita"><svg viewBox="0 0 40 40" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 2 36 11 38 27 20 38 2 27 4 11Z"/><path d="M20 2 10 13 4 11m16-9 10 11 6-2M2 27l8-14h20l8 14M2 27l18 5 18-5m-28-14 10 19 10-19M20 32v6"/><text x="20" y="21.5" text-anchor="middle" stroke="none" fill="currentColor" font-family="system-ui,sans-serif" font-weight="800" font-size="8">20</text></svg></a></div></div>
+  <div class="results-fab-group" role="group" aria-label="Azioni di gioco"><div class="player-action"><span>Risultato</span><button id="results-open" class="results-fab" type="button" aria-label="Inserisci un risultato">+</button></div><div class="player-action"><span>Segnavita</span><a class="results-fab life-dock-link" href="/segnavita#life" aria-label="Apri segnavita"><svg viewBox="0 0 40 40" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 2 36 11 38 27 20 38 2 27 4 11Z"/><path d="M20 2 10 13 4 11m16-9 10 11 6-2M2 27l8-14h20l8 14M2 27l18 5 18-5m-28-14 10 19 10-19M20 32v6"/><text x="20" y="21.5" text-anchor="middle" stroke="none" fill="currentColor" font-family="system-ui,sans-serif" font-weight="800" font-size="8">20</text></svg></a></div></div>
   <dialog id="player-results-dialog" aria-labelledby="player-results-title"><button type="button" class="dialog-close" id="player-results-close" aria-label="Chiudi">×</button><h2 id="player-results-title">Inserisci il risultato</h2><div id="player-results-content"></div></dialog>
   <dialog id="profile-dialog" aria-labelledby="profile-title"><button type="button" class="dialog-close" id="profile-close" aria-label="Chiudi">×</button><h2 id="profile-title">Il tuo profilo</h2><div id="profile-content"></div></dialog>
   <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>

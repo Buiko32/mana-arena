@@ -118,7 +118,7 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
     @application.middleware("http")
     async def private_player_data(request: Request, call_next):
         response = await call_next(request)
-        if request.url.path.startswith(('/api/player/', '/api/public/tournaments/')):
+        if request.url.path == '/api/public/tournaments' or request.url.path.startswith(('/api/player/', '/api/public/tournaments/')):
             response.headers['Cache-Control'] = 'private, no-store'
             response.headers['Vary'] = 'Cookie'
         return response
@@ -251,10 +251,10 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             result = []
             for row in rows:
                 matches = Database.get_matches(conn, row['id'])
-                current, _ = reveal_state(conn, row['id'], matches, session['player_id'])
+                current, revealed = reveal_state(conn, row['id'], matches, session['player_id'])
                 for match in matches:
                     if match['round'] == current and session['player_id'] in (match.get('p1'), match.get('p2')) and not match.get('result') and not match.get('void') and not match.get('bye'):
-                        result.append({**match, 'tournament': {'id': row['id'], 'config': json.loads(row['frozen_config_json'] or row['config_json'])}})
+                        result.append({**match, 'revealed': revealed, 'tournament': {'id': row['id'], 'config': json.loads(row['frozen_config_json'] or row['config_json'])}})
             return result
 
     @application.post('/api/player/results', status_code=201)
@@ -1124,9 +1124,25 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             token_hash = hashlib.sha256(request.cookies.get('mana_player_session', '').encode()).hexdigest()
             active = conn.execute("SELECT player_id FROM player_sessions WHERE token_hash=? AND expires_at>strftime('%s','now')", (token_hash,)).fetchone()
             result = []
+            player_id = active['player_id'] if active else None
             for row in rows:
-                current, revealed = reveal_state(conn, row['id'], Database.get_matches(conn, row['id']), active['player_id'] if active else None)
-                result.append({"id": row["id"], "config": json.loads(row["frozen_config_json"] or row["config_json"]), "status": row["status"], "champion_id": None, "reveal_locked": current is not None and not revealed, "reveal_available": current is not None})
+                matches = Database.get_matches(conn, row['id'])
+                current, revealed = reveal_state(conn, row['id'], matches, player_id)
+                personal = None
+                if player_id and current is not None and row['status'] == 'active':
+                    match = next((m for m in matches if m['round'] == current and player_id in (m.get('p1'), m.get('p2'))), None)
+                    if match:
+                        personal = {'round': current}
+                        if revealed:
+                            opponent = match.get('p2') if match.get('p1') == player_id else match.get('p1')
+                            personal.update(
+                                table=match.get('table'), opponent_id=opponent, bye=bool(match.get('bye')),
+                                completed=bool(match.get('result') or match.get('void')),
+                                match_id=match['id'],
+                            )
+                result.append({"id": row["id"], "config": json.loads(row["frozen_config_json"] or row["config_json"]),
+                               "status": row["status"], "champion_id": None, "my_match": personal,
+                               "reveal_locked": current is not None and not revealed, "reveal_available": current is not None})
             return result
 
     def public_detail(tid, request: Request):
@@ -1144,7 +1160,7 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             shown = matches if current is None else [m for m in matches if m['round'] < current or (revealed and m['round'] == current)]
             public_entrants = [{"id": p["id"], "name": p["name"], "photo_url": p["photo_url"], "avatar_hue": p["avatar_hue"], "avatar_color": p["avatar_color"], "seed": p["seed"], "withdrawn": p["withdrawn"]} for p in entrants]
             return {"id": tid, "config": cfg, "status": tournament["status"], "entrants": public_entrants,
-                    "matches": shown, "rounds": public_rounds(shown), "reveal_available": current is not None, "reveal_locked": current is not None and not revealed, "standings": engine.calculate_standings(cfg, entrants, shown),
+                    "matches": shown, "rounds": public_rounds(shown), "current_round": current, "reveal_available": current is not None, "reveal_locked": current is not None and not revealed, "standings": engine.calculate_standings(cfg, entrants, shown),
                     "champion_id": tournament["champion_id"] if revealed else None, "warnings": tournament["warnings"] if revealed else []}
 
     @application.get("/api/public/tournaments/{tid}")

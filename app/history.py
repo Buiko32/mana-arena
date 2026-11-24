@@ -5,10 +5,10 @@ import json
 def month_matches(conn, start, end):
     names = {r["id"]: r["name"] for r in conn.execute("SELECT id,name FROM players")}
     games = []
-    def add(stamp, label, left, right, winner, kind="friendly"):
+    def add(stamp, label, left, right, winner, kind="friendly", score=None):
         games.append({"at": stamp.replace(" ", "T") + "Z", "label": label, "kind": kind,
                       "sides": [[names.get(p, "Giocatore") for p in side] for side in (left, right)],
-                      "winner": winner})
+                      "winner": winner, "score": score})
 
     for row in conn.execute("""
         WITH recorded AS (
@@ -24,7 +24,11 @@ def month_matches(conn, start, end):
         outcome = m.get("result")
         if outcome in ("p1_win", "p2_win", "draw") and m.get("p2") and not m.get("void"):
             label = f'{json.loads(row["config_json"])["name"]} · Turno {row["round_no"]}'
-            add(row["stamp"], label, [m["p1"]], [m["p2"]], {"p1_win": 0, "p2_win": 1}.get(outcome), kind="tournament")
+            score = [m.get("p1_games"), m.get("p2_games")]
+            if m.get("score_unknown") or any(value is None for value in score):
+                score = None
+            add(row["stamp"], label, [m["p1"]], [m["p2"]], {"p1_win": 0, "p2_win": 1}.get(outcome),
+                kind="tournament", score=score)
 
     for r in conn.execute("""SELECT * FROM result_proposals WHERE status='confirmed'
             AND tournament_id IS NULL AND created_at>=? AND created_at<?""", (start, end)):

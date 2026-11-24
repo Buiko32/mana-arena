@@ -203,10 +203,15 @@ def test_tournament_form_hides_format_and_presets_and_highlights_players(tmp_pat
         page = client.get('/').text
         js = client.get('/static/app.js').text
         css = client.get('/static/style.css').text
+        results_js = client.get('/static/player-results.js').text
     assert 'data-preset=' not in page
     assert 'name="game_format"' not in page
     assert 'name="name"' in page and 'name="description"' in page
-    assert 'is-match-winner' in js and "player?.id===savedPlayer()" in js
+    assert 'id="personal-matches"' in page and 'data-personal-result' in js
+    assert 'data-round-disclosure' in js and 'match-card-winner' in css
+    assert 'data-result-type="tournament"' in results_js and 'data-result-type="friendly"' in results_js
+    assert '👤' not in page and 'renderProfileButton' in js
+    assert 'match-card-winner' in js and "player?.id===savedPlayer()" in js
     assert '.graph-player-row.is-me' in css and '.graph-player-row.is-winner' in css
 
 

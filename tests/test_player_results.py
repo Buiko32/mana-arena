@@ -31,6 +31,7 @@ def test_tournament_result_registers_immediately_and_legacy_confirm_is_rejected(
         }).json()
         assert len(history) == 1 and history[0]['kind'] == 'tournament'
         assert history[0]['label'] == 'Serata Mana · Turno 1'
+        assert history[0]['score'] == [stored['p1_games'], stored['p2_games']]
         assert b.post(f'/api/player/results/{pid}/confirm', headers=tokens[1]).status_code == 409
         duplicate = b.post('/api/player/results', headers=tokens[1], json={'tournament_id': tid, 'match_id': match['id'], 'winner_id': players[1]['id']})
         assert duplicate.status_code == 409
@@ -147,11 +148,23 @@ def test_next_round_hidden_until_player_reveals(app_factory):
         for client,person in zip((a,b),people):
             login=client.post('/api/player/login',json={'player_id':person['id']})
             assert login.status_code==200
-        assert a.get(f'/api/public/tournaments/{tid}').json()['matches']==[]
+        detail = a.get(f'/api/public/tournaments/{tid}').json()
+        assert detail['current_round'] == 1 and detail['matches'] == []
+        listing = a.get('/api/public/tournaments')
+        assert listing.headers['cache-control'] == 'private, no-store'
+        assert 'Cookie' in listing.headers['vary']
+        assert listing.json()[0]['my_match'] == {'round': 1}
+        assert admin.get('/api/public/tournaments').json()[0]['my_match'] is None
+        assert a.get('/api/player/matches').json()[0]['revealed'] is False
         session=a.get('/api/player/session').json()
         reveal=a.post(f'/api/player/tournaments/{tid}/reveal',headers={'X-Player-CSRF':session['csrf_token']})
         assert reveal.status_code==200
         assert reveal.json()['opponent']['id']==people[1]['id']
+        personal = a.get('/api/public/tournaments').json()[0]['my_match']
+        assert personal['opponent_id'] == people[1]['id'] and personal['table'] == 1
+        match = a.get('/api/player/matches').json()[0]
+        assert match['revealed'] is True and match['id'] == personal['match_id']
+        assert b.get('/api/public/tournaments').json()[0]['my_match'] == {'round': 1}
         assert len(a.get(f'/api/public/tournaments/{tid}').json()['matches'])==1
         assert b.get(f'/api/public/tournaments/{tid}').json()['matches']==[]
 

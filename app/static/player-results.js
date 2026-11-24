@@ -5,8 +5,22 @@
   const dialog=$('#player-results-dialog'), content=$('#player-results-content'), select=$('#player-identity');
   async function api(path,options={}) {const headers=new Headers(options.headers||{});if(session?.csrf_token)headers.set('X-Player-CSRF',session.csrf_token);const r=await fetch(path,{...options,headers,credentials:'same-origin'});const data=await r.json();if(!r.ok){const error=Error(data.detail?.message||'Operazione non riuscita.');error.status=r.status;throw error;}return data;}
   const post=(path,data={})=>api(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-  function error(e){const el=$('#player-results-error');if(el)el.textContent=e.message;}
-  async function getSession(){try{session=await api('/api/player/session');localStorage.setItem('mana-arena-player-id',session.player_id);if(![...select.options].some(o=>o.value===session.player_id))select.add(new Option(session.name,session.player_id));select.value=session.player_id;document.dispatchEvent(new Event('player-identity-changed'));}catch(error){if(error.status===401){session=null;try{localStorage.removeItem('mana-arena-player-id');}catch{}select.value='';}else throw error;}}
+  async function getSession() {
+    const previous = select.value;
+    try {
+      session = await api('/api/player/session');
+      localStorage.setItem('mana-arena-player-id',session.player_id);
+      if (![...select.options].some(option => option.value === session.player_id)) select.add(new Option(session.name,session.player_id));
+      select.value = session.player_id;
+    } catch (error) {
+      if (error.status !== 401) throw error;
+      session = null;
+      try { localStorage.removeItem('mana-arena-player-id'); } catch {}
+      select.value = '';
+    }
+    if (previous !== select.value) document.dispatchEvent(new Event('player-identity-changed'));
+  }
+
   let resultSaved=false;
   function updateSummary(form, label, sides, winner, valid) {
     const summary=form.querySelector('.result-review');
@@ -32,23 +46,85 @@
       enabledControls.forEach(control => { control.disabled = false; });
     }
   }
-  async function render(){if(!session){content.innerHTML='<p>Seleziona il tuo nome in alto per accedere.</p>';return;}
-    const [ranking,ownMatches]=await Promise.all([api('/api/public/ranking'),api('/api/player/matches')]);players=ranking;matches=ownMatches;
-    const name=id=>players.find(p=>p.id===id)?.name||'Giocatore';
-    $('#player-results-title').textContent=`Inserisci il risultato ${session.name}`;
-    content.innerHTML=`<div class="results-panel"><button type="button" class="button secondary" id="friendly-result">Amichevole (1–3 per parte)</button><form id="new-player-result" class="results-panel"><label>Partita di torneo<select name="match" required><option value="">Seleziona una partita</option>${matches.map((m,i)=>`<option value="${i}">🏆 ${esc(m.tournament.config.name)} · ${esc(name(m.p1))} – ${esc(name(m.p2))}</option>`).join('')}</select></label><label>Chi ha vinto?<select name="winner" required><option value="">Seleziona chi ha vinto</option></select></label><div class="result-review" aria-live="polite"></div><p id="player-results-error" class="results-error" role="alert"></p><button class="button primary" type="submit" disabled>Salva risultato</button></form></div>`;
-    $('#friendly-result').addEventListener('click',renderTeamForm);
-    const form=$('#new-player-result');
-    function update(){const value=form.elements.match.value,m=value===''?null:matches[Number(value)],winner=form.elements.winner.value;updateSummary(form,m?'🏆 Partita di torneo · '+m.tournament.config.name:'Partita di torneo',m?[[name(m.p1)],[name(m.p2)]]:[[],[]],winner?name(winner):'',Boolean(m&&winner));}
-    form.elements.match.addEventListener('change',()=>{const value=form.elements.match.value,m=value===''?null:matches[Number(value)];form.elements.winner.replaceChildren(new Option('Seleziona chi ha vinto',''));if(m)for(const id of [m.p1,m.p2])form.elements.winner.add(new Option(name(id),id));update();});
-    form.elements.winner.addEventListener('change',update);update();
-    form.addEventListener('submit',event=>{event.preventDefault();const value=form.elements.match.value,m=value===''?null:matches[Number(value)],winner=form.elements.winner.value;if(m&&winner)saveResult(form,'/api/player/results',{tournament_id:m.tournament.id,match_id:m.id,winner_id:winner},'#player-results-error');});
+  async function render(matchId = null) {
+    if (!session) {
+      content.innerHTML = '<p>Seleziona il tuo nome in alto per accedere.</p>';
+      return;
+    }
+    const [ranking,ownMatches] = await Promise.all([api('/api/public/ranking'),api('/api/player/matches')]);
+    if (!dialog.open) return;
+    players = ranking;
+    matches = ownMatches;
+    $('#player-results-title').textContent = 'Inserisci risultato';
+    content.innerHTML = `<div class="results-panel">
+      <div class="result-type-switch" role="group" aria-label="Tipo di partita">
+        <button type="button" class="button secondary" data-result-type="tournament" aria-pressed="false"><span aria-hidden="true">🏆</span> Torneo</button>
+        <button type="button" class="button secondary" data-result-type="friendly" aria-pressed="false">Amichevole</button>
+      </div>
+      <div id="result-form-slot"></div>
+    </div>`;
+    const buttons = [...content.querySelectorAll('[data-result-type]')];
+    function selectType(type, selectedMatch = null) {
+      if (content.querySelector('form[data-saving]')) return;
+      buttons.forEach(button => button.setAttribute('aria-pressed',String(button.dataset.resultType === type)));
+      if (type === 'tournament') renderTournamentForm(selectedMatch);
+      else renderTeamForm();
+    }
+    buttons.forEach(button => button.addEventListener('click',() => selectType(button.dataset.resultType)));
+    if (matchId) selectType('tournament',matchId);
+    else buttons[0].focus();
+  }
+  function renderTournamentForm(matchId) {
+    const host = $('#result-form-slot');
+    const name = id => players.find(p => p.id === id)?.name || 'Giocatore';
+    const available = matches.filter(match => match.revealed);
+    const locked = matches.filter(match => !match.revealed);
+    const revealButtons = locked.map(match => `<button type="button" class="button secondary" data-result-reveal="${esc(match.tournament.id)}">Scopri incontro · ${esc(match.tournament.config.name)}</button>`).join('');
+    host.innerHTML = `${locked.length ? `<div class="results-panel result-reveals">${revealButtons}</div>` : ''}
+      ${available.length ? `<form id="new-player-result" class="results-panel">
+        <label>Partita di torneo<select name="match" required><option value="">Seleziona una partita</option>
+          ${available.map(match => `<option value="${esc(match.id)}">🏆 ${esc(match.tournament.config.name)} · ${esc(name(match.p1))} – ${esc(name(match.p2))}</option>`).join('')}
+        </select></label>
+        <label>Chi ha vinto?<select name="winner" required></select></label>
+        <div class="result-review" aria-live="polite"></div><p id="player-results-error" class="results-error" role="alert"></p>
+        <button class="button primary" type="submit" disabled>Salva risultato</button></form>`
+      : locked.length ? '' : '<p class="muted" role="status">Nessun incontro di torneo da registrare.</p>'}`;
+    host.querySelectorAll('[data-result-reveal]').forEach(button => button.addEventListener('click',() => {
+      dialog.close();
+      document.dispatchEvent(new CustomEvent('reveal-tournament',{detail:button.dataset.resultReveal}));
+    }));
+    const form = $('#new-player-result');
+    if (!form) return;
+    const matchField = form.elements.match, winnerField = form.elements.winner;
+    const selectedMatch = () => available.find(match => match.id === matchField.value);
+    function updateSummaryFields() {
+      const match = selectedMatch(), winner = winnerField.value;
+      updateSummary(form, match ? '🏆 Partita di torneo · ' + match.tournament.config.name : 'Partita di torneo',
+        match ? [[name(match.p1)],[name(match.p2)]] : [[],[]], winner ? name(winner) : '', Boolean(match && winner));
+    }
+    function updateWinnerOptions() {
+      const match = selectedMatch();
+      winnerField.replaceChildren(new Option('Seleziona chi ha vinto',''));
+      if (match) for (const id of [match.p1,match.p2]) winnerField.add(new Option(name(id),id));
+      updateSummaryFields();
+    }
+    matchField.value = available.some(match => match.id === matchId) ? matchId : '';
+    matchField.addEventListener('change',updateWinnerOptions);
+    winnerField.addEventListener('change',updateSummaryFields);
+    updateWinnerOptions();
+    if (matchField.value) winnerField.focus();
+    form.addEventListener('submit',event => {
+      event.preventDefault();
+      const match = selectedMatch(), winner = winnerField.value;
+      if (match && winner) saveResult(form,'/api/player/results',
+        {tournament_id:match.tournament.id,match_id:match.id,winner_id:winner},'#player-results-error');
+    });
   }
   function renderTeamForm(){
     const choice=(p,locked=false)=>`<label class="team-choice"><span class="team-choice-person">${window.manaPlayerAvatar(p.name,p.photo_url,p.avatar_hue,p.avatar_color)}<span>${esc(p.name)}${locked?' (tu)':''}</span></span><input type="checkbox" value="${esc(p.id)}" ${locked?'checked disabled':''}></label>`;
     const options=players.filter(p=>p.id!==session.player_id).map(p=>choice(p)).join('');
     const own=players.find(p=>p.id===session.player_id)||{id:session.player_id,name:session.name};
-    content.innerHTML=`<form id="team-result-form" class="results-panel"><p>Puoi giocare da solo o scegliere fino a due compagni. Seleziona da uno a tre avversari.</p><fieldset><legend>La tua squadra</legend><div class="team-choices">${choice(own,true)}<div id="team-a" class="team-choices">${options}</div></div></fieldset><fieldset><legend>Avversari</legend><div id="team-b" class="team-choices">${options}</div></fieldset><label>Chi ha vinto?<select name="winner" required></select></label><div class="result-review" aria-live="polite"></div><p id="team-result-error" class="results-error" role="alert"></p><button class="button primary" type="submit" disabled>Salva risultato</button><button class="button quiet" type="button" id="team-result-back">Indietro</button></form>`;
+    $('#result-form-slot').innerHTML=`<form id="team-result-form" class="results-panel"><p>Puoi giocare da solo o scegliere fino a due compagni. Seleziona da uno a tre avversari.</p><fieldset><legend>La tua squadra</legend><div class="team-choices">${choice(own,true)}<div id="team-a" class="team-choices">${options}</div></div></fieldset><fieldset><legend>Avversari</legend><div id="team-b" class="team-choices">${options}</div></fieldset><label>Chi ha vinto?<select name="winner" required></select></label><div class="result-review" aria-live="polite"></div><p id="team-result-error" class="results-error" role="alert"></p><button class="button primary" type="submit" disabled>Salva risultato</button></form>`;
     const teamForm=$('#team-result-form');
     const selected = key => [...teamForm.querySelectorAll(`#team-${key} input:checked`)].map(input => input.value);
     const winner = teamForm.elements.winner;
@@ -78,7 +154,6 @@
       if(counterpart){counterpart.disabled=input.checked;counterpart.closest('.team-choice').classList.toggle('is-unavailable',input.checked);}
       updateWinnerOptions();updateTeamSummary();
     });
-    $('#team-result-back').addEventListener('click',()=>render().catch(error));
     teamForm.addEventListener('submit',event=>{event.preventDefault();const a=[session.player_id,...selected('a')],b=selected('b'),win=winner.value;if(a.length>3||b.length<1||b.length>3||!win||new Set([...a,...b]).size!==a.length+b.length){$('#team-result-error').textContent='Scegli da 1 a 3 giocatori distinti per parte e il vincitore.';return;}saveResult(teamForm,'/api/player/team-results',{team_a:a,team_b:b,winner:win},'#team-result-error');});
   }
   const profileDialog=$('#profile-dialog'), profileContent=$('#profile-content');
@@ -95,7 +170,15 @@
   }
   $('#profile-open').addEventListener('click',async()=>{profileDialog.showModal();try{await getSession();await renderProfile();}catch(err){profileContent.textContent=err.message;}});
   $('#profile-close').addEventListener('click',()=>profileDialog.close());
-  $('#results-open').addEventListener('click',async()=>{dialog.showModal();try{await getSession();await render();}catch(e){content.textContent=e.message;}});
+  async function openResults(matchId = null) {
+    if (dialog.open) return;
+    content.textContent = 'Caricamento…';
+    dialog.showModal();
+    try { await getSession(); await render(matchId); }
+    catch (e) { content.textContent = e.message; }
+  }
+  $('#results-open').addEventListener('click',() => openResults());
+  document.addEventListener('player-result-open',event => openResults(event.detail));
   $('#player-results-close').addEventListener('click',()=>dialog.close());
   dialog.addEventListener('close',()=>{if(resultSaved){resultSaved=false;document.dispatchEvent(new Event('player-result-saved'));}const id=session?.player_id||'';select.value=id;try{if(id)localStorage.setItem('mana-arena-player-id',id);else localStorage.removeItem('mana-arena-player-id');}catch{}});
   select.addEventListener('change',async()=>{const id=select.value;document.dispatchEvent(new Event('player-identity-changing'));try{if(!id){if(session)await post('/api/player/logout');session=null;localStorage.removeItem('mana-arena-player-id');}else{session=await post('/api/player/login',{player_id:id});localStorage.setItem('mana-arena-player-id',id);}document.dispatchEvent(new Event('player-identity-changed'));}catch(err){select.value=session?.player_id||'';document.dispatchEvent(new Event('player-identity-changed'));window.alert(err.message);}});
