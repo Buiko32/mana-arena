@@ -67,6 +67,15 @@
     if(response.status===204)return null;
     return type.includes('json')?response.json():response;
   }
+  async function loadDevices() {
+    const host = $('#devices-list');
+    host.textContent = 'Caricamento…';
+    try {
+      const devices = await request('/api/admin/devices');
+      const format = value => { const date = new Date(typeof value === 'number' ? value * 1000 : value); return Number.isNaN(date.getTime()) ? String(value ?? '—') : date.toLocaleString('it-IT'); };
+      host.innerHTML = devices.length ? devices.map(device => `<div class="admin-event-row"><div><h3>${esc(device.label || 'Dispositivo')}</h3><p class="muted">Autorizzato: ${esc(format(device.created_at))} · Scadenza: ${esc(format(device.expires_at))}</p></div><button type="button" class="button danger" data-revoke-device="${esc(device.id)}">Revoca</button></div>`).join('') : '<p class="muted">Nessun dispositivo autorizzato.</p>';
+    } catch (error) { host.textContent = error.message; }
+  }
   function formObject(form){return Object.fromEntries(new FormData(form).entries());}
   function busy(button, value){if(button){button.disabled=value;button.dataset.oldText ||= button.textContent;button.textContent=value?'Salvataggio…':button.dataset.oldText;}}
   function configFromForm(form){const v=formObject(form);return {name:v.name.trim(),date:v.date||null,description:v.description.trim(),structure:v.structure,game_format:state.current?.config?.game_format||'Magic',match_length:Number(v.match_length),rounds:v.structure==='swiss'?Number(v.rounds):null,loss_threshold:v.structure==='adapted'?Number(v.loss_threshold):null,league_mode:v.structure==='league'?v.league_mode:null,seeding:v.seeding,allow_draws:form.elements.allow_draws.checked,points:{win:Number(form.elements['points.win'].value),draw:Number(form.elements['points.draw'].value),loss:Number(form.elements['points.loss'].value),bye:Number(form.elements['points.bye'].value)},tiebreakers:$$('#tiebreak-list li').filter(li=>$('input[type=checkbox]',li).checked).map(li=>li.dataset.tiebreak)};}
@@ -487,7 +496,8 @@
     if(target.matches('[data-reveal-open]')){openReveal();return;}
     if(target.id==='reveal-close'){closeReveal();return;}
     if(target.matches('[data-close-detail]')){$('#public-detail').hidden=true;state.publicId='';return;}
-    if(target.matches('[data-admin-tab]')){$$('[data-admin-tab]').forEach(b=>b.setAttribute('aria-selected',String(b===target)));$$('[role=tabpanel].admin-section').forEach(s=>s.hidden=s.id!==`admin-${target.dataset.adminTab}`);if(target.dataset.adminTab==='events')scheduleGraphConnections();if(target.dataset.adminTab==='friendlies')window.openAdminFriendlies();return;}
+    if(target.matches('[data-revoke-device]')){if(!confirm('Revocare l’accesso a questo dispositivo?'))return;target.disabled=true;await request(`/api/admin/devices/${encodeURIComponent(target.dataset.revokeDevice)}`,{method:'DELETE'});await loadDevices();message('Accesso revocato.');return;}
+    if(target.matches('[data-admin-tab]')){$$('[data-admin-tab]').forEach(b=>b.setAttribute('aria-selected',String(b===target)));$$('[role=tabpanel].admin-section').forEach(s=>s.hidden=s.id!==`admin-${target.dataset.adminTab}`);if(target.dataset.adminTab==='events')scheduleGraphConnections();if(target.dataset.adminTab==='friendlies')window.openAdminFriendlies();if(target.dataset.adminTab==='devices')await loadDevices();return;}
     if(target.matches('[data-manager-tab]')){setManagerTab(target.dataset.managerTab);return;}
     if(target.matches('[data-round-view]')){const scope=target.dataset.roundScope;if(scope==='public')state.publicRoundView=target.dataset.roundView;else state.adminRoundView=target.dataset.roundView;if(scope==='public'&&state.publicDetailData)renderPublicDetail(state.publicDetailData);else if(scope==='admin')renderManager();return;}
     if(target.matches('[data-round-window]')){const scope=target.dataset.roundScope,groups=scope==='public'?(state.publicDetailData?.rounds||[]):(state.current?.rounds||[]),entrants=scope==='public'?(state.publicDetailData?.entrants||[]):(state.current?.entrants||[]),offset=scope==='public'?state.publicRoundOffset:state.adminRoundOffset,model=ManaBrackets.buildRoundProgression(groups,entrants,{offset,windowSize:4}),next=target.dataset.roundWindow==='next'?model.nextOffset:model.previousOffset;if(next===null)return;if(scope==='public'){state.publicRoundOffset=next;if(state.publicDetailData)renderPublicDetail(state.publicDetailData);}else{state.adminRoundOffset=next;renderManager();}return;}

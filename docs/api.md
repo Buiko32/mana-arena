@@ -9,14 +9,19 @@ GET /healthz verifica SQLite con PRAGMA quick_check e risponde 200 {"status":"ok
 | Variabile | Comportamento |
 | --- | --- |
 | DATA_DIR | Directory persistente, predefinita /data; DB in db/mana-arena.sqlite3 e immagini in photos/. |
+| SHARED_ACCESS_PASSWORD | Password del gruppo, obbligatoria, almeno 12 caratteri. La rotazione al riavvio revoca i browser registrati. |
 | ADMIN_USERNAME | Nome iniziale, predefinito admin; con un DB esistente deve coincidere con l'admin registrato. |
 | ADMIN_PASSWORD | Richiesta solo alla prima inizializzazione; almeno 12 caratteri, segnaposto rifiutati. Non viene reimpostata ai riavvii. |
 | SESSION_SECRET | Obbligatoria, almeno 32 byte; usata per la firma HMAC-SHA256 delle sessioni. |
-| COOKIE_SECURE | false per HTTP LAN; impostare true dietro HTTPS. Default false. |
+| COOKIE_SECURE | false per HTTP LAN; impostare true dietro HTTPS. Default true. |
 
 Il server non si fida di X-Forwarded-* e non offre registrazione pubblica.
 
 ## Sessione e CSRF
+
+Tutte le pagine, le risorse e le API richiedono il cookie di accesso, ad eccezione di `GET /healthz`, dello script di aggiornamento offline `GET /life-worker.js` e `POST /api/access/login`. Il login condiviso accetta JSON con il campo `password`. Il server risponde con 200 e imposta il cookie HttpOnly `mana_device` valido per 90 giorni. Una password errata produce 401 e il blocco temporaneo dei tentativi produce 429.
+
+L’amministratore può elencare i browser con `GET /api/admin/devices` e revocarne uno con `DELETE /api/admin/devices/{id}` fornendo il token CSRF.
 
 POST /api/admin/login accetta {"username":"...","password":"..."}. Successo: 200 {"username":"...","csrf_token":"...","expires_in":28800}; imposta mana_session (HttpOnly, SameSite=Lax, scadenza 8 ore) e mana_csrf (SameSite=Lax). I tentativi sono limitati per IP di connessione e nome account: credenziali errate 401, blocco temporaneo 429. L'errore non rivela quale credenziale fosse errata. La sessione firmata è registrata nel DB e può essere revocata.
 

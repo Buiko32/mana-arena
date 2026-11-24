@@ -2,6 +2,7 @@ import json
 import sqlite3
 import pytest
 from fastapi import HTTPException
+from test_support import TestClient
 from app.life import Game, _save, _validate
 from test_api import app_factory
 
@@ -36,7 +37,6 @@ def test_life_record_retry_validation_and_statistics(tmp_path, monkeypatch):
 
 
 def test_life_game_creates_one_proposal_even_after_deletion(app_factory):
-    from fastapi.testclient import TestClient
     from test_api import admin_headers, tournament_with_players
     app=app_factory()
     with TestClient(app) as admin, TestClient(app) as player, TestClient(app) as opponent:
@@ -72,7 +72,6 @@ def test_life_game_creates_one_proposal_even_after_deletion(app_factory):
 
 
 def test_life_team_registers_immediately(app_factory):
-    from fastapi.testclient import TestClient
     from test_api import admin_headers, tournament_with_players
     app=app_factory()
     with TestClient(app) as admin, TestClient(app) as player:
@@ -91,7 +90,6 @@ def test_life_team_registers_immediately(app_factory):
 
 
 def test_life_unavailable_tournament_keeps_archive(app_factory):
-    from fastapi.testclient import TestClient
     from test_api import admin_headers, tournament_with_players
     app=app_factory()
     with TestClient(app) as admin, TestClient(app) as player:
@@ -111,7 +109,6 @@ def test_life_unavailable_tournament_keeps_archive(app_factory):
 
 def test_life_concurrent_retries_make_only_one_proposal(app_factory):
     from concurrent.futures import ThreadPoolExecutor
-    from fastapi.testclient import TestClient
     from test_api import admin_headers, tournament_with_players
     app=app_factory()
     with TestClient(app) as admin, TestClient(app) as player:
@@ -142,7 +139,6 @@ def test_life_storage_errors_offer_specific_recovery(error, expected):
 
 
 def test_life_http_storage_error_logs_path_without_payload(app_factory, monkeypatch, caplog):
-    from fastapi.testclient import TestClient
     from importlib import import_module
     life_module=import_module("app.life")
     app=app_factory()

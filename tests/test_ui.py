@@ -1,6 +1,6 @@
 """Serve and inspect the Italian, same-origin tournament interface."""
 
-from fastapi.testclient import TestClient
+from test_support import TestClient
 from html.parser import HTMLParser
 from io import BytesIO
 

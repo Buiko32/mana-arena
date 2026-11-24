@@ -4,7 +4,7 @@ Mana Arena gestisce tornei amatoriali di Magic in italiano. È pensata per una p
 
 ## Versione
 
-La versione mostrata nel footer è `0.01.24` e segue il formato `major.release.fix`: il primo numero indica la major release, il secondo la release di base e l’ultimo i fix. Per ogni modifica richiesta dall’utente si incrementa il numero dei fix; release di base e major avanzano quando viene richiesta una nuova release di quel livello. Aggiorna il valore nel footer di `app/static/index.html` insieme alla modifica.
+La versione mostrata nel footer è `0.01.25` e segue il formato `major.release.fix`: il primo numero indica la major release, il secondo la release di base e l’ultimo i fix. Per ogni modifica richiesta dall’utente si incrementa il numero dei fix; release di base e major avanzano quando viene richiesta una nuova release di quel livello. Aggiorna il valore nel footer di `app/static/index.html` insieme alla modifica.
 
 ## Scelta del giocatore
 
@@ -26,14 +26,15 @@ Il profilo scelto nella pagina pubblica è ricordato solo nel browser e non aute
 
 ## Installazione su UGREEN UGOS
 
-Serve Docker/Container Manager e accesso in scrittura alla cartella del progetto. Crea `.env` copiando `.env.example` e sostituisci i due valori di esempio. Genera due valori distinti e casuali, ad esempio con Python:
+Serve Docker/Container Manager e accesso in scrittura alla cartella del progetto. Crea `.env` copiando `.env.example` e sostituisci i tre valori di esempio. Genera tre valori distinti e casuali, ad esempio con Python:
 
 ```text
+python -c "import secrets; print(secrets.token_urlsafe(24))"
 python -c "import secrets; print(secrets.token_urlsafe(24))"
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
-Usa il primo come `ADMIN_PASSWORD` e il secondo come `SESSION_SECRET`; copia i risultati nel file senza incollarli in chat o in un repository. Il nome admin iniziale è `organizzatore` e può essere cambiato prima del primo avvio. Il segnaposto `change-me` viene rifiutato all’inizializzazione.
+Usa i tre valori per `SHARED_ACCESS_PASSWORD`, `ADMIN_PASSWORD` e `SESSION_SECRET`, rispettivamente; copia i risultati nel file senza incollarli in chat o in un repository. Il nome admin iniziale è `organizzatore` e può essere cambiato prima del primo avvio. Il segnaposto `change-me` viene rifiutato all’inizializzazione.
 
 In UGOS: apri **App Center → Docker → Project → Create**, scegli la cartella che contiene `docker-compose.yaml` e `.env`, quindi distribuisci il progetto. La lettura automatica di `.env` dall’interfaccia Project non è stata verificata; se l’interfaccia non carica l’ambiente, usa il terminale del NAS nella cartella del progetto:
 
@@ -42,9 +43,11 @@ docker compose --env-file .env -f docker-compose.yaml pull
 docker compose --env-file .env -f docker-compose.yaml up -d
 ```
 
-Compose scarica `ghcr.io/buiko32/mana-arena:latest`, pubblica la porta `3388` e conserva database e foto in due volumi Docker nominati (`mana-arena-db` e `mana-arena-photos`; Docker può anteporre il nome del progetto). Attendi lo stato `healthy`, poi apri `http://IP-DEL-NAS:3388` dalla rete locale. `/healthz` indica se l’app e il database sono pronti. Le viste pubbliche sono in sola lettura; l’accesso admin non ha registrazione pubblica.
+Compose scarica `ghcr.io/buiko32/mana-arena:latest`, pubblica la porta `3388` e conserva database e foto in due volumi Docker nominati (`mana-arena-db` e `mana-arena-photos`; Docker può anteporre il nome del progetto). Attendi lo stato `healthy`, poi apri il sito attraverso il reverse proxy HTTPS. `/healthz` indica se l’app e il database sono pronti. Le viste pubbliche sono in sola lettura; l’accesso admin non ha registrazione pubblica.
 
-Le password dei cookie sono HTTP compatibili per l’uso LAN (`COOKIE_SECURE=false`). Per l’accesso da Internet configura un reverse proxy HTTPS e imposta `COOKIE_SECURE=true`; gestisci certificato e firewall sul router separatamente. L’app non modifica impostazioni del router e non abilita HTTPS da sola.
+Condividi con i partecipanti solo `SHARED_ACCESS_PASSWORD` (almeno 12 caratteri). Al primo accesso ciascun browser riceve un cookie valido per 90 giorni. In **Organizza** puoi vedere e revocare i browser registrati. Chi conosce la password condivisa può registrarsi di nuovo. Per scollegare tutti, cambia `SHARED_ACCESS_PASSWORD` nel file `.env` e ricrea il container. Il registro viene conservato nel volume database, separatamente dai backup dei tornei. Un browser già autorizzato può conservare sul dispositivo i dati del segnavita già scaricati per l’uso offline.
+
+Per l’accesso da Internet configura un reverse proxy HTTPS e imposta `COOKIE_SECURE=true`. Per una prova locale su HTTP è necessario `COOKIE_SECURE=false`.
 
 Per aggiornare dopo una pubblicazione:
 

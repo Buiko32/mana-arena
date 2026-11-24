@@ -9,7 +9,7 @@ import sqlite3
 import zipfile
 
 import pytest
-from fastapi.testclient import TestClient
+from test_support import TestClient
 from PIL import Image
 
 from app.main import create_app

@@ -6,6 +6,8 @@ In PowerShell, dalla cartella del progetto, avviare il server in un terminale de
 
 ```powershell
 $env:DATA_DIR = Join-Path (Get-Location) '.taste-skill/diagnostic-data'
+$env:SHARED_ACCESS_PASSWORD = 'Diagnostic-local-group-42'
+$env:COOKIE_SECURE = 'false'
 $env:ADMIN_PASSWORD = 'Diagnostic-local-password-42'
 $env:SESSION_SECRET = 'diagnostic-local-secret-only-1234567890'
 .\.venv\Scripts\python.exe -m uvicorn app.main:create_app --factory --host 127.0.0.1 --port 8765

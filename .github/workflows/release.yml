@@ -63,7 +63,7 @@ jobs:
         shell: bash
         run: |
           trap 'rm -f .env' EXIT
-          printf '%s\n' 'DATA_DIR=/data' 'ADMIN_USERNAME=ci-organizer' 'ADMIN_PASSWORD=CI-only-admin-password-42' 'SESSION_SECRET=ci-only-session-secret-with-more-than-32-bytes' 'COOKIE_SECURE=false' > .env
+          printf '%s\n' 'DATA_DIR=/data' 'SHARED_ACCESS_PASSWORD=CI-only-shared-access-42' 'ADMIN_USERNAME=ci-organizer' 'ADMIN_PASSWORD=CI-only-admin-password-42' 'SESSION_SECRET=ci-only-session-secret-with-more-than-32-bytes' 'COOKIE_SECURE=false' > .env
           docker compose -f docker-compose.yaml config --quiet
       - name: Smoke-test the exact built image
         run: python scripts/smoke_container.py --image ghcr.io/buiko32/mana-arena:ci-${{ github.sha }}

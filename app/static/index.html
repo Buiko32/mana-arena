@@ -80,6 +80,7 @@
           <button type="button" role="tab" id="tab-events" aria-selected="true" aria-controls="admin-events" data-admin-tab="events">Tornei</button>
           <button type="button" role="tab" id="tab-players" aria-selected="false" aria-controls="admin-players" data-admin-tab="players">Giocatori</button>
           <button type="button" role="tab" id="tab-friendlies" aria-selected="false" aria-controls="admin-friendlies" data-admin-tab="friendlies">Amichevoli</button>
+          <button type="button" role="tab" id="tab-devices" aria-selected="false" aria-controls="admin-devices" data-admin-tab="devices">Dispositivi</button>
           <button type="button" role="tab" id="tab-backup" aria-selected="false" aria-controls="admin-backup" data-admin-tab="backup">Backup</button>
         </div>
         <section id="admin-events" class="admin-section" role="tabpanel" aria-labelledby="tab-events">
@@ -103,6 +104,7 @@
           <div id="players-list" class="players-list" aria-live="polite"></div>
         </section>
         <section id="admin-friendlies" class="admin-section" role="tabpanel" aria-labelledby="tab-friendlies" hidden></section>
+        <section id="admin-devices" class="admin-section" role="tabpanel" aria-labelledby="tab-devices" hidden><div class="section-heading compact"><h2>Dispositivi autorizzati</h2></div><p class="muted">Revoca l’accesso ai dispositivi che non devono più entrare nell’arena.</p><div id="devices-list" aria-live="polite"></div></section>
         <section id="admin-backup" class="admin-section" role="tabpanel" aria-labelledby="tab-backup" hidden>
           <div class="section-heading compact mascot-section-heading"><h2>Backup e ripristino</h2></div>
           <div class="backup-grid"><article class="backup-card"><span class="backup-icon">↓</span><h3>Backup</h3><button id="backup-download" class="button secondary" type="button">Scarica ZIP</button></article><article class="backup-card danger-card"><span class="backup-icon">↥</span><h3>Ripristino</h3><p>Sostituisce i dati correnti e richiede un nuovo accesso.</p><form id="restore-form"><label>Archivio ZIP<input name="file" type="file" accept=".zip,application/zip" required></label><button class="button danger" type="submit">Ripristina</button></form></article></div>
@@ -111,7 +113,7 @@
       </div>
     </section>
   </main>
-  <footer><span class="brand-mini">✦ MANA ARENA</span><span class="app-version">Versione 0.01.24</span><a href="#admin-view" data-view-link="admin">Area organizzatore</a></footer>
+  <footer><span class="brand-mini">✦ MANA ARENA</span><span class="app-version">Versione 0.01.25</span><a href="#admin-view" data-view-link="admin">Area organizzatore</a></footer>
   <dialog id="identity-welcome" class="identity-welcome" aria-labelledby="identity-welcome-title" aria-describedby="identity-welcome-description">
     <p class="identity-welcome-kicker">MANA ARENA</p>
     <h2 id="identity-welcome-title">Chi sta giocando?</h2>

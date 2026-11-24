@@ -1,4 +1,4 @@
-from fastapi.testclient import TestClient
+from test_support import TestClient
 from test_api import app_factory, admin_headers, tournament_with_players, start
 
 

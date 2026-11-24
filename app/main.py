@@ -16,6 +16,9 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, Response
+from starlette.concurrency import run_in_threadpool
+from fastapi.responses import JSONResponse
+from .access import COOKIE as DEVICE_COOKIE, LIFETIME, DeviceAccess
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps, UnidentifiedImageError
 
@@ -83,7 +86,7 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
     username = admin_username if admin_username is not None else os.getenv("ADMIN_USERNAME", "admin")
     password = admin_password if admin_password is not None else os.getenv("ADMIN_PASSWORD")
     secret = session_secret if session_secret is not None else os.getenv("SESSION_SECRET")
-    secure = cookie_secure if cookie_secure is not None else os.getenv("COOKIE_SECURE", "false").lower() in ("1", "true", "yes")
+    secure = cookie_secure if cookie_secure is not None else os.getenv("COOKIE_SECURE", "true").strip().lower() not in ("0", "false", "no")
     db = Database(data_dir)
     photo_slots = asyncio.Semaphore(2)
 
@@ -93,6 +96,11 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             raise RuntimeError("ADMIN_USERNAME non è valido.")
         if not secret or len(secret.encode("utf-8")) < 32:
             raise RuntimeError("SESSION_SECRET deve contenere almeno 32 byte.")
+        shared_password = os.getenv("SHARED_ACCESS_PASSWORD")
+        if not valid_bootstrap_password(shared_password) or len(shared_password.encode()) > 1024:
+            raise RuntimeError("SHARED_ACCESS_PASSWORD deve avere almeno 12 caratteri, massimo 1024 byte e non essere un segnaposto.")
+        if shared_password in (password, secret):
+            raise RuntimeError("La password condivisa deve essere diversa dai segreti amministrativi.")
         db.initialize()
         with MUTATION_LOCK, db.transaction() as conn:
             admin = Database.admin_row(conn)
@@ -103,9 +111,13 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
                 Database.insert_admin(conn, username, salt, digest)
                 admin_name = username
             else:
+                _, shared_hash = hash_password(shared_password, admin["salt"])
+                if secrets.compare_digest(shared_hash, admin["password_hash"]):
+                    raise RuntimeError("La password condivisa deve essere diversa dalla password amministratore.")
                 admin_name = admin["username"]
                 if admin_name != username:
                     raise RuntimeError("ADMIN_USERNAME deve corrispondere all'amministratore già configurato.")
+        application.state.access = DeviceAccess(db.db_dir, shared_password, secret)
         application.state.db = db
         application.state.auth = AuthManager(secret, admin_name, bool(secure), login_limit)
         yield
@@ -116,12 +128,55 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
     application.include_router(life_router)
 
     @application.middleware("http")
-    async def private_player_data(request: Request, call_next):
-        response = await call_next(request)
-        if request.url.path == '/api/public/tournaments' or request.url.path.startswith(('/api/player/', '/api/public/tournaments/')):
-            response.headers['Cache-Control'] = 'private, no-store'
-            response.headers['Vary'] = 'Cookie'
+    async def require_device_access(request: Request, call_next):
+        path = request.url.path
+        public = (path in ("/healthz", "/life-worker.js") and request.method == "GET") or (
+            path == "/api/access/login" and request.method == "POST"
+        )
+        if not public and not await run_in_threadpool(
+            request.app.state.access.authorized, request.cookies.get(DEVICE_COOKIE)
+        ):
+            navigation = request.method == "GET" and (
+                path in ("/", "/segnavita", "/profilo") or path.startswith("/profilo/")
+                or request.headers.get("sec-fetch-mode") == "navigate"
+            )
+            if navigation and not path.startswith("/api/"):
+                response = FileResponse(Path(__file__).with_name("access.html"), media_type="text/html", status_code=401)
+                response.headers["X-Frame-Options"] = "DENY"
+            else:
+                response = JSONResponse({"detail": {"message": "Accesso a Mana Arena richiesto."}}, status_code=401)
+        else:
+            response = await call_next(request)
+        if "no-store" not in response.headers.get("Cache-Control", ""):
+            response.headers["Cache-Control"] = "private, no-store"
+        response.headers.add_vary_header("Cookie")
         return response
+
+    @application.post("/api/access/login")
+    async def access_login(request: Request, response: Response):
+        if request.headers.get("content-type", "").split(";")[0].strip().lower() != "application/json":
+            _detail(415, "Invia la password in formato JSON.")
+        key = ("shared-access", request.client.host if request.client else "unknown")
+        auth = request.app.state.auth
+        if not auth.allowed(key):
+            _detail(429, "Troppi tentativi. Riprova più tardi.")
+        data = bytearray()
+        async for chunk in request.stream():
+            if len(data) + len(chunk) > 8192:
+                _detail(413, "Richiesta troppo grande.")
+            data.extend(chunk)
+        try:
+            body = json.loads(data)
+        except (ValueError, RecursionError):
+            _detail(422, "Richiesta non valida.")
+        access = request.app.state.access
+        if not isinstance(body, dict) or not access.accepts(body.get("password")):
+            auth.failed(key)
+            _detail(401, "Password non corretta.")
+        auth.succeeded(key)
+        token = await run_in_threadpool(access.register, request.headers.get("user-agent", ""))
+        response.set_cookie(DEVICE_COOKIE, token, max_age=LIFETIME, httponly=True, secure=secure, samesite="lax", path="/")
+        return {"ok": True}
 
     def admin_session(request: Request):
         auth: AuthManager = request.app.state.auth
@@ -141,6 +196,16 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
         if not token or not cookie or token != session["csrf"] or cookie != session["csrf"]:
             _detail(403, "Token di sicurezza CSRF mancante o non valido.")
         return session
+
+    @application.get("/api/admin/devices")
+    def devices(request: Request, session=Depends(admin_session)):
+        return request.app.state.access.devices()
+
+    @application.delete("/api/admin/devices/{device_id}")
+    def revoke_device(device_id: str, request: Request, session=Depends(admin_write)):
+        if not request.app.state.access.revoke(device_id):
+            _detail(404, "Dispositivo non trovato.")
+        return {"ok": True}
 
     def player_session(request: Request):
         import hashlib
@@ -442,6 +507,8 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             _, digest = hash_password(current, admin["salt"])
             if not secrets.compare_digest(digest, admin["password_hash"]):
                 _detail(401, "Password attuale non valida.")
+            if request.app.state.access.accepts(new):
+                _detail(422, "Scegli una password amministratore diversa dalla password condivisa.")
             salt, digest = hash_password(new)
             conn.execute("UPDATE admin SET salt=?,password_hash=?,revision=revision+1 WHERE id=1", (salt, digest))
             conn.execute("DELETE FROM sessions")

@@ -17,6 +17,7 @@ import uuid
 
 
 PASSWORD = "CI-only-admin-password-42"
+SHARED_PASSWORD = "CI-only-shared-access-password-42"
 SESSION_SECRET = "ci-only-session-secret-with-more-than-32-bytes"
 PNG_FIXTURE = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
@@ -38,7 +39,14 @@ def request(base: str, path: str, *, opener=None, method: str = "GET", body=None
     try:
         with (opener or urllib.request.build_opener()).open(req, timeout=5) as response:
             raw = response.read()
-            return response.status, json.loads(raw) if raw else None
+            if not raw:
+                payload = None
+            else:
+                try:
+                    payload = json.loads(raw)
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    payload = raw.decode("utf-8", errors="replace")
+            return response.status, payload
     except urllib.error.HTTPError as error:
         return error.code, error.read().decode("utf-8", errors="replace")
     except urllib.error.URLError as error:
@@ -73,10 +81,10 @@ def upload_photo(base: str, player_id: str, opener, csrf: str):
         return 0, str(reason)
 
 
-def read_public_photo(base: str, photo_url: str) -> bytes:
+def read_public_photo(base: str, photo_url: str, opener=None) -> bytes:
     req = urllib.request.Request(base + photo_url, method="GET")
     try:
-        with urllib.request.build_opener().open(req, timeout=10) as response:
+        with (opener or urllib.request.build_opener()).open(req, timeout=10) as response:
             photo = response.read()
             if response.status != 200 or not photo.startswith(b"\xff\xd8") or not photo.endswith(b"\xff\xd9"):
                 raise RuntimeError("public player photo was not a complete JPEG")
@@ -106,9 +114,31 @@ def wait_for_health(base: str, container: str) -> None:
     raise RuntimeError(f"container did not become healthy ({last}):\n{logs.stdout}\n{logs.stderr}")
 
 
-def login(base: str):
+def shared_access_login(base: str):
     jar = http.cookiejar.CookieJar()
     opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+    status, payload = request(
+        base, "/api/access/login", opener=opener, method="POST",
+        body={"password": SHARED_PASSWORD},
+    )
+    if status != 200 or not any(cookie.name == "mana_device" for cookie in jar):
+        raise RuntimeError(f"shared access login failed: HTTP {status}: {payload}")
+    token = next(cookie.value for cookie in jar if cookie.name == "mana_device")
+    return opener, token
+
+
+def opener_for_device(base: str, token: str):
+    jar = http.cookiejar.CookieJar()
+    jar.set_cookie(http.cookiejar.Cookie(
+        version=0, name="mana_device", value=token, port=None, port_specified=False,
+        domain="127.0.0.1", domain_specified=False, domain_initial_dot=False,
+        path="/", path_specified=True, secure=False, expires=None, discard=True,
+        comment=None, comment_url=None, rest={"HttpOnly": None}, rfc2109=False,
+    ))
+    return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+
+
+def login(base: str, opener):
     status, payload = request(
         base,
         "/api/admin/login",
@@ -122,15 +152,26 @@ def login(base: str):
 
 
 def assert_anonymous_write_denied(base: str) -> None:
+    for path in ("/", "/segnavita"):
+        status, _ = request(base, path)
+        if status != 401:
+            raise RuntimeError(f"anonymous page access was not denied for {path} (HTTP {status})")
+    status, _ = request(base, "/api/public/tournaments")
+    if status != 401:
+        raise RuntimeError(f"anonymous API access was not denied (HTTP {status})")
     # A request with no session must not mutate the player list.
     status, _ = request(base, "/api/admin/players", method="POST", body={"name": "Anonymous forbidden"})
-    if status not in (401, 403):
+    if status != 401:
         raise RuntimeError(f"anonymous player creation was not denied (HTTP {status})")
 
 
-def create_player_and_photo(base: str) -> tuple[str, str, str]:
+def create_player_and_photo(base: str) -> tuple[str, str, str, str]:
     assert_anonymous_write_denied(base)
-    opener, csrf = login(base)
+    opener, device_token = shared_access_login(base)
+    status, page = request(base, "/", opener=opener)
+    if status != 200 or not isinstance(page, str):
+        raise RuntimeError(f"authenticated home page failed: HTTP {status}: {page}")
+    opener, csrf = login(base, opener)
     status, player = request(
         base,
         "/api/admin/players",
@@ -156,23 +197,45 @@ def create_player_and_photo(base: str) -> tuple[str, str, str]:
     profile = next((row for row in players if row.get("id") == player_id), None)
     if not profile or profile.get("name") != "CI Persisted Player" or profile.get("photo_url") != photo_url:
         raise RuntimeError("created player profile did not retain the uploaded photo reference")
-    photo = read_public_photo(base, photo_url)
+    photo = read_public_photo(base, photo_url, opener)
     digest = hashlib.sha256(photo).hexdigest()
-    return player_id, photo_url, digest
+    return player_id, photo_url, digest, device_token
 
 
-def verify_persisted_player_and_photo(base: str, player_id: str, photo_url: str, expected_digest: str) -> None:
+def verify_persisted_player_and_photo(base: str, player_id: str, photo_url: str, expected_digest: str, device_token: str) -> None:
     assert_anonymous_write_denied(base)
-    opener, _ = login(base)
+    opener = opener_for_device(base, device_token)
+    status, page = request(base, "/", opener=opener)
+    if status != 200 or not isinstance(page, str):
+        raise RuntimeError(f"existing device cookie did not survive container restart: HTTP {status}: {page}")
+    opener, csrf = login(base, opener)
     status, players = request(base, "/api/admin/players", opener=opener)
     if status != 200 or not isinstance(players, list):
         raise RuntimeError(f"admin player list failed after restart: HTTP {status}: {players}")
     profile = next((row for row in players if row.get("id") == player_id), None)
     if not profile or profile.get("name") != "CI Persisted Player" or profile.get("photo_url") != photo_url:
         raise RuntimeError("player or photo reference did not persist across container restart")
-    photo = read_public_photo(base, photo_url)
+    photo = read_public_photo(base, photo_url, opener)
     if hashlib.sha256(photo).hexdigest() != expected_digest:
         raise RuntimeError("stored player photo content changed across container restart")
+    status, devices = request(base, "/api/admin/devices", opener=opener)
+    if status != 200 or not isinstance(devices, list) or not devices:
+        raise RuntimeError(f"admin device list failed after restart: HTTP {status}: {devices}")
+    device_id = devices[0].get("id")
+    if not device_id:
+        raise RuntimeError("admin device list did not include a device id")
+    status, revoked = request(
+        base,
+        f"/api/admin/devices/{device_id}",
+        opener=opener,
+        method="DELETE",
+        headers={"X-CSRF-Token": csrf},
+    )
+    if status != 200:
+        raise RuntimeError(f"admin device revocation failed: HTTP {status}: {revoked}")
+    status, _ = request(base, "/", opener=opener)
+    if status != 401:
+        raise RuntimeError(f"revoked device cookie remained authorized (HTTP {status})")
 
 
 def start_container(image: str, container: str, db_volume: str, photos_volume: str) -> str:
@@ -183,6 +246,7 @@ def start_container(image: str, container: str, db_volume: str, photos_volume: s
         "--env", "DATA_DIR=/data",
         "--env", "ADMIN_USERNAME=ci-organizer",
         "--env", f"ADMIN_PASSWORD={PASSWORD}",
+        "--env", f"SHARED_ACCESS_PASSWORD={SHARED_PASSWORD}",
         "--env", f"SESSION_SECRET={SESSION_SECRET}",
         "--env", "COOKIE_SECURE=false",
         "--volume", f"{db_volume}:/data/db",
@@ -217,7 +281,7 @@ def main() -> int:
 
         base = start_container(args.image, container, db_volume, photos_volume)
         wait_for_health(base, container)
-        player_id, photo_url, photo_digest = create_player_and_photo(base)
+        player_id, photo_url, photo_digest, device_token = create_player_and_photo(base)
 
         # Recreate the container instead of restarting it in place. The named
         # volumes preserve the database and photos, while Docker allocates a
@@ -225,7 +289,7 @@ def main() -> int:
         docker("rm", "--force", container)
         base = start_container(args.image, container, db_volume, photos_volume)
         wait_for_health(base, container)
-        verify_persisted_player_and_photo(base, player_id, photo_url, photo_digest)
+        verify_persisted_player_and_photo(base, player_id, photo_url, photo_digest, device_token)
         print("Container smoke passed: health, anonymous write denied, and player/photo persisted across restart.")
         return 0
     except Exception as error:
