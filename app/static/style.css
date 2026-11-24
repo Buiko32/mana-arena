@@ -292,3 +292,9 @@ footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:va
 .results-fab-group .results-fab:active,.results-fab-group #confirmations-open:active{transform:translateY(1px)}
 .results-fab-group button:focus-visible{outline:3px solid #fff;outline-offset:3px}
 @media(prefers-reduced-motion:reduce){.results-fab-group button{transition:none}}
+
+/* Etichette e conteggio delle conferme da gestire. */
+.results-fab-group{align-items:end;gap:10px;padding:10px 14px max(12px,env(safe-area-inset-bottom))}
+.player-action{display:grid;justify-items:center;gap:6px;min-width:112px;color:var(--text);font-size:.68rem;font-weight:700;white-space:nowrap}
+.results-fab-group #confirmations-open{overflow:visible}
+.confirmations-count{position:absolute;top:-7px;right:-7px;display:grid;place-items:center;min-width:23px;height:23px;padding:0 5px;border:2px solid #222427;border-radius:999px;background:#d93434;color:#fff;font:700 .7rem/1 system-ui,sans-serif}
