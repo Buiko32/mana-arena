@@ -61,10 +61,15 @@ def calculate_global_elo(players: list[dict], matches: list[dict]) -> list[dict]
             averages = [sum(row['rating'] for row in team)/len(team) for team in teams]
             updates = []
             for index, team in enumerate(teams):
-                diff = max(-400, min(400, averages[1-index]-averages[index])) if averages[index] < 2650 else averages[1-index]-averages[index]
-                expected_score = 1/(1+10**(diff/400))
+                # The numerical handicap adjusts the opposing team's average;
+                # every player is compared using their own pre-match rating.
+                opponent_strength = averages[1-index] + 150 * (len(teams[1-index]) - len(team))
                 won = match['winner'] == ('a' if index == 0 else 'b')
                 for row in team:
+                    diff = opponent_strength - row['rating']
+                    if row['rating'] < 2650:
+                        diff = max(-400, min(400, diff))
+                    expected_score = 1/(1+10**(diff/400))
                     k = 40 if row['matches'] < 30 else 10 if row['peak_2400'] else 20
                     updates.append((row, k*((1 if won else 0)-expected_score), won))
             for row, change, won in updates:
