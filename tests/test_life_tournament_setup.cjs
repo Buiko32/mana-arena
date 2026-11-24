@@ -40,7 +40,7 @@ function fixture({offline = false, matches = [match('uno','b'),match('due','c')]
       return {ok:true,json:async () => data[path]};
     },
   };
-  vm.runInNewContext(source,ctx);
+  vm.runInNewContext(fs.readFileSync("app/static/player-avatar.js","utf8")+"\n"+source,ctx);
   return {api:ctx.setupTest,root,form,submit,calls};
 }
 

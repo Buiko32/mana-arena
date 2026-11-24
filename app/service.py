@@ -50,8 +50,12 @@ def safe_csv(value) -> str:
     return text
 
 
+def _elo_order(row):
+    return (-row['rating'], -row['wins'], row['name'].casefold(), row['id'])
+
+
 # Internal Elo inspired by FIDE K thresholds, not an official FIDE rating.
-def calculate_global_elo(players: list[dict], matches: list[dict]) -> list[dict]:
+def calculate_global_elo(players: list[dict], matches: list[dict], *, on_game=None) -> list[dict]:
     rows = {p['id']: {**p, 'rating': 1500.0, 'matches': 0, 'wins': 0, 'draws': 0, 'losses': 0, 'peak_2400': False} for p in players}
     for match in matches:
         if match.get('team_a') and match.get('team_b'):
@@ -65,18 +69,21 @@ def calculate_global_elo(players: list[dict], matches: list[dict]) -> list[dict]
                 # every player is compared using their own pre-match rating.
                 opponent_strength = averages[1-index] + 150 * (len(teams[1-index]) - len(team))
                 won = match['winner'] == ('a' if index == 0 else 'b')
+                opponents = [row['name'] for row in teams[1-index]] if on_game else None
                 for row in team:
                     diff = opponent_strength - row['rating']
                     if row['rating'] < 2650:
                         diff = max(-400, min(400, diff))
                     expected_score = 1/(1+10**(diff/400))
                     k = 40 if row['matches'] < 30 else 10 if row['peak_2400'] else 20
-                    updates.append((row, k*((1 if won else 0)-expected_score), won))
-            for row, change, won in updates:
+                    updates.append((row, k*((1 if won else 0)-expected_score), won, opponent_strength, opponents))
+            for row, change, won, _, _ in updates:
                 row['rating'] += change
                 row['matches'] += 1
                 row['wins' if won else 'losses'] += 1
                 row['peak_2400'] |= row['rating'] >= 2400
+            if on_game:
+                on_game(rows, match, updates)
             continue
         result = match.get('result')
         a, b = rows.get(match.get('p1')), rows.get(match.get('p2'))
@@ -98,7 +105,12 @@ def calculate_global_elo(players: list[dict], matches: list[dict]) -> list[dict]
             row['peak_2400'] |= row['rating'] >= 2400
         if score_a == 1: a['wins'] += 1; b['losses'] += 1
         elif score_a == 0: b['wins'] += 1; a['losses'] += 1
-    result = sorted(rows.values(), key=lambda row: (-row['rating'], -row['wins'], row['name'].casefold(), row['id']))
+        if on_game:
+            on_game(rows, match, [
+                (a, a['rating'] - ra, score_a == 1, rb, [b['name']]),
+                (b, b['rating'] - rb, score_a == 0, ra, [a['name']]),
+            ])
+    result = sorted(rows.values(), key=_elo_order)
     for position, row in enumerate(result, 1):
         row['rating'] = round(row['rating'])
         row['rank'] = position
@@ -106,7 +118,7 @@ def calculate_global_elo(players: list[dict], matches: list[dict]) -> list[dict]
     return result
 
 
-def global_elo_from_db(conn):
+def _elo_inputs(conn):
     import json
     players = [dict(row) for row in conn.execute('SELECT id,name,active,photo,avatar_hue,avatar_color FROM players')]
     # Replay by match date. Audit sequence breaks ties when records share a second.
@@ -141,4 +153,76 @@ def global_elo_from_db(conn):
         key=(row['created_at'], event[1] if event else 0, row['id'])
         matches.append((key,match))
     matches.sort(key=lambda item: item[0])
-    return [row for row in calculate_global_elo(players, [item[1] for item in matches]) if row['active']]
+    return players, [{**match, 'elo_date': key[0]} for key, match in matches]
+
+
+def global_elo_from_db(conn):
+    players, matches = _elo_inputs(conn)
+    return [row for row in calculate_global_elo(players, matches) if row['active']]
+
+
+def elo_snapshot(conn, player_ids):
+    ids = set(player_ids)
+    return {
+        row['id']: {
+            'id': row['id'], 'name': row['name'], 'rating': row['rating'], 'rank': rank,
+            'photo_url': f"/photos/{row['photo']}" if row['photo'] else None,
+            'avatar_hue': row['avatar_hue'], 'avatar_color': row['avatar_color'],
+        }
+        for rank, row in enumerate(global_elo_from_db(conn), 1) if row['id'] in ids
+    }
+
+
+def elo_changes(conn, before):
+    after = elo_snapshot(conn, before)
+    return [
+        {**row, 'previous_rating': before[pid]['rating'], 'previous_rank': before[pid]['rank']}
+        for pid, row in after.items()
+    ]
+
+
+def player_statistics(conn, player_id):
+    players, matches = _elo_inputs(conn)
+    active_ids = [player['id'] for player in players if player['active']]
+    if player_id not in active_ids:
+        return None
+
+    history = []
+    recent_form = []
+    streak = longest_streak = 0
+    best_win = None
+    best_gap = float('-inf')
+
+    def after_game(rows, match, updates):
+        nonlocal streak, longest_streak, best_win, best_gap
+        player = rows[player_id]
+        order = _elo_order(player)
+        rank = 1 + sum(_elo_order(rows[pid]) < order for pid in active_ids if pid != player_id)
+        rating = round(player['rating'])
+        date = match['elo_date']
+        own = next((update for update in updates if update[0] is player), None)
+        if own or (history and (rating, rank) != (history[-1]['rating'], history[-1]['rank'])):
+            history.append({'date': date, 'rating': rating, 'rank': rank})
+        if own:
+            _, change, won, opponent_rating, opponents = own
+            recent_form.append('win' if won else 'loss')
+            if len(recent_form) > 5:
+                recent_form.pop(0)
+            streak = streak + 1 if won else 0
+            longest_streak = max(longest_streak, streak)
+            gap = opponent_rating - (player['rating'] - change)
+            if won and gap > best_gap:
+                best_gap = gap
+                best_win = {'date': date, 'opponents': opponents, 'gap': round(gap), 'gain': round(change)}
+
+    rows = calculate_global_elo(players, matches, on_game=after_game)
+    active = [row for row in rows if row['active']]
+    rank, player = next((rank, row) for rank, row in enumerate(active, 1) if row['id'] == player_id)
+    return {
+        'player': {**player, 'rank': rank},
+        'history': history,
+        'peak_rating': max(1500, max((point['rating'] for point in history), default=1500)),
+        'best_rank': min((point['rank'] for point in history), default=rank),
+        'win_streak': streak, 'longest_win_streak': longest_streak,
+        'recent_form': recent_form, 'best_win': best_win,
+    }

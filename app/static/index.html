@@ -17,6 +17,8 @@
   <script src="/static/reveal.js" defer></script>
   <script src="/static/history.js" defer></script>
   <script src="/static/admin-friendlies.js" defer></script>
+  <script src="/static/player-avatar.js" defer></script>
+  <script src="/static/result-celebration.js" defer></script>
   <script src="/static/app.js" defer></script>
   <script src="/static/player-results.js" defer></script>
 </head>
@@ -33,7 +35,7 @@
       <a href="#history" data-history-link>Storico</a>
       <a href="#admin-view" data-view-link="admin">Organizza</a>
     </nav>
-    <div class="session-area" id="session-area"><label class="visually-hidden" for="player-identity">Il tuo nome</label><select id="player-identity"><option value="">Scegli il tuo nome</option></select><button type="button" id="profile-open" class="button quiet" aria-label="Modifica il tuo profilo" title="Modifica il tuo profilo">Profilo</button></div>
+    <div class="session-area" id="session-area"><label class="visually-hidden" for="player-identity">Il tuo nome</label><select id="player-identity"><option value="">Scegli il tuo nome</option></select><button type="button" id="profile-open" class="button quiet" aria-label="Apri il tuo profilo" title="Apri il tuo profilo">Profilo</button></div>
   </header>
   <main id="main-content" class="shell">
     <div id="public-view" class="view" aria-labelledby="public-title">
@@ -109,7 +111,7 @@
       </div>
     </section>
   </main>
-  <footer><span class="brand-mini">✦ MANA ARENA</span><span class="app-version">Versione 0.01.20</span><a href="#admin-view" data-view-link="admin">Area organizzatore</a></footer>
+  <footer><span class="brand-mini">✦ MANA ARENA</span><span class="app-version">Versione 0.01.23</span><a href="#admin-view" data-view-link="admin">Area organizzatore</a></footer>
   <dialog id="identity-welcome" class="identity-welcome" aria-labelledby="identity-welcome-title" aria-describedby="identity-welcome-description">
     <p class="identity-welcome-kicker">MANA ARENA</p>
     <h2 id="identity-welcome-title">Chi sta giocando?</h2>
@@ -129,7 +131,7 @@
   <dialog id="confirm-dialog" aria-labelledby="confirm-title"><button type="button" class="dialog-close" data-dialog-close aria-label="Chiudi">×</button><h2 id="confirm-title">Conferma</h2><p id="confirm-message" class="muted"></p><div id="confirm-impact" class="impact-list"></div><div class="dialog-actions"><button id="confirm-cancel" class="button quiet" type="button">Annulla</button><button id="confirm-ok" class="button danger" type="button">Conferma</button></div></dialog>
   <div class="results-fab-group" role="group" aria-label="Azioni di gioco"><div class="player-action"><span>Risultato</span><button id="results-open" class="results-fab" type="button" aria-label="Inserisci un risultato">+</button></div><div class="player-action"><span>Segnavita</span><a class="results-fab life-dock-link" href="/segnavita#life" aria-label="Apri segnavita"><svg viewBox="0 0 40 40" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 2 36 11 38 27 20 38 2 27 4 11Z"/><path d="M20 2 10 13 4 11m16-9 10 11 6-2M2 27l8-14h20l8 14M2 27l18 5 18-5m-28-14 10 19 10-19M20 32v6"/><text x="20" y="21.5" text-anchor="middle" stroke="none" fill="currentColor" font-family="system-ui,sans-serif" font-weight="800" font-size="8">20</text></svg></a></div></div>
   <dialog id="player-results-dialog" aria-labelledby="player-results-title"><button type="button" class="dialog-close" id="player-results-close" aria-label="Chiudi">×</button><h2 id="player-results-title">Inserisci il risultato</h2><div id="player-results-content"></div></dialog>
-  <dialog id="profile-dialog" aria-labelledby="profile-title"><button type="button" class="dialog-close" id="profile-close" aria-label="Chiudi">×</button><h2 id="profile-title">Il tuo profilo</h2><div id="profile-content"></div></dialog>
+  <dialog id="profile-dialog" aria-labelledby="profile-title"><button type="button" class="dialog-close" id="profile-close" aria-label="Chiudi">×</button><h2 id="profile-title">Profilo giocatore</h2><div id="profile-content"></div></dialog>
   <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
 </body>
 </html>

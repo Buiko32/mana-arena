@@ -6,6 +6,7 @@ import uuid
 from datetime import timezone
 
 from .db import Database, MUTATION_LOCK
+from .service import elo_snapshot, elo_changes
 from .tournament_results import record_tournament_winner
 
 
@@ -52,8 +53,10 @@ def submit_result(db, game, cookie, csrf):
         first = 0 if target.proposer_id in sides[0] else 1
         rid = str(uuid.uuid4())
         played_at = game.ended_at.astimezone(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+        if game.format == 'team' and (target.kind != 'friendly' or any(not 1 <= len(side) <= 3 for side in sides)):
+            return unavailable()
+        before = elo_snapshot(conn, ids)
         if game.format == 'team':
-            if target.kind != 'friendly' or any(not 1 <= len(side) <= 3 for side in sides): return unavailable()
             conn.execute("INSERT INTO team_results(id,proposer_id,winning_team,created_at,status) VALUES(?,?,?,?,'confirmed')",(rid,target.proposer_id,'a' if winner_index==first else 'b',played_at))
             conn.executemany('INSERT INTO team_result_players(result_id,player_id,team) VALUES(?,?,?)',[(rid,pid,'a' if index==first else 'b') for index,side in enumerate(sides) for pid in side])
             Database.audit(conn, None, 'team_friendly_result_recorded', {'match_id': rid})
@@ -72,4 +75,4 @@ def submit_result(db, game, cookie, csrf):
                 Database.audit(conn, None, 'friendly_result_recorded', {'match_id': rid})
             kind='single'
         conn.execute('INSERT INTO life_result_links VALUES (?,?,?)',(str(game.session_id),kind,rid))
-        return {'result_status':'confirmed','result_id':rid}
+        return {'result_status':'confirmed','result_id':rid,'elo_changes':elo_changes(conn, before)}

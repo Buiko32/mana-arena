@@ -4,12 +4,10 @@
   if (!root) return;
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   function avatar(member) {
-    const name=String(member?.name||'?'), initials=name.trim().split(/\s+/).slice(0,2).map(part=>part[0]||'').join('').toLocaleUpperCase()||'?';
-    const url=typeof member?.photo_url==='string' && member.photo_url.startsWith('/') && !member.photo_url.startsWith('//') ? member.photo_url : '';
-    return `<span class="life-avatar" aria-hidden="true"><span>${esc(initials)}</span>${url?`<img src="${esc(url)}" alt="" loading="lazy">`:''}</span>`;
+    const profile = member.id && profiles.find(profile => profile.id === member.id);
+    return window.renderPlayerAvatar(profile || member, 'life-avatar');
   }
   function memberNames(side) { return (side.members||[{name:side.name}]).map(member=>`<span class="life-person">${avatar(member)}<span>${esc(member.name)}</span></span>`).join(''); }
-  root.addEventListener('error',event=>{if(event.target.matches?.('.life-avatar img'))event.target.remove();},true);
   let profiles = [], sides = [[], []], game = null, busy = false;
   const key='mana-life-draft-v1', outboxKey='mana-life-outbox-v1', rosterKey='mana-life-roster-v1';
   let draining=null, storageProblem='', setupGeneration=0, sessionPlayer=null, cachedMatches=[], queueMessage='';
@@ -52,6 +50,11 @@
     if (session?.player_id === target.proposer_id) headers['X-Player-CSRF'] = session.csrf_token;
     return headers;
   }
+  const pendingEloResults = [];
+  function showPendingEloResults() {
+    if (game && !game.payload) return;
+    for (const changes of pendingEloResults.splice(0)) window.showEloResult?.(changes);
+  }
   async function syncFinishedGames() {
     const attempted = new Set();
     const messages = {
@@ -85,6 +88,10 @@
         queueMessage = messages[outcome.result_status] || 'Partita sincronizzata.';
         const current = outbox();
         if (!current || !write(outboxKey, current.filter(x => x.session_id !== next.session_id))) return;
+        if (outcome.elo_changes?.length) {
+          pendingEloResults.push(outcome.elo_changes);
+          showPendingEloResults();
+        }
       } catch {
         queueMessage = 'NAS irraggiungibile. Le partite in attesa restano sul telefono.';
       }
@@ -113,10 +120,13 @@
       ? data.matches.filter(match => match.p1 && match.p2 && [match.p1,match.p2].includes(sessionPlayer.player_id))
       : [];
   }
-  function setup() {
-    const generation = ++setupGeneration;
+  function loadCachedProfiles() {
     const cached = read(rosterKey,[]);
     profiles = Array.isArray(cached) ? cached : [];
+  }
+  function setup() {
+    const generation = ++setupGeneration;
+    loadCachedProfiles();
     useMatchCache(read('mana-life-matches-v1',null));
     drawSetup();
     refreshQueueStatus();
@@ -345,9 +355,27 @@
   window.addEventListener('pageshow', syncScreenLock);
 
   const tapFeedback = new Map();
+  function readRememberedPlayer() {
+    try { return localStorage.getItem('mana-arena-player-id'); }
+    catch (_) { return null; }
+  }
+
+  function mobileSeats(sides, playerId) {
+    const seats = sides.map((_, index) => index);
+    const ownSide = playerId ? sides.findIndex(side => side.members?.some(member => member.id === playerId)) : -1;
+    if (ownSide !== -1) seats.push(...seats.splice(ownSide, 1));
+    return seats;
+  }
+
   function drawGame() {
+    const seats = mobileSeats(game.sides, game.proposer || readRememberedPlayer());
+    const topCount = game.sides.length === 2 ? 1 : 2;
+    const seat = index => {
+      const mobile = seats.indexOf(index);
+      return `style="--mobile-order:${mobile};--seat-turn:${index < topCount ? 180 : 0}deg;--mobile-turn:${mobile < topCount ? 180 : 0}deg;--seat-span:${game.sides.length === 3 && index === 2 ? 2 : 1};--mobile-span:${game.sides.length === 3 && mobile === 2 ? 2 : 1}"`;
+    };
     root.classList.add('life-playing');
-    root.innerHTML = `<div class="life-table-shell"><div class="life-table life-table-${game.sides.length}">${game.sides.map((side,i)=>`<article class="life-side life-side-${i}"><div class="life-side-inner"><div class="life-side-heading">${memberNames(side)}</div><div class="life-counter"><button type="button" data-delta="${i},-1" aria-label="Togli una vita a ${esc(side.name)}">−</button><div class="life-total"><strong data-life="${i}">${side.life}</strong><span class="life-change" data-feedback="${i}" aria-hidden="true"></span></div><button type="button" data-delta="${i},1" aria-label="Aggiungi una vita a ${esc(side.name)}">+</button></div><button class="life-undo" type="button" data-undo="${i}">Annulla</button></div></article>`).join('')}</div><div class="life-floating-controls"><button type="button" data-end>Termina</button><button type="button" data-dice-open aria-label="Apri dadi">⚄</button></div><p class="life-error" role="alert"></p><div class="life-dice-overlay" data-dice-overlay hidden><div class="life-dice-dialog" role="dialog" aria-modal="true" aria-labelledby="life-dice-title"><div class="life-dice-header"><h2 id="life-dice-title">Tira il D20</h2><button type="button" data-dice-close aria-label="Chiudi dadi">×</button></div><p class="life-roll-result" aria-live="polite"></p><div class="life-dice-grid">${game.sides.map((side,i)=>`<div class="life-dice-player"><div class="life-dice-name">${memberNames(side)}</div><div class="life-die-wrap"><canvas width="150" height="150" data-die="${i}" aria-label="Dado a venti facce"></canvas><span data-roll-value="${i}">—</span></div><button type="button" data-roll="${i}">Tira D20</button></div>`).join('')}</div></div></div></div>`;
+    root.innerHTML = `<div class="life-table-shell"><div class="life-table life-seating life-seating-${game.sides.length}">${game.sides.map((side,i)=>`<article class="life-side" ${seat(i)}><div class="life-side-inner"><div class="life-side-heading">${memberNames(side)}</div><div class="life-counter"><button type="button" data-delta="${i},-1" aria-label="Togli una vita a ${esc(side.name)}">−</button><div class="life-total"><strong data-life="${i}">${side.life}</strong><span class="life-change" data-feedback="${i}" aria-hidden="true"></span></div><button type="button" data-delta="${i},1" aria-label="Aggiungi una vita a ${esc(side.name)}">+</button></div><button class="life-undo" type="button" data-undo="${i}">Annulla</button></div></article>`).join('')}</div><div class="life-floating-controls"><button type="button" data-end>Termina</button><button type="button" data-dice-open aria-label="Apri dadi">⚄</button></div><p class="life-error" role="alert"></p><div class="life-dice-overlay" data-dice-overlay hidden><div class="life-dice-dialog" role="dialog" aria-modal="true" aria-labelledby="life-dice-title"><div class="life-dice-header"><h2 id="life-dice-title">Tira il D20</h2><button type="button" data-dice-close aria-label="Chiudi dadi">×</button></div><p class="life-roll-result" aria-live="polite"></p><div class="life-dice-grid life-seating life-seating-${game.sides.length}">${game.sides.map((side,i)=>`<div class="life-dice-player" ${seat(i)}><div class="life-dice-inner"><div class="life-dice-name">${memberNames(side)}</div><div class="life-die-wrap"><canvas width="150" height="150" data-die="${i}" aria-label="Dado a venti facce"></canvas><span data-roll-value="${i}">—</span></div><button type="button" data-roll="${i}">Tira D20</button></div></div>`).join('')}</div></div></div></div>`;
     syncScreenLock();
     game.sides.forEach((_,i)=>{drawDie(root.querySelector(`[data-die="${i}"]`),0,0,0,game.rolls.values[i]);root.querySelector(`[data-roll-value="${i}"]`).textContent=game.rolls.values[i]||'—';}); updateRollStatus();
     root.onclick = e => { const b=e.target.closest('button'); if (!b || busy) return;
@@ -410,11 +438,11 @@
     root.innerHTML='<div class="life-shell"><h1>Archivio segnavita</h1><p data-status>Partita conservata su questo dispositivo.</p><p data-queue-status role="status"></p><p class="life-error" role="alert"></p><div class="life-setup-actions"><button type="button" class="button secondary" data-queue-retry hidden>Riprova sincronizzazione</button><button type="button" class="button secondary" data-queue-login hidden>Accedi come proponente e sincronizza</button><button type="button" class="button secondary" data-new>Nuova partita</button></div></div>';
     root.onclick=e=>{if(e.target.closest('[data-queue-retry]'))drainOutbox();if(e.target.closest('[data-queue-login]'))loginAndDrain();if(e.target.closest('[data-new]')){try{localStorage.removeItem(key);}catch(_){reportStorage('Impossibile aggiornare la memoria locale.');return;}sides=[[],[]];game=null;setup();}};
     if(finished.payload.result_target)root.querySelector('[data-status]').textContent+=' Il risultato verrà registrato alla sincronizzazione.';
-    refreshQueueStatus();drainOutbox();
+    refreshQueueStatus();showPendingEloResults();drainOutbox();
   }
   window.addEventListener('online',async () => {
     await drainOutbox();
     if (!game && root.querySelector('#life-setup')) loadTournamentMatches(sessionPlayer?.player_id);
   });
-  window.openLifeCounter = () => { if (!root.firstElementChild) { game=restore(); if(game?.payload){savePending();} else if(game?.sides && game?.rolls)drawGame(); else setup(); } drainOutbox(); };
+  window.openLifeCounter = () => { if (!root.firstElementChild) { game=restore(); if(game?.payload){savePending();} else if(game?.sides && game?.rolls){loadCachedProfiles();drawGame();} else setup(); } drainOutbox(); };
 })();

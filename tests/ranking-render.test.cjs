@@ -19,7 +19,7 @@ test('ranking and avatar retain their DOM when the server returns the same data'
       return elements.get(selector);
     },
   };
-  vm.runInNewContext(source,{window,document,localStorage:{getItem:() => 'player'}});
+  vm.runInNewContext(fs.readFileSync("app/static/player-avatar.js","utf8")+"\n"+source,{window,document:{addEventListener(){},...document},localStorage:{getItem:() => 'player'}});
   const player = {id:'player',name:'Ada',photo_url:'/photos/abc.jpg',rank:1,rating:1500,matches:0,wins:0,losses:0};
   window.renderRankingForTest([player]);
   window.renderRankingForTest([{...player}]);

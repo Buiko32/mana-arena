@@ -18,6 +18,7 @@ def test_team_friendly_registers_immediately_and_updates_each_elo_once(app_facto
             tokens.append({'X-Player-CSRF':client.post('/api/player/login',json={'player_id':person['id'],'password':pw}).json()['csrf_token']})
         ids=[p['id'] for p in people]
         body={'team_a':ids[:team_size],'team_b':ids[team_size:],'winner':'a'}
+        before = {p['id']: p for p in admin.get('/api/public/ranking').json()}
         response=clients[0].post('/api/player/team-results',json=body,headers=tokens[0]); assert response.status_code==201, response.text
         rid=response.json()['id']
         confirm = f'/api/player/team-results/{rid}/confirm'
@@ -27,6 +28,11 @@ def test_team_friendly_registers_immediately_and_updates_each_elo_once(app_facto
         ranks = {p['id']: p for p in admin.get('/api/public/ranking').json()}
         assert [ranks[i]['rating'] for i in ids] == [1520] * team_size + [1480] * team_size
         assert [ranks[i]['matches'] for i in ids] == [1] * len(ids)
+        changes = {row['id']: row for row in response.json()['elo_changes']}
+        assert set(changes) == set(ids)
+        for pid in ids:
+            assert (changes[pid]['previous_rating'], changes[pid]['previous_rank']) == (1500, before[pid]['rank'])
+            assert (changes[pid]['rating'], changes[pid]['rank']) == (ranks[pid]['rating'], ranks[pid]['rank'])
 
 def test_team_validation_rejection_and_backup_roundtrip(app_factory):
     app=app_factory()

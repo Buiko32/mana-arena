@@ -52,7 +52,12 @@ def test_life_game_creates_one_proposal_even_after_deletion(app_factory):
         assert player.post('/api/life/games',json=raw).json()['result_status']=='unauthorized'
         response=player.post('/api/life/games',json=raw,headers=token).json()
         assert response['duplicate'] and response['result_status']=='confirmed'
-        assert player.post('/api/life/games',json=raw,headers=token).json()['result_id']==response['result_id']
+        changes = {row['id']: row for row in response['elo_changes']}
+        assert changes[people[1]['id']]['rating'] == 1520
+        assert changes[people[0]['id']]['rating'] == 1480
+        retry = player.post('/api/life/games',json=raw,headers=token).json()
+        assert retry['result_id'] == response['result_id']
+        assert 'elo_changes' not in retry
         login=opponent.post('/api/player/login',json={'player_id':people[1]['id']}).json()
         assert opponent.post('/api/player/results/'+response['result_id']+'/confirm',headers={'X-Player-CSRF':login['csrf_token']}).status_code==409
         from app.history import month_matches

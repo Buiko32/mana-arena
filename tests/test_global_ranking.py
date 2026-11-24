@@ -95,3 +95,32 @@ def test_database_ranking_replays_all_game_types_by_shared_dates(tmp_path):
         assert actual == {r['id']:r['rating'] for r in expected}
         history=month_matches(conn,'2024-01-01 00:00:00','2024-02-01 00:00:00')
         assert [g['at'] for g in history] == ['2024-01-03T12:00:00Z','2024-01-02T12:00:00Z','2024-01-01T12:00:00Z']
+
+def test_player_statistics_track_rank_changes_and_only_count_confirmed_games(tmp_path):
+    from app.db import Database
+    from app.service import global_elo_from_db, player_statistics
+
+    db = Database(tmp_path)
+    db.initialize()
+    with db.transaction() as conn:
+        for pid in 'abcd':
+            conn.execute('INSERT INTO players(id,name) VALUES (?,?)', (pid, pid))
+        games = [
+            ('1', 'b', 'c', 'b', 'confirmed', '2026-01-01 12:00:00'),
+            ('2', 'a', 'd', 'a', 'confirmed', '2026-01-02 12:00:00'),
+            ('3', 'b', 'd', 'b', 'confirmed', '2026-01-03 12:00:00'),
+            ('4', 'a', 'b', 'a', 'confirmed', '2026-01-04 12:00:00'),
+            ('5', 'a', 'c', 'c', 'pending', '2026-01-05 12:00:00'),
+        ]
+        conn.executemany("INSERT INTO result_proposals(id,proposer_id,opponent_id,winner_id,status,created_at) VALUES (?,?,?,?,?,?)", games)
+        stats = player_statistics(conn, 'a')
+        points = stats['history']
+        assert [point['rank'] for point in points] == [1, 2, 1]
+        assert points[0]['rating'] == points[1]['rating'] == 1520
+        assert stats['recent_form'] == ['win', 'win']
+        assert stats['win_streak'] == stats['longest_win_streak'] == 2
+        assert stats['best_win']['opponents'] == ['b']
+        assert stats['best_win']['gap'] > 0
+        assert stats['peak_rating'] == points[-1]['rating']
+        assert stats['player']['rating'] == global_elo_from_db(conn)[0]['rating']
+        assert player_statistics(conn, 'missing') is None

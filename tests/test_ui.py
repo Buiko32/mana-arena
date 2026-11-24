@@ -225,8 +225,10 @@ def test_offline_counter_caches_only_its_own_versioned_shell(tmp_path):
         worker = client.get("/life-worker.js")
         assert shell.status_code == worker.status_code == 200
         urls = re.findall(r'(?:href|src)="(/static/[^"]+)"', shell.text)
-        assert len(urls) == 5
-        assert any("mana-arena-mark.svg" in url for url in urls)
+        assert {url.split("?", 1)[0] for url in urls} == {
+            "/static/mana-arena-mark.svg", "/static/style.css", "/static/life.css",
+            "/static/player-avatar.js", "/static/result-celebration.js", "/static/life.js", "/static/life-entry.js",
+        }
         for url in urls:
             assert "?v=" in url and url in worker.text
             assert client.get(url).status_code == 200

@@ -27,7 +27,7 @@ from . import engine
 from .auth import AuthManager, hash_password, valid_bootstrap_password
 from .backup import create_backup, restore_backup
 from .db import Database, MUTATION_LOCK, _dump
-from .service import public_rounds, safe_csv, global_elo_from_db
+from .service import public_rounds, safe_csv, global_elo_from_db, player_statistics, elo_snapshot, elo_changes
 
 MAX_PHOTO = 5 * 1024 * 1024
 MAX_PHOTO_PIXELS = 20_000_000
@@ -213,11 +213,12 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             _detail(422,'Scegli da 1 a 3 giocatori distinti per parte e indica chi ha vinto.')
         with MUTATION_LOCK, db.transaction() as conn:
             if any(not conn.execute('SELECT 1 FROM players WHERE id=? AND active=1',(pid,)).fetchone() for pid in a+b): _detail(422,'Seleziona giocatori attivi.')
+            before = elo_snapshot(conn, a + b)
             rid=str(uuid.uuid4())
             conn.execute("INSERT INTO team_results(id,proposer_id,winning_team,status) VALUES(?,?,?,'confirmed')",(rid,session['player_id'],winner))
             conn.executemany('INSERT INTO team_result_players(result_id,player_id,team) VALUES(?,?,?)',[(rid,pid,team) for team,items in (('a',a),('b',b)) for pid in items])
             Database.audit(conn, None, 'team_friendly_result_recorded', {'match_id': rid})
-        return {'id':rid}
+            return {'id':rid, 'elo_changes':elo_changes(conn, before)}
 
     @application.post('/api/player/team-results/{result_id}/confirm')
     def confirm_team_result(result_id: str, session=Depends(player_write)):
@@ -227,10 +228,15 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             member=conn.execute("SELECT * FROM team_result_players WHERE result_id=? AND player_id=?",(result_id,session['player_id'])).fetchone()
             if not member or member['team']!='b': _detail(403,'Solo gli avversari possono confermare.')
             if row['status']!='pending' or member['confirmed']: _detail(409,'Proposta già gestita.')
+            before = None
+            if conn.execute("SELECT COUNT(*) FROM team_result_players WHERE result_id=? AND team='b' AND confirmed=0", (result_id,)).fetchone()[0] == 1:
+                ids = [row['player_id'] for row in conn.execute('SELECT player_id FROM team_result_players WHERE result_id=?', (result_id,))]
+                before = elo_snapshot(conn, ids)
             conn.execute('UPDATE team_result_players SET confirmed=1 WHERE result_id=? AND player_id=?',(result_id,session['player_id']))
             if not conn.execute("SELECT 1 FROM team_result_players WHERE result_id=? AND team='b' AND confirmed=0",(result_id,)).fetchone():
                 conn.execute("UPDATE team_results SET status='confirmed' WHERE id=?",(result_id,))
                 Database.audit(conn,None,'team_friendly_result_recorded',{'match_id':result_id})
+                return {'ok':True, 'elo_changes':elo_changes(conn, before)}
         return {'ok':True}
 
     @application.post('/api/player/team-results/{result_id}/reject')
@@ -274,6 +280,7 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
                 opponent=body.get('opponent_id'); tid=None; mid=None
                 if not opponent or opponent==player or not conn.execute('SELECT 1 FROM players WHERE id=? AND active=1',(opponent,)).fetchone(): _detail(422,'Seleziona un avversario valido.')
             if winner not in (player,opponent): _detail(422,'Seleziona il vincitore.')
+            before = elo_snapshot(conn, (player, opponent))
             rid=str(uuid.uuid4())
             conn.execute("INSERT INTO result_proposals(id,proposer_id,opponent_id,tournament_id,match_id,winner_id,status) VALUES(?,?,?,?,?,?,'confirmed')",(rid,player,opponent,tid,mid,winner))
             if tid:
@@ -281,7 +288,7 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
                 record_tournament_winner(conn, tournament, matches, match, winner)
             else:
                 Database.audit(conn, None, 'friendly_result_recorded', {'match_id': rid})
-        return {'id':rid}
+            return {'id':rid, 'elo_changes':elo_changes(conn, before)}
 
     @application.post('/api/player/results/{result_id}/confirm')
     def confirm_player_result(result_id: str, session=Depends(player_write)):
@@ -290,6 +297,7 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             if not proposal: _detail(404,'Proposta non trovata.')
             if proposal['opponent_id']!=session['player_id']: _detail(403,'Solo l’avversario può confermare.')
             if proposal['status']!='pending': _detail(409,'Proposta già gestita.')
+            before = elo_snapshot(conn, (proposal['proposer_id'], proposal['opponent_id']))
             if proposal['tournament_id']:
                 tid=proposal['tournament_id']; tournament=_row_tournament(conn,tid)
                 if tournament['status']!='active': _detail(409,'Il torneo non è attivo.')
@@ -299,7 +307,7 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             if not proposal['tournament_id']:
                 Database.audit(conn,None,'friendly_result_recorded',{'match_id':result_id})
             conn.execute("UPDATE result_proposals SET status='confirmed' WHERE id=?",(result_id,))
-        return {'ok':True}
+            return {'ok':True, 'elo_changes':elo_changes(conn, before)}
 
     @application.post('/api/player/results/{result_id}/reject')
     def reject_player_result(result_id: str, session=Depends(player_write)):
@@ -324,13 +332,13 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
         index = Path(__file__).parent / "static" / "index.html"
         if index.is_file():
             html = index.read_text(encoding="utf-8")
-            for asset in ("mana-arena-mark.svg", "style.css", "taste/motion.css", "taste/motion.js", "brackets.js", "reveal.js", "app.js", "player-results.js", "history.js", "admin-friendlies.js"):
+            for asset in ("mana-arena-mark.svg", "style.css", "taste/motion.css", "taste/motion.js", "brackets.js", "reveal.js", "player-avatar.js", "result-celebration.js", "app.js", "player-results.js", "history.js", "admin-friendlies.js"):
                 version = hashlib.sha256((index.parent / asset).read_bytes()).hexdigest()[:12]
                 html = html.replace(f'/static/{asset}"', f'/static/{asset}?v={version}"')
             return HTMLResponse(html, headers={"Cache-Control": "no-store"})
         return HTMLResponse("<!doctype html><html lang='it'><meta charset='utf-8'><title>Mana Arena</title><body><main><h1>Mana Arena</h1><p>Interfaccia in preparazione.</p></main></body></html>")
 
-    life_assets = ("mana-arena-mark.svg", "style.css", "life.css", "life.js", "life-entry.js")
+    life_assets = ("mana-arena-mark.svg", "style.css", "life.css", "player-avatar.js", "result-celebration.js", "life.js", "life-entry.js")
 
     def offline_shell():
         folder = Path(__file__).parent / "static"
@@ -769,12 +777,13 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
                 finalized = engine.apply_result(cfg, found, body)
             except ValueError as exc:
                 _detail(422, str(exc))
+            before = elo_snapshot(conn, (found["p1"], found["p2"]))
             matches[matches.index(found)] = finalized
             _persist_match_rows(conn, tid, matches)
             _bump(conn, tid)
             Database.audit(conn, tid, "match_result_recorded", {"match_id": match_id, "round": found["round"], "result": finalized["result"]})
             _advance_completed_round(conn, tournament, entrants, matches)
-            return {"id": match_id, **finalized, "status": Database.get_tournament(conn, tid)["status"]}
+            return {"id": match_id, **finalized, "status": Database.get_tournament(conn, tid)["status"], "elo_changes": elo_changes(conn, before)}
 
     @application.post("/api/admin/tournaments/{tid}/withdrawals")
     async def withdraw(tid: str, request: Request, session=Depends(admin_write)):
@@ -1082,13 +1091,25 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             Database.audit(conn,None,'friendly_admin_deleted',{'match_id':result_id,'kind':kind})
         return {'ok':True}
 
+    def ranking_player(row, rank):
+        return {"rank": rank, "id": row["id"], "name": row["name"], "rating": row["rating"],
+                "matches": row["matches"], "wins": row["wins"], "draws": row["draws"], "losses": row["losses"],
+                "photo_url": f"/photos/{row['photo']}" if row.get("photo") else None,
+                "avatar_hue": row["avatar_hue"], "avatar_color": row["avatar_color"]}
+
     @application.get("/api/public/ranking")
     def public_ranking():
         with db.transaction() as conn:
-            rows = global_elo_from_db(conn)
-            return [{"rank": i, "id": row["id"], "name": row["name"], "rating": row["rating"],
-                     "matches": row["matches"], "wins": row["wins"], "draws": row["draws"], "losses": row["losses"],
-                     "photo_url": f"/photos/{row['photo']}" if row.get("photo") else None, "avatar_hue": row["avatar_hue"], "avatar_color": row["avatar_color"]} for i, row in enumerate(rows, 1)]
+            return [ranking_player(row, rank) for rank, row in enumerate(global_elo_from_db(conn), 1)]
+
+    @application.get("/api/public/players/{player_id}/statistics")
+    def public_player_statistics(player_id: str):
+        with db.transaction() as conn:
+            stats = player_statistics(conn, player_id)
+            if stats is None:
+                _detail(404, "Profilo non disponibile.")
+            stats["player"] = ranking_player(stats["player"], stats["player"]["rank"])
+            return stats
 
     def reveal_state(conn, tid, matches, pid):
         pending = [m['round'] for m in matches if not m.get('result') and not m.get('void')]
