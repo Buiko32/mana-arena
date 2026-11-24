@@ -174,3 +174,24 @@ def test_public_navigation_has_separate_ranking_and_visible_player_selector():
     assert "$('#global-ranking').hidden=!ranking" in js
     assert 'is-active-tournament' in js
     assert 'Eliminato' in js
+
+
+def test_page_versions_script_and_stylesheet_urls_and_disables_html_cache(tmp_path):
+    import hashlib
+    import re
+    from pathlib import Path
+    app = create_app(data_dir=tmp_path, admin_username='admin', admin_password='Valid-admin-passphrase-42', session_secret='ui-test-session-secret-at-least-32-bytes')
+    with TestClient(app) as client:
+        response = client.get('/')
+    assert 'no-cache' in response.headers['cache-control'] or 'no-store' in response.headers['cache-control']
+    for asset in ('style.css', 'taste/motion.css', 'taste/motion.js', 'brackets.js', 'reveal.js', 'app.js', 'player-results.js'):
+        digest = hashlib.sha256((Path('app/static') / asset).read_bytes()).hexdigest()[:12]
+        assert f'/static/{asset}?v={digest}' in response.text
+    assert re.search(r'<section id="global-ranking"[^>]*\bhidden\b', response.text)
+
+
+def test_hero_rules_target_current_markup():
+    from pathlib import Path
+    css = Path('app/static/style.css').read_text()
+    assert '#tournament-home>.hero' in css
+    assert '#public-view>.hero' not in css
