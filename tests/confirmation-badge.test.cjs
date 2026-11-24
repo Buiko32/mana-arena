@@ -20,8 +20,14 @@ test('badge counts only results awaiting the current player and refreshes', asyn
   assert.match(elements['confirmations-content'].innerHTML,/Due.*vs.*Uno/s);
   assert.match(elements['confirmations-content'].innerHTML,/confirmation-winner[^>]*>Vince Uno/);
   assert.match(elements['confirmations-content'].innerHTML,/\/photos\/1.jpg/);
-  pending=[];teamPending=[{status:'pending',players:[{player_id:'p1',team:'b',confirmed:0}]}];tick();await new Promise(resolve=>setImmediate(resolve));
+  pending=[];teamPending=[{id:'t1',status:'pending',winning_team:'a',players:[{player_id:'p2',name:'Due',team:'a',confirmed:0},{player_id:'p1',name:'Uno',team:'b',confirmed:0}]}];
+  await handlers['confirmations-open:click']();
+  assert.match(elements['confirmations-content'].innerHTML,/is-winning[^>]*>.*Squadra A.*Vincitrice.*Due.*Squadra B.*Uno/s);
+  teamPending[0].winning_team='b';
+  await handlers['confirmations-open:click']();
+  assert.match(elements['confirmations-content'].innerHTML,/Squadra A.*Due.*is-winning[^>]*>.*Squadra B.*Vincitrice.*Uno/s);
+  tick();await new Promise(resolve=>setImmediate(resolve));
   assert.equal(elements['confirmations-count'].textContent,'1');
-  teamPending[0].players[0].confirmed=1;tick();await new Promise(resolve=>setImmediate(resolve));
+  teamPending[0].players[1].confirmed=1;tick();await new Promise(resolve=>setImmediate(resolve));
   assert.equal(elements['confirmations-count'].hidden,true);
 });
