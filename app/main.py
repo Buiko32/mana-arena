@@ -287,8 +287,8 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
     @application.post('/api/player/team-results',status_code=201)
     async def create_team_result(request: Request, session=Depends(player_write)):
         body=await _json(request); a=body.get('team_a'); b=body.get('team_b'); winner=body.get('winner')
-        if not isinstance(a,list) or not isinstance(b,list) or len(a) not in (2,3) or len(b) not in (2,3) or not all(isinstance(x,str) for x in a+b) or len(set(a+b))!=len(a+b) or session['player_id'] not in a or winner not in ('a','b'):
-            _detail(422,'Scegli due squadre da 2 o 3 giocatori distinti e il vincitore.')
+        if not isinstance(a,list) or not isinstance(b,list) or not 1 <= len(a) <= 3 or not 1 <= len(b) <= 3 or not all(isinstance(x,str) for x in a+b) or len(set(a+b))!=len(a+b) or session['player_id'] not in a or winner not in ('a','b'):
+            _detail(422,'Scegli da 1 a 3 giocatori distinti per parte e indica chi ha vinto.')
         with MUTATION_LOCK, db.transaction() as conn:
             if any(not conn.execute('SELECT 1 FROM players WHERE id=? AND active=1',(pid,)).fetchone() for pid in a+b): _detail(422,'Seleziona giocatori attivi.')
             rid=str(uuid.uuid4())
