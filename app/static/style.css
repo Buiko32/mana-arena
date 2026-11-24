@@ -283,3 +283,12 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber-bright);ou
 footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:var(--amber-bright)}
 @media(max-width:540px){#tournament-home>.hero{padding:2.5rem 0 1.5rem}#tournament-home .hero h1{font-size:clamp(3.4rem,14vw,4.7rem)}.identity-bar{padding:1rem}.ranking-section h2,.public-heading h2{font-size:2.4rem}}
 
+
+/* Dock delle azioni giocatore, raccordato al bordo inferiore. */
+.results-fab-group{position:fixed;left:50%;bottom:0;transform:translateX(-50%);z-index:20;display:flex;align-items:center;justify-content:center;gap:12px;width:auto;padding:14px 20px max(14px,env(safe-area-inset-bottom));border:1px solid #5b6265;border-bottom:0;border-radius:36px 36px 0 0;background:#222427;box-shadow:0 -8px 24px #0006}
+.results-fab-group .results-fab,.results-fab-group #confirmations-open{position:relative;inset:auto;transform:none;display:grid;place-items:center;flex:none;width:56px;height:56px;min-width:56px;min-height:56px;padding:0;border:2px solid #ff9c7f;border-radius:50%;background:#ff7654;color:#18191b;box-shadow:none;cursor:pointer;transition:background .18s,transform .18s}
+.results-fab-group #confirmations-open{font-size:1.65rem;line-height:1;font-weight:700}
+.results-fab-group .results-fab:hover,.results-fab-group #confirmations-open:hover{background:#ffac93;transform:translateY(-2px)}
+.results-fab-group .results-fab:active,.results-fab-group #confirmations-open:active{transform:translateY(1px)}
+.results-fab-group button:focus-visible{outline:3px solid #fff;outline-offset:3px}
+@media(prefers-reduced-motion:reduce){.results-fab-group button{transition:none}}
