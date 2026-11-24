@@ -233,3 +233,11 @@ tr.is-me td{background:#173b55}
 @media(prefers-reduced-motion:reduce){.crystal-stage.is-revealing .crystal-ball{animation:none}}
 #confirmations-open{min-width:42px;min-height:42px;padding:.45rem;flex:none}
 @media(max-width:650px){.topbar{gap:0 .4rem}.topbar .brand{flex:none}.topbar .session-area{flex:1 1 105px;min-width:0;margin-left:auto}.topbar .session-area select{width:100%;min-width:0;max-width:none}.topbar .main-nav{order:3}}
+
+/* Keep participant cards and their selection outlines clear of the heading. */
+.detail-body .mascot-section-heading{margin-bottom:1rem}
+.player-strip{gap:14px}
+.player-strip .player-chip{max-width:100%;min-width:0}
+.player-strip .player-chip .avatar{flex:0 0 34px}
+.player-strip .player-chip>span:not(.avatar):not(.player-status):not(.badge){min-width:0;overflow-wrap:anywhere}
+.player-strip .player-status,.player-strip .badge{flex-shrink:0}
