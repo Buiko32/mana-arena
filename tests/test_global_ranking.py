@@ -39,3 +39,34 @@ def test_draws_do_not_affect_games_ratings_or_k_factor():
     win = {"p1":"a", "p2":"b", "result":"p1_win"}
     draw = {"p1":"a", "p2":"b", "result":"draw"}
     assert calculate_global_elo(players, [draw] * 50 + [win]) == calculate_global_elo(players, [win])
+
+
+def test_team_elo_rewards_outnumbered_players_and_limits_loss():
+    players=[{'id':str(i),'name':str(i)} for i in range(5)]
+    game={'team_a':['0','1'],'team_b':['2','3','4'],'winner':'a'}
+    ranks={p['id']:p for p in calculate_global_elo(players,[game])}
+    assert [ranks[str(i)]['rating'] for i in range(5)]==[1528,1528,1472,1472,1472]
+    game['winner']='b'
+    ranks={p['id']:p for p in calculate_global_elo(players,[game])}
+    assert [ranks[str(i)]['rating'] for i in range(5)]==[1488,1488,1512,1512,1512]
+
+
+def test_team_elo_uses_each_players_individual_rating():
+    players=[{'id':str(i),'name':str(i)} for i in range(4)]
+    warmup=[{'p1':'0','p2':'1','result':'p1_win'}]
+    before={p['id']:p for p in calculate_global_elo(players,warmup)}
+    game={'team_a':['0','1'],'team_b':['2','3'],'winner':'a'}
+    after={p['id']:p for p in calculate_global_elo(players,warmup+[game])}
+    assert after['1']['rating']-before['1']['rating'] > after['0']['rating']-before['0']['rating']
+    assert after['0']['rating']>before['0']['rating'] and after['1']['rating']>before['1']['rating']
+
+
+def test_team_elo_lower_rated_player_loses_less_and_orientation_is_symmetric():
+    players=[{'id':str(i),'name':str(i)} for i in range(5)]
+    warmup=[{'p1':'0','p2':'1','result':'p1_win'}]
+    before={p['id']:p for p in calculate_global_elo(players,warmup)}
+    game={'team_a':['0','1'],'team_b':['2','3','4'],'winner':'b'}
+    after={p['id']:p for p in calculate_global_elo(players,warmup+[game])}
+    assert before['1']['rating']-after['1']['rating'] < before['0']['rating']-after['0']['rating']
+    reversed_game={'team_a':game['team_b'],'team_b':game['team_a'],'winner':'a'}
+    assert calculate_global_elo(players,warmup+[game])==calculate_global_elo(players,warmup+[reversed_game])
