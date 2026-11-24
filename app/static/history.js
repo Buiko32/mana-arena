@@ -3,6 +3,7 @@
   const root = document.querySelector('#history');
   const calendar = root.querySelector('#history-calendar');
   const games = root.querySelector('#history-games');
+  const count = root.querySelector('#history-count');
   const today = new Date();
   let month = new Date(today.getFullYear(), today.getMonth(), 1);
   let selected = today.getDate();
@@ -10,11 +11,51 @@
   let days = new Map();
   const format = (date, options) => date.toLocaleDateString('it-IT', options);
   const fullDate = date => format(date, {weekday:'long', day:'numeric', month:'long', year:'numeric'});
-  function element(tag, value) {
+  function element(tag, value = '', className = '') {
     const el = document.createElement(tag);
     el.textContent = value;
+    if (className) el.className = className;
     return el;
   }
+  function renderMatch(match) {
+    const card = element('article', '', 'history-match');
+    const teamMatch = match.sides.some(side => side.length > 1);
+    const label = teamMatch ? match.label + ' · Squadre' : match.label;
+    const heading = element('header', '', 'history-match-heading');
+    heading.append(element('h3', label));
+    if (match.winner === null) heading.append(element('span', 'Pareggio', 'history-outcome'));
+    const layout = element('div', '', 'history-match-layout');
+    match.sides.forEach((side, index) => {
+      if (index === 1) {
+        const separator = element('div', '', 'history-match-separator');
+        if (match.score) {
+          const score = element('strong', match.score.join('–'));
+          score.setAttribute('aria-label', 'Punteggio ' + match.score.join(' a '));
+          separator.append(score);
+        } else {
+          separator.setAttribute('aria-hidden', 'true');
+        }
+        layout.append(separator);
+      }
+      const team = element('div', '', 'history-side');
+      if (match.winner === index) team.append(element('span', 'Vittoria', 'history-outcome history-winner'));
+      for (const [position, name] of side.entries()) {
+        const row = element('div', '', 'history-player');
+        row.append(element('strong', name));
+        const delta = match.elo_deltas?.[index]?.[position];
+        if (Number.isInteger(delta)) {
+          const points = element('span', (delta > 0 ? '+' : delta < 0 ? '−' : '') + Math.abs(delta) + ' Elo', 'match-card-elo');
+          points.dataset.direction = Math.sign(delta);
+          row.append(points);
+        }
+        team.append(row);
+      }
+      layout.append(team);
+    });
+    card.append(heading, layout);
+    return card;
+  }
+
   function showDay(day) {
     selected = day;
     calendar.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.day) === day)));
@@ -22,18 +63,16 @@
     root.querySelector('#history-day').textContent = fullDate(date);
     games.replaceChildren();
     const matches = days.get(day) || [];
-    if (!matches.length) games.append(element('p', 'Nessuna partita registrata.'));
-    for (const match of matches) {
-      games.insertAdjacentHTML('beforeend',window.manaMatchCard({
-        ...match, status: match.winner === null ? 'Pareggio' : '',
-      }));
-    }
+    count.textContent = matches.length === 1 ? '1 partita' : matches.length + ' partite';
+    if (!matches.length) games.append(element('p', 'Nessuna partita registrata.', 'muted'));
+    else games.append(...matches.map(renderMatch));
   }
   async function load() {
     const request = ++sequence;
     const end = new Date(month.getFullYear(), month.getMonth()+1, 1);
     root.querySelector('#history-month').textContent = format(month,{month:'long',year:'numeric'});
     root.querySelector('#history-day').textContent = '';
+    count.textContent = '';
     calendar.replaceChildren();
     games.textContent = 'Caricamento partite…';
     try {

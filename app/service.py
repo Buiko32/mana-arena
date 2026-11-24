@@ -163,6 +163,10 @@ def _elo_inputs(conn):
     return players, [{**match, 'elo_date': key[0], 'elo_match_id': key[2]} for key, match in matches]
 
 
+def _displayed_elo_delta(rating, change):
+    return round(rating) - round(rating - change)
+
+
 def match_elo_deltas(conn, ids):
     players, matches = _elo_inputs(conn)
     deltas = {}
@@ -170,7 +174,7 @@ def match_elo_deltas(conn, ids):
     def record_day_match(_rows, match, updates):
         if match["elo_match_id"] in ids:
             deltas[match["elo_match_id"]] = {
-                row["id"]: round(row["rating"]) - round(row["rating"] - change)
+                row["id"]: _displayed_elo_delta(row["rating"], change)
                 for row, change, *_ in updates
             }
 
@@ -262,6 +266,7 @@ def player_statistics(conn, player_id):
 
     history = []
     recent_results = []
+    head_to_head = {}
     streak = longest_streak = 0
     best_win = None
     best_gap = float('-inf')
@@ -279,7 +284,18 @@ def player_statistics(conn, player_id):
         if own:
             _, change, won, opponent_rating, opponents = own
             profiles = [_opponent_profile(opponent) for opponent in opponents]
-            recent_results.append({'result': 'win' if won else 'loss', 'opponents': profiles})
+            if match.get('p1'):
+                opponent = {**profiles[0], 'id': opponents[0]['id']}
+                record = head_to_head.setdefault(opponent['id'], {
+                    'opponent': opponent, 'wins': 0, 'losses': 0,
+                })
+                record['wins' if won else 'losses'] += 1
+            recent_results.append({
+                'result': 'win' if won else 'loss',
+                'opponents': profiles,
+                'date': date,
+                'elo_delta': _displayed_elo_delta(player['rating'], change),
+            })
             if len(recent_results) > 5:
                 recent_results.pop(0)
             streak = streak + 1 if won else 0
@@ -301,4 +317,8 @@ def player_statistics(conn, player_id):
         'win_streak': streak, 'longest_win_streak': longest_streak,
         'recent_form': [match['result'] for match in recent_results],
         'recent_results': recent_results, 'best_win': best_win,
+        'head_to_head': sorted(head_to_head.values(), key=lambda record: (
+            -(record['wins'] + record['losses']),
+            record['opponent']['name'].casefold(), record['opponent']['id'],
+        ))
     }

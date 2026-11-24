@@ -93,6 +93,9 @@ def test_database_ranking_replays_all_game_types_by_shared_dates(tmp_path):
             {'team_a':['a','b'],'team_b':['c','d'],'winner':'b'},
             {'p1':'a','p2':'b','result':'p1_win'}, {'p1':'a','p2':'c','result':'p2_win'}])
         assert actual == {r['id']:r['rating'] for r in expected}
+        from app.service import player_statistics
+        records = player_statistics(conn, 'a')['head_to_head']
+        assert [(row['opponent']['id'], row['wins'], row['losses']) for row in records] == [('b', 1, 0), ('c', 0, 1)]
         history=month_matches(conn,'2024-01-01 00:00:00','2024-02-01 00:00:00')
         assert [g['at'] for g in history] == ['2024-01-03T12:00:00Z','2024-01-02T12:00:00Z','2024-01-01T12:00:00Z']
 
@@ -118,6 +121,8 @@ def test_player_statistics_track_rank_changes_and_only_count_confirmed_games(tmp
         assert [point['rank'] for point in points] == [1, 2, 1]
         assert points[0]['rating'] == points[1]['rating'] == 1520
         assert stats['recent_form'] == ['win', 'win']
+        assert stats['recent_results'][0]['elo_delta'] == 20
+        assert stats['recent_results'][0]['date'] == '2026-01-02 12:00:00'
         assert stats['recent_results'][0]['opponents'][0]['name'] == 'd'
         assert stats['win_streak'] == stats['longest_win_streak'] == 2
         assert stats['best_win']['opponents'] == ['b']
@@ -155,4 +160,6 @@ def test_ranking_movement_uses_latest_played_day_in_rome(tmp_path):
         assert ranking['e']['movement'] is None
         stats = player_statistics(conn, 'a')
         assert stats['recent_results'][1]['result'] == 'loss'
+        assert [match['elo_delta'] for match in stats['recent_results']] == [-20, -18]
         assert stats['recent_results'][1]['opponents'][0]['photo_url'] == '/photos/abcd.jpg'
+        assert [(row['opponent']['id'], row['wins'], row['losses']) for row in stats['head_to_head']] == [('b', 0, 2)]

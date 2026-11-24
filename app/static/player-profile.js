@@ -84,9 +84,26 @@
     const won = match.result === 'win';
     const label = won ? 'Vittoria' : 'Sconfitta';
     const tooltip = `profile-result-${index}`;
+    const delta = match.elo_delta;
+    const points = Number.isInteger(delta)
+      ? `<strong class="profile-result-elo match-card-elo" data-direction="${Math.sign(delta)}">${delta > 0 ? '+' : delta < 0 ? '−' : ''}${Math.abs(delta)} Elo</strong>`
+      : '';
+    const date = match.date ? `<span class="muted">${historyDate.format(utcTime(match.date))}</span>` : '';
     return `<li><button type="button" class="${match.result}" aria-label="${label}" aria-describedby="${tooltip}">${won ? 'V' : 'S'}</button>
       <div class="profile-result-tooltip" id="${tooltip}" role="tooltip"><strong>${won ? 'Vittoria contro' : 'Sconfitta contro'}</strong>
-      ${opponentList(match.opponents)}</div></li>`;
+      ${opponentList(match.opponents)}<div class="profile-result-meta">${date}${points}</div></div></li>`;
+  }
+
+  function headToHead(records = []) {
+    const title = '<h3 id="profile-head-to-head">Testa a testa · Duelli Elo</h3>';
+    if (!records.length) return title + '<p class="muted">Nessun duello valido per l’Elo.</p>';
+    const percent = new Intl.NumberFormat('it-IT', {style:'percent', maximumFractionDigits:1});
+    const rows = records.map(({opponent, wins, losses}) => `<tr>
+      <th scope="row">${opponentList([opponent])}</th><td>${wins}–${losses}</td>
+      <td>${percent.format(wins / (wins + losses))}</td></tr>`).join('');
+    return `${title}<div class="table-wrap profile-head-to-head"><table aria-labelledby="profile-head-to-head">
+      <thead><tr><th scope="col">Avversario</th><th scope="col">V–S</th><th scope="col">% vittorie</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`;
   }
 
   function renderStatistics(stats) {
@@ -110,10 +127,11 @@
     $('#profile-summary').innerHTML = `
       <dl class="profile-metrics">${metrics.map(([label,value])=>`<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')}</dl>
       ${historyContent}
-      ${results?.length ? `<h3>Ultime partite</h3><ol class="profile-form-results">${results.map(recentResult).join('')}</ol>` : ''}
+      ${results?.length ? `<h3>Ultime 5 partite Elo</h3><ol class="profile-form-results">${results.map(recentResult).join('')}</ol>` : ''}
       ${bestWin ? `<section class="profile-best-win"><div><h3>Miglior vittoria</h3>
         <div class="profile-best-opponents">${bestWin.opponent_profiles ? opponentList(bestWin.opponent_profiles) : esc(bestWin.opponents.join(' e '))}</div></div>
-        <strong class="profile-best-gain">+${bestWin.gain} Elo</strong></section>` : ''}`;
+        <strong class="profile-best-gain">+${bestWin.gain} Elo</strong></section>` : ''}
+      ${headToHead(stats.head_to_head)}`;
     const recent = $('.profile-form-results');
     recent?.addEventListener('click', event => event.target.closest('button')?.focus());
     recent?.addEventListener('keydown', event => {

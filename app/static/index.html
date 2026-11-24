@@ -70,9 +70,9 @@
     </section>
     <section id="history" class="wrap" aria-labelledby="history-title" hidden>
       <h1 id="history-title">Storico partite</h1>
-      <div class="month-controls"><button type="button" data-month="-1" aria-label="Mese precedente">‹</button><h2 id="history-month"></h2><button type="button" data-month="1" aria-label="Mese successivo">›</button></div>
-      <div class="history-grid" id="history-calendar" aria-labelledby="history-month"></div>
-      <section aria-live="polite"><h2 id="history-day"></h2><div id="history-games"></div></section>
+      <div class="history-month-panel"><div class="month-controls"><button type="button" data-month="-1" aria-label="Mese precedente">‹</button><h2 id="history-month"></h2><button type="button" data-month="1" aria-label="Mese successivo">›</button></div>
+      <div class="history-grid" id="history-calendar" aria-labelledby="history-month"></div></div>
+      <section aria-live="polite"><div class="history-day-heading"><h2 id="history-day"></h2><span id="history-count" class="muted"></span></div><div id="history-games"></div></section>
     </section>
     <section id="admin-view" class="view" aria-labelledby="admin-title" hidden>
       <div class="hero admin-hero" data-enter><div><p class="hero-kicker">AREA ORGANIZZATORE</p><h1 id="admin-title">Gestione</h1></div></div>
@@ -121,7 +121,7 @@
       </div>
     </section>
   </main>
-  <footer><span class="brand-mini">✦ MANA ARENA</span><span class="app-version">Versione 0.01.28</span><a href="#admin-view" data-view-link="admin">Area organizzatore</a></footer>
+  <footer><span class="brand-mini">✦ MANA ARENA</span><span class="app-version">Versione 0.01.31</span><a href="#admin-view" data-view-link="admin">Area organizzatore</a></footer>
   <dialog id="identity-welcome" class="identity-welcome" aria-labelledby="identity-welcome-title" aria-describedby="identity-welcome-description">
     <p class="identity-welcome-kicker">MANA ARENA</p>
     <h2 id="identity-welcome-title">Chi sta giocando?</h2>
