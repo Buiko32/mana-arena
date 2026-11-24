@@ -2,6 +2,10 @@
 
 Mana Arena gestisce tornei amatoriali di Magic in italiano. È pensata per una partita 1v1, con un massimo di 64 partecipanti. Gli abbinamenti e gli spareggi sono strumenti amatoriali: l’OMW usa la percentuale effettiva senza soglia minima. L’app non gestisce tornei multiplayer Commander e non offre funzioni o certificazioni DCI/sanzionate.
 
+## Versione
+
+La versione mostrata nel footer è `0.01.1` e segue il formato `major.release.fix`: il primo numero indica la major release, il secondo la release di base e l’ultimo i fix. Per ogni modifica richiesta dall’utente si incrementa il numero dei fix; release di base e major avanzano quando viene richiesta una nuova release di quel livello. Aggiorna il valore nel footer di `app/static/index.html` insieme alla modifica.
+
 ## Scoprire il proprio abbinamento
 
 Apri un torneo pubblico e scegli **Scopri il tuo incontro**. Seleziona il tuo nome e il turno: una breve animazione mostra l'avversario e il tavolo, oppure segnala bye, incontro annullato o abbinamento non ancora disponibile. I dati vengono riletti dal server prima della rivelazione. Gli incontri restano pubblici anche nelle viste turni e tabellone; non è una funzione di segretezza o autenticazione. Con movimento ridotto il risultato compare subito.
