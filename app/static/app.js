@@ -25,7 +25,8 @@
     if (snapshot === profileSnapshot) return;
     profileSnapshot = snapshot;
     button.innerHTML = player ? avatar(player.name,player.photo_url,player.avatar_hue,player.avatar_color) : 'Profilo';
-    const label = player ? `Modifica il profilo di ${player.name}` : 'Modifica il tuo profilo';
+    button.href = player ? `/profilo/${encodeURIComponent(player.id)}` : '/profilo';
+    const label = player ? `Apri il profilo di ${player.name}` : 'Apri il tuo profilo';
     button.setAttribute('aria-label',label);
     button.title = label;
   }
@@ -37,7 +38,7 @@
     const snapshot = JSON.stringify(rows);
     if (snapshot === rankingSnapshot) return;
     rankingSnapshot = snapshot;
-    $('#ranking-list').innerHTML=rows.length?`<div class="table-wrap"><table class="global-table"><thead><tr><th>Pos.</th><th>Giocatore</th><th>Elo</th><th>Partite</th><th>V–S</th></tr></thead><tbody>${rows.map(p=>`<tr><td class="rank">${p.rank}</td><td><button type="button" class="ranking-player" data-player-profile="${esc(p.id)}" aria-label="Apri profilo di ${esc(p.name)}">${avatar(p.name,p.photo_url,p.avatar_hue,p.avatar_color)}<span class="ranking-name" title="${esc(p.name)}">${esc(p.name)}</span></button></td><td><strong>${p.rating}</strong></td><td>${p.matches}</td><td>${p.wins}–${p.losses}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">La classifica apparirà dopo l’aggiunta dei giocatori.</p>';
+    $('#ranking-list').innerHTML=rows.length?`<div class="table-wrap"><table class="global-table"><thead><tr><th>Pos.</th><th>Giocatore</th><th>Elo</th><th>Partite</th><th>V–S</th></tr></thead><tbody>${rows.map(p=>`<tr><td class="rank">${p.rank}</td><td><a class="ranking-player" href="/profilo/${encodeURIComponent(p.id)}" aria-label="Apri profilo di ${esc(p.name)}">${avatar(p.name,p.photo_url,p.avatar_hue,p.avatar_color)}<span class="ranking-name" title="${esc(p.name)}">${esc(p.name)}</span></a></td><td><strong>${p.rating}</strong></td><td>${p.matches}</td><td>${p.wins}–${p.losses}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">La classifica apparirà dopo l’aggiunta dei giocatori.</p>';
   }
   const errorBox = id => $(id);
   function message(text, kind='success') { const node=document.createElement('div');node.className=`toast ${kind==='error'?'error':''}`;node.textContent=text;$('#toast-region').append(node);setTimeout(()=>node.remove(),4200); }

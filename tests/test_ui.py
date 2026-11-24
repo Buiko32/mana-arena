@@ -234,3 +234,18 @@ def test_offline_counter_caches_only_its_own_versioned_shell(tmp_path):
             assert client.get(url).status_code == 200
         assert "player-results.js" not in shell.text and "/static/app.js" not in shell.text
         assert "__CACHE_NAME__" not in worker.text and "__ASSETS__" not in worker.text
+
+def test_player_profile_serves_a_standalone_page(tmp_path):
+    app = create_app(data_dir=tmp_path, admin_username="admin",
+                     admin_password="Local-test-password-42", session_secret="test-secret-longer-than-thirty-two-bytes")
+    with TestClient(app) as client:
+        home = client.get("/")
+        assert 'id="profile-dialog"' not in home.text
+        assert 'href="/profilo" id="profile-open"' in home.text
+        for path in ("/profilo", "/profilo/nicholas"):
+            response = client.get(path)
+            assert response.status_code == 200
+            assert response.headers["cache-control"] == "no-store"
+            assert 'id="profile-content"' in response.text
+            assert '/static/player-profile.js?v=' in response.text
+            assert '/static/player-results.js' not in response.text

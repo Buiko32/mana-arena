@@ -338,6 +338,16 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             return HTMLResponse(html, headers={"Cache-Control": "no-store"})
         return HTMLResponse("<!doctype html><html lang='it'><meta charset='utf-8'><title>Mana Arena</title><body><main><h1>Mana Arena</h1><p>Interfaccia in preparazione.</p></main></body></html>")
 
+    @application.get("/profilo", response_class=HTMLResponse)
+    @application.get("/profilo/{player_id}", response_class=HTMLResponse)
+    def profile_page(player_id: str = ""):
+        folder = Path(__file__).parent / "static"
+        html = (folder / "profile.html").read_text(encoding="utf-8")
+        for asset in ("mana-arena-mark.svg", "style.css", "player-avatar.js", "player-profile.js"):
+            version = hashlib.sha256((folder / asset).read_bytes()).hexdigest()[:12]
+            html = html.replace(f'/static/{asset}"', f'/static/{asset}?v={version}"')
+        return HTMLResponse(html, headers={"Cache-Control": "no-store"})
+
     life_assets = ("mana-arena-mark.svg", "style.css", "life.css", "player-avatar.js", "result-celebration.js", "life.js", "life-entry.js")
 
     def offline_shell():

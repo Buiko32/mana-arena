@@ -437,13 +437,9 @@ footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:va
 
 .avatar > .avatar-mascot, .avatar > img { grid-area:1 / 1; }
 
-.global-table button.ranking-player{width:100%;padding:0;border:0;background:none;text-align:left;cursor:pointer}
-.global-table button.ranking-player:hover .ranking-name{text-decoration:underline}
-#profile-dialog{width:min(720px,calc(100% - 1rem));max-height:calc(100dvh - 1rem);overflow:auto;padding:clamp(1rem,4vw,1.6rem)}
-#profile-title{padding-right:2rem}
 .profile-header{display:flex;align-items:center;gap:.8rem;margin:1.1rem 0}
 .profile-header .avatar{width:56px;height:56px}
-.profile-header h3{margin:0;overflow-wrap:anywhere}
+.profile-header h1{margin:0;font-size:clamp(2rem,6vw,3.8rem);overflow-wrap:anywhere}
 .profile-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:.5rem;margin:0 0 1.15rem}
 .profile-metrics div{padding:.65rem;background:var(--panel-2);border:1px solid var(--line);border-radius:.65rem}
 .profile-metrics dt{font-size:.77rem;color:var(--muted)}
@@ -460,7 +456,7 @@ footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:va
 .profile-chart-scale{display:flex;flex-direction:column;justify-content:space-between;padding:.3rem 0;text-align:right}
 .profile-chart-scale:has(span:only-child){justify-content:center}
 .profile-chart-scale,.profile-chart-dates{font-size:.73rem;color:var(--muted)}
-.profile-chart-body svg{height:104px;width:100%;min-width:0;color:var(--amber-bright)}
+.profile-chart-body svg{height:clamp(130px,24vw,200px);width:100%;min-width:0;color:var(--amber-bright)}
 .profile-chart-body circle{fill:currentColor}
 .profile-chart-grid,.profile-chart-line{fill:none;stroke-width:1;vector-effect:non-scaling-stroke}
 .profile-chart-grid{stroke:var(--line)}
@@ -503,3 +499,8 @@ footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:va
 }
 @keyframes elo-result-arrive{from{opacity:0;transform:translateY(.45rem) scale(.93)}to{opacity:1;transform:none}}
 @keyframes elo-podium-burst{0%{opacity:1;transform:translate(0,0) rotate(0)}75%{opacity:.9}100%{opacity:0;transform:translate(var(--dx),var(--dy)) rotate(330deg)}}
+
+.player-profile-page main.shell{max-width:980px;padding-top:1.75rem}
+.profile-back{display:inline-block;color:var(--amber-bright);margin-bottom:.5rem}
+.profile-back:hover,.global-table .ranking-player:hover .ranking-name{text-decoration:underline}
+.player-profile-page .profile-metrics{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
