@@ -175,7 +175,7 @@ def _elo_inputs(conn):
         match = json.loads(row['data_json'])
         event = events.get(row['id'])
         key = (row['proposal_at'] or (event[0] if event else row['created_at']), event[1] if event else 0, row['id'])
-        matches.append((key, match))
+        matches.append((key, {**match, 'tournament_match': True}))
     for row in conn.execute("SELECT id,proposer_id,opponent_id,winner_id,created_at FROM result_proposals WHERE tournament_id IS NULL AND status='confirmed'"):
         match = {'p1':row['proposer_id'], 'p2':row['opponent_id'], 'result':'p1_win' if row['winner_id']==row['proposer_id'] else 'p2_win'}
         event = events.get(row['id'])
@@ -199,6 +199,39 @@ def _displayed_elo_delta(rating, change):
     return round(rating) - round(rating - change)
 
 
+class ManaFragments:
+    WIN_REWARD = 2
+    STREAK_REWARDS = {3: 10, 5: 20}
+    TOURNAMENT_REWARD = 30
+
+    def __init__(self, conn):
+        self.balances = {
+            champion: count * self.TOURNAMENT_REWARD
+            for champion, count in conn.execute("""
+                SELECT champion_id, COUNT(*) FROM tournaments
+                WHERE champion_id IS NOT NULL AND
+                  (status = 'completed' OR (status = 'archived' AND archived_from = 'completed'))
+                GROUP BY champion_id
+            """)
+        }
+        self.streaks = {}
+
+    def record(self, match, updates):
+        for player, _, won, *_ in updates:
+            player_id = player['id']
+            if won:
+                self.balances[player_id] = self.balance(player_id) + self.WIN_REWARD
+            if match.get('tournament_match'):
+                continue
+            streak = self.streaks.get(player_id, 0) + 1 if won else 0
+            self.streaks[player_id] = streak
+            if streak in self.STREAK_REWARDS:
+                self.balances[player_id] += self.STREAK_REWARDS[streak]
+
+    def balance(self, player_id):
+        return self.balances.get(player_id, 0)
+
+
 def match_elo_deltas(conn, ids):
     players, matches = _elo_inputs(conn)
     deltas = {}
@@ -219,6 +252,7 @@ def global_elo_from_db(conn, *, include_movement=False):
     if not include_movement:
         return [row for row in calculate_global_elo(players, matches) if row['active']]
 
+    fragments = ManaFragments(conn)
     rome = ZoneInfo('Europe/Rome')
     day = None
     opening = {}
@@ -254,11 +288,13 @@ def global_elo_from_db(conn, *, include_movement=False):
 
     def after_game(rows, match, updates):
         played.update(row['id'] for row, *_ in updates)
+        fragments.record(match, updates)
 
     rows = calculate_global_elo(players, matches, before_game=before_game, on_game=after_game)
     active = [row for row in rows if row['active']]
     close_day({row['id']: (rank, row['rating']) for rank, row in enumerate(active, 1)})
-    return [{**row, 'movement': movement.get(row['id'])} for row in active]
+    return [{**row, 'movement': movement.get(row['id']), 'mana_fragments': fragments.balance(row['id'])}
+            for row in active]
 
 
 def _opponent_profile(row):
@@ -296,6 +332,7 @@ def player_statistics(conn, player_id):
     if player_id not in active_ids:
         return None
 
+    fragments = ManaFragments(conn)
     history = []
     recent_results = []
     head_to_head = {}
@@ -315,6 +352,7 @@ def player_statistics(conn, player_id):
         if own or (history and (rating, rank) != (history[-1]['rating'], history[-1]['rank'])):
             history.append({'date': date, 'rating': rating, 'rank': rank})
         if own:
+            fragments.record(match, [own])
             reached_2400 = player['peak_2400']
             _, change, won, opponent_rating, opponents = own
             profiles = [_opponent_profile(opponent) for opponent in opponents]
@@ -347,7 +385,7 @@ def player_statistics(conn, player_id):
     active = [row for row in rows if row['active']]
     rank, player = next((rank, row) for rank, row in enumerate(active, 1) if row['id'] == player_id)
     return {
-        'player': {**player, 'rank': rank},
+        'player': {**player, 'rank': rank, 'mana_fragments': fragments.balance(player_id)},
         'history': history,
         'placement': {
             'played': player['matches'], 'total': ELO_PLACEMENT_MATCHES,

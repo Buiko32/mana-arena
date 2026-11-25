@@ -118,12 +118,11 @@
       ['Serie di vittorie attuale', stats.win_streak], ['Serie di vittorie più lunga', stats.longest_win_streak],
     ];
     const placement = stats.placement;
-    const remaining = placement.remaining === 1 ? 'Manca 1 partita' : `Mancano ${placement.remaining} partite`;
-    const placementContent = placement.remaining
-      ? `<section class="profile-placement"><h3>Piazzamento Elo · ${placement.played}/${placement.total} partite</h3>
-         <progress aria-label="Fase di piazzamento Elo" value="${placement.played}" max="${placement.total}"></progress>
-         <p>${remaining}. K attivo ${placement.next_k}, poi ${placement.established_k} a fine piazzamento.</p></section>`
-      : `<section class="profile-placement"><h3>Piazzamento Elo completato</h3><p>${placement.played} partite conteggiate · K attivo ${placement.next_k}</p></section>`;
+    const placementPlayed = Math.min(placement.played, placement.total);
+    const placementContent = `<section class="profile-placement">
+      <h3>Piazzamento Elo · ${placementPlayed}/${placement.total} partite</h3>
+      <progress aria-label="Piazzamento Elo" value="${placementPlayed}" max="${placement.total}"></progress>
+    </section>`;
     const streakBadge = [10, 5].find(milestone => stats.longest_win_streak >= milestone);
     const daily = dailyClosingValues(history);
     const historyContent = daily.length ? `
@@ -135,7 +134,9 @@
     document.title = `${player.name} · Mana Arena`;
     $('#profile-heading').innerHTML = `${window.renderPlayerAvatar(player)}<h1>${esc(player.name)}</h1>`;
     $('#profile-summary').innerHTML = `
-      <dl class="profile-metrics">${metrics.map(([label,value])=>`<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')}</dl>
+      <dl class="profile-metrics">${metrics.map(([label,value])=>`<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')}
+        <div><dt>Frammenti Mana</dt><dd class="mana-balance"><span class="mana-fragment-icon" aria-hidden="true"></span>${player.mana_fragments ?? 0}</dd></div>
+      </dl>
       ${placementContent}
       ${streakBadge ? `<p class="profile-streak-badge">Traguardo · ${streakBadge} vittorie di fila</p>` : ''}
       ${historyContent}

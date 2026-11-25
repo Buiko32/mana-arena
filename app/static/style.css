@@ -475,6 +475,10 @@ footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:va
 .profile-chart-body circle{fill:currentColor;stroke:transparent;stroke-width:7;vector-effect:non-scaling-stroke;cursor:help}
 .profile-chart-body circle:is(:hover,:focus-visible){stroke:currentColor;stroke-width:3}
 .global-table td:nth-child(1),.global-table td:nth-child(3){white-space:nowrap}
+.global-table .ranking-own-row td{background:color-mix(in srgb,var(--amber) 11%,var(--panel))}
+.global-table .ranking-own-row td:first-child{box-shadow:inset 3px 0 var(--amber)}
+.mana-balance{display:inline-flex;align-items:center;gap:.35rem;color:#c9f5ed;font-variant-numeric:tabular-nums;white-space:nowrap}
+.mana-fragment-icon{display:inline-block;width:1.15em;height:1.3em;background:url('/static/mana-fragment.svg') center/contain no-repeat;flex:none}
 .ranking-movement{font-size:.76rem;font-weight:700}
 .ranking-movement.is-up{color:var(--green)}
 .ranking-movement.is-down{color:var(--red)}
