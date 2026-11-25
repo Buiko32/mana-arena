@@ -579,3 +579,8 @@ footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:va
   .history-match-separator:empty::before{content:''}
   .history-match-separator:empty::after{display:none}
 }
+
+.profile-placement { margin-block:1.2rem; }
+.profile-placement progress { display:block; width:min(100%,24rem); accent-color:var(--amber-bright); }
+.profile-placement-delta { display:block; margin-top:.3rem; text-align:center; }
+.profile-streak-badge { width:fit-content; padding:.35rem .7rem; border:1px solid var(--line); border-radius:.5rem; }

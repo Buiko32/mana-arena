@@ -97,6 +97,22 @@
   }
   window.manaPlayerAvatar=avatar;
   window.manaAdminRequest = request;
+
+  async function loadTrueSkill() {
+    const target = $('#trueskill-results');
+    target.textContent = 'Caricamento…';
+    try {
+      const rows = await request('/api/admin/trueskill');
+      if (!state.user) return;
+      const number = new Intl.NumberFormat('it-IT', {minimumFractionDigits:2, maximumFractionDigits:2});
+      target.innerHTML = rows.length ? `<div class="table-wrap"><table aria-label="Confronto TrueSkill ed Elo">
+        <thead><tr><th>Pos. TrueSkill</th><th>Giocatore</th><th>Punteggio TrueSkill</th><th>Abilità</th><th>Incertezza</th><th>Partite</th><th>Pos. Elo</th><th>Elo</th></tr></thead>
+        <tbody>${rows.map(row => `<tr><td>${row.rank ?? '—'}</td><th scope="row">${esc(row.name)}</th><td>${row.matches ? number.format(row.score) : '—'}</td><td>${number.format(row.mu)}</td><td>${number.format(row.sigma)}</td><td>${row.matches}</td><td>${row.elo_rank}</td><td>${row.elo}</td></tr>`).join('')}</tbody>
+        </table></div>` : '<p>Nessun giocatore attivo.</p>';
+    } catch (error) {
+      target.textContent = error.message;
+    }
+  }
   function setView(view){
     const publicPage = view === 'public';
     const liveOpen = publicPage && (location.hash === '#live' || location.hash.startsWith('#live/'));
@@ -342,7 +358,7 @@
     }
   }
   async function getSession(){try{const s=await request('/api/admin/session');state.user=s.username;state.csrf=s.csrf_token;showWorkspace();return true;}catch(e){if(e.status===401){state.user='';state.csrf='';showLogin();return false;}throw e;}}
-  function showLogin(){ $('#login-panel').hidden=false;$('#admin-workspace').hidden=true; }
+  function showLogin(){ $('#trueskill-results').replaceChildren(); $('#login-panel').hidden=false;$('#admin-workspace').hidden=true; }
   function showWorkspace(){ $('#login-panel').hidden=true;$('#admin-workspace').hidden=false;$('#admin-identity').textContent=state.user; }
   async function refreshAdmin(){if(!state.visible||state.editing||state.busy||$('#confirm-dialog').open||$('#player-results-dialog').open||$('#reveal-dialog').open)return;clearError();try{if(!state.user&&!await getSession())return;const [ps,ts]=await Promise.all([request('/api/admin/players'),request('/api/admin/tournaments')]);state.players=ps;state.tournaments=ts;showWorkspace();renderPlayers();renderAdminTournaments();if(state.current?.id){const latest=ts.find(t=>t.id===state.current.id);if(latest)await openManager(latest.id,true);else {state.current=null;state.managerSnapshot='';}}}catch(e){if(e.status===401){state.user='';state.csrf='';showLogin();}else showError(e.message);}}
   function renderAdminTournaments(){const host=$('#admin-tournament-list'),focus=captureFocus(host);if(!state.tournaments.length){host.innerHTML='<p class="muted">Nessun torneo.</p>';return;}const labels={draft:'Bozza',active:'In corso',completed:'Concluso',archived:'Archiviato'};host.innerHTML=state.tournaments.map(t=>`<article class="admin-event-row"><div><h3><span aria-hidden="true">🏆</span> ${esc(t.config?.name||'Torneo senza nome')}</h3><div class="admin-event-info"><span class="state-tag ${t.status==='completed'?'completed':''}">${labels[t.status]||esc(t.status)}</span><span class="muted">${configSummary(t.config||{})}</span></div></div><div class="admin-event-actions"><button class="button secondary small-button" data-manage="${esc(t.id)}">Gestisci</button></div></article>`).join('');restoreFocus(host,focus);}
@@ -512,7 +528,7 @@
     if(target.id==='reveal-close'){closeReveal();return;}
     if(target.matches('[data-close-detail]')){$('#public-detail').hidden=true;state.publicId='';return;}
     if(target.matches('[data-revoke-device]')){if(!confirm('Revocare l’accesso a questo dispositivo?'))return;target.disabled=true;await request(`/api/admin/devices/${encodeURIComponent(target.dataset.revokeDevice)}`,{method:'DELETE'});await loadDevices();message('Accesso revocato.');return;}
-    if(target.matches('[data-admin-tab]')){$$('[data-admin-tab]').forEach(b=>b.setAttribute('aria-selected',String(b===target)));$$('[role=tabpanel].admin-section').forEach(s=>s.hidden=s.id!==`admin-${target.dataset.adminTab}`);if(target.dataset.adminTab==='events')scheduleGraphConnections();if(target.dataset.adminTab==='friendlies')window.openAdminFriendlies();if(target.dataset.adminTab==='devices')await loadDevices();return;}
+    if(target.matches('[data-admin-tab]')){$$('[data-admin-tab]').forEach(b=>b.setAttribute('aria-selected',String(b===target)));$$('[role=tabpanel].admin-section').forEach(s=>s.hidden=s.id!==`admin-${target.dataset.adminTab}`);if(target.dataset.adminTab==='events')scheduleGraphConnections();if(target.dataset.adminTab==='friendlies')window.openAdminFriendlies();if(target.dataset.adminTab==='devices')await loadDevices();if(target.dataset.adminTab==='trueskill')await loadTrueSkill();return;}
     if(target.matches('[data-manager-tab]')){setManagerTab(target.dataset.managerTab);return;}
     if(target.matches('[data-round-view]')){const scope=target.dataset.roundScope;if(scope==='public')state.publicRoundView=target.dataset.roundView;else state.adminRoundView=target.dataset.roundView;if(scope==='public'&&state.publicDetailData)renderPublicDetail(state.publicDetailData);else if(scope==='admin')renderManager();return;}
     if(target.matches('[data-round-window]')){const scope=target.dataset.roundScope,groups=scope==='public'?(state.publicDetailData?.rounds||[]):(state.current?.rounds||[]),entrants=scope==='public'?(state.publicDetailData?.entrants||[]):(state.current?.entrants||[]),offset=scope==='public'?state.publicRoundOffset:state.adminRoundOffset,model=ManaBrackets.buildRoundProgression(groups,entrants,{offset,windowSize:4}),next=target.dataset.roundWindow==='next'?model.nextOffset:model.previousOffset;if(next===null)return;if(scope==='public'){state.publicRoundOffset=next;if(state.publicDetailData)renderPublicDetail(state.publicDetailData);}else{state.adminRoundOffset=next;renderManager();}return;}

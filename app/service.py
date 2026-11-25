@@ -64,8 +64,11 @@ def _expected_score(own, other):
     return 1 / (1 + 10 ** (diff / 400))
 
 
+ELO_PLACEMENT_MATCHES = 30
+
+
 def _elo_factor(row):
-    return 40 if row['matches'] < 30 else 10 if row['peak_2400'] else 20
+    return 40 if row['matches'] < ELO_PLACEMENT_MATCHES else 10 if row['peak_2400'] else 20
 
 
 # Internal Elo inspired by FIDE K thresholds, not an official FIDE rating.
@@ -112,7 +115,7 @@ def calculate_global_elo(players: list[dict], matches: list[dict], *, on_game=No
                     if row['rating'] < 2650:
                         diff = max(-400, min(400, diff))
                     expected_score = 1/(1+10**(diff/400))
-                    k = 40 if row['matches'] < 30 else 10 if row['peak_2400'] else 20
+                    k = _elo_factor(row)
                     updates.append((row, k*((1 if won else 0)-expected_score), won, opponent_strength, opponents))
             for row, change, won, _, _ in updates:
                 row['rating'] += change
@@ -299,9 +302,10 @@ def player_statistics(conn, player_id):
     streak = longest_streak = 0
     best_win = None
     best_gap = float('-inf')
+    reached_2400 = False
 
     def after_game(rows, match, updates):
-        nonlocal streak, longest_streak, best_win, best_gap
+        nonlocal streak, longest_streak, best_win, best_gap, reached_2400
         player = rows[player_id]
         order = _elo_order(player)
         rank = 1 + sum(_elo_order(rows[pid]) < order for pid in active_ids if pid != player_id)
@@ -311,6 +315,7 @@ def player_statistics(conn, player_id):
         if own or (history and (rating, rank) != (history[-1]['rating'], history[-1]['rank'])):
             history.append({'date': date, 'rating': rating, 'rank': rank})
         if own:
+            reached_2400 = player['peak_2400']
             _, change, won, opponent_rating, opponents = own
             profiles = [_opponent_profile(opponent) for opponent in opponents]
             if match.get('p1'):
@@ -319,12 +324,15 @@ def player_statistics(conn, player_id):
                     'opponent': opponent, 'wins': 0, 'losses': 0,
                 })
                 record['wins' if won else 'losses'] += 1
+            placements = match.get('placements')
             recent_results.append({
                 'result': 'win' if won else 'loss',
                 'opponents': profiles,
                 'date': date,
                 'elo_delta': _displayed_elo_delta(player['rating'], change),
             })
+            if placements:
+                recent_results[-1].update(position=placements.index(player_id) + 1, field_size=len(placements))
             if len(recent_results) > 5:
                 recent_results.pop(0)
             streak = streak + 1 if won else 0
@@ -341,6 +349,12 @@ def player_statistics(conn, player_id):
     return {
         'player': {**player, 'rank': rank},
         'history': history,
+        'placement': {
+            'played': player['matches'], 'total': ELO_PLACEMENT_MATCHES,
+            'remaining': max(0, ELO_PLACEMENT_MATCHES - player['matches']),
+            'next_k': _elo_factor({**player, 'peak_2400': reached_2400}),
+            'established_k': _elo_factor({'matches': ELO_PLACEMENT_MATCHES, 'peak_2400': reached_2400}),
+        },
         'peak_rating': max(1500, max((point['rating'] for point in history), default=1500)),
         'best_rank': min((point['rank'] for point in history), default=rank),
         'win_streak': streak, 'longest_win_streak': longest_streak,

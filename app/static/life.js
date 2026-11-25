@@ -447,7 +447,7 @@
       return `style="--table-order:${position};--table-turn:${turn}deg" ${bottom ? 'data-bottom-seat' : ''}`;
     };
     root.classList.add('life-playing');
-    root.innerHTML = `<div class="life-table-shell ${layout ? 'life-ffa-shell' : ''}"><div class="life-table life-seating life-seating-${game.sides.length} ${layout ? 'life-ffa-table' : ''}">${game.sides.map((side,i)=>`<article class="life-side" ${tableSeat(i)}><div class="life-side-inner" ${editSeats ? 'inert' : ''}><div class="life-side-heading">${memberNames(side)}</div><div class="life-counter"><button type="button" data-delta="${i},-1" aria-label="Togli una vita a ${esc(side.name)}">−</button><div class="life-total"><strong data-life="${i}">${side.life}</strong><span class="life-change" data-feedback="${i}" aria-hidden="true"></span></div><button type="button" data-delta="${i},1" aria-label="Aggiungi una vita a ${esc(side.name)}">+</button></div><button class="life-undo" type="button" data-undo="${i}">Annulla</button></div>${editSeats ? `<button type="button" class="life-seat-pick" data-seat-pick="${i}" aria-label="Sposta ${esc(side.name)}" aria-pressed="${picked === i}"></button>` : ''}</article>`).join('')}</div><div class="life-floating-controls">${layout ? `<button type="button" data-seats aria-pressed="${editSeats}">${editSeats ? 'Fatto' : 'Posti'}</button>` : ''}<button type="button" data-end>Termina</button><button type="button" data-dice-open aria-label="Apri dadi">${layout ? 'D20' : '⚄'}</button></div>${editSeats ? '<p class="life-seat-help" role="status">Tocca due giocatori per scambiare i posti.</p>' : ''}<p class="life-error" role="alert"></p><div class="life-dice-overlay" data-dice-overlay hidden><div class="life-dice-dialog" role="dialog" aria-modal="true" aria-labelledby="life-dice-title"><div class="life-dice-header"><h2 id="life-dice-title">Tira il D20</h2><button type="button" data-dice-close aria-label="Chiudi dadi">×</button></div><p class="life-roll-result" aria-live="polite"></p><div class="life-dice-grid life-seating life-seating-${game.sides.length}">${game.sides.map((side,i)=>`<div class="life-dice-player" ${seat(i)}><div class="life-dice-inner"><div class="life-dice-name">${memberNames(side)}</div><div class="life-die-wrap"><canvas width="150" height="150" data-die="${i}" aria-label="Dado a venti facce"></canvas><span data-roll-value="${i}">—</span></div><button type="button" data-roll="${i}">Tira D20</button></div></div>`).join('')}</div></div></div></div>`;
+    root.innerHTML = `<div class="life-table-shell ${layout ? 'life-ffa-shell' : ''}"><div class="life-table life-seating life-seating-${game.sides.length} ${layout ? 'life-ffa-table' : ''}">${game.sides.map((side,i)=>`<article class="life-side" ${tableSeat(i)}><div class="life-side-inner" ${editSeats ? 'inert' : ''}><div class="life-side-heading">${memberNames(side)}</div><div class="life-counter"><button type="button" data-delta="${i},-1" aria-label="Togli una vita a ${esc(side.name)}">−</button><div class="life-total"><strong data-life="${i}">${side.life}</strong><span class="life-change" data-feedback="${i}" aria-hidden="true"></span></div><button type="button" data-delta="${i},1" aria-label="Aggiungi una vita a ${esc(side.name)}">+</button></div><button class="life-undo" type="button" data-undo="${i}">Annulla</button></div>${editSeats ? `<button type="button" class="life-seat-pick" data-seat-pick="${i}" aria-label="Sposta ${esc(side.name)}" aria-pressed="${picked === i}"></button>` : ''}</article>`).join('')}</div><div class="life-floating-controls">${layout ? `<button type="button" data-seats aria-pressed="${editSeats}">${editSeats ? 'Fatto' : 'Posti'}</button>` : ''}<button type="button" data-end>Termina</button><button type="button" data-cancel-game>Annulla partita</button><button type="button" data-dice-open aria-label="Apri dadi">${layout ? 'D20' : '⚄'}</button></div>${editSeats ? '<p class="life-seat-help" role="status">Tocca due giocatori per scambiare i posti.</p>' : ''}<p class="life-error" role="alert"></p><div class="life-dice-overlay" data-dice-overlay hidden><div class="life-dice-dialog" role="dialog" aria-modal="true" aria-labelledby="life-dice-title"><div class="life-dice-header"><h2 id="life-dice-title">Tira il D20</h2><button type="button" data-dice-close aria-label="Chiudi dadi">×</button></div><p class="life-roll-result" aria-live="polite"></p><div class="life-dice-grid life-seating life-seating-${game.sides.length}">${game.sides.map((side,i)=>`<div class="life-dice-player" ${seat(i)}><div class="life-dice-inner"><div class="life-dice-name">${memberNames(side)}</div><div class="life-die-wrap"><canvas width="150" height="150" data-die="${i}" aria-label="Dado a venti facce"></canvas><span data-roll-value="${i}">—</span></div><button type="button" data-roll="${i}">Tira D20</button></div></div>`).join('')}</div></div></div></div>`;
     syncScreenLock();
     game.sides.forEach((_,i)=>{drawDie(root.querySelector(`[data-die="${i}"]`),0,0,0,game.rolls.values[i]);root.querySelector(`[data-roll-value="${i}"]`).textContent=game.rolls.values[i]||'—';}); updateRollStatus();
     root.onclick = e => { const b=e.target.closest('button'); if (!b || busy) return;
@@ -470,6 +470,7 @@
       else if (b.dataset.undo !== undefined) { const i=Number(b.dataset.undo), previous=[...game.changes].reverse().find(c=>c.player===game.sides[i].name && !c.undone && !c.undo); if(previous && game.changes.length<5000){previous.undone=true;change(i,-previous.delta,true);} }
       else if (b.dataset.roll !== undefined) roll(Number(b.dataset.roll));
       else if (b.hasAttribute('data-end')) end();
+      else if (b.hasAttribute('data-cancel-game')) cancelGame();
     };
     root.onkeydown=e=>{if(e.key==='Escape' && !root.querySelector('[data-dice-overlay]').hidden){root.querySelector('[data-dice-overlay]').hidden=true;root.querySelector('[data-dice-open]').focus();}};
   }
@@ -501,6 +502,26 @@
     c.clearRect(0,0,150,150);c.fillStyle='rgba(0,0,0,.2)';c.beginPath();c.ellipse(75,132,Math.max(2,35-bounce/3),7,0,0,7);c.fill();
     faces.map((f,n)=>({f,n,z:f.reduce((sum,i)=>sum+p[i][2],0)})).sort((a,b)=>a.z-b.z).forEach(({f,n,z})=>{c.beginPath();f.forEach((i,j)=>{const [x,y]=p[i], X=75+x*26,Y=75+y*26-bounce;j?c.lineTo(X,Y):c.moveTo(X,Y)});c.closePath();c.fillStyle=`hsl(267 45% ${Math.max(28,Math.min(62,43+z*4))}%)`;c.fill();c.strokeStyle='#d9c8ff';c.lineWidth=1;c.stroke();if(z>1){const x=f.reduce((s,i)=>s+p[i][0],0)/3,y=f.reduce((s,i)=>s+p[i][1],0)/3;c.fillStyle='white';c.font='bold 11px sans-serif';c.textAlign='center';c.fillText(String(n+1),75+x*26,79+y*26-bounce);}});
   }
+  function cancelGame() {
+    if (!game || game.payload || !window.confirm('Annullare la partita in corso? Il risultato non verrà registrato.')) return;
+    try {
+      localStorage.removeItem(key);
+    } catch (_) {
+      reportStorage('Impossibile rimuovere la partita salvata. Riprova.');
+      return;
+    }
+    clearTimeout(liveTimer);
+    queueLive(false);
+    for (const {timer} of tapFeedback.values()) clearTimeout(timer);
+    tapFeedback.clear();
+    game = null;
+    sides = [[], []];
+    root.classList.remove('life-playing');
+    root.onkeydown = null;
+    setup();
+    syncScreenLock();
+  }
+
   function end(){
     clearTimeout(liveTimer);
     queueLive(false);

@@ -152,3 +152,7 @@
 #life.life-playing .life-seat-pick { position:absolute; inset:0; width:100%; border:2px solid #aa81e0; background:#904ed71a; }
 #life.life-playing .life-seat-pick[aria-pressed="true"] { border-color:#fff; background:#904ed752; }
 .life-seat-help { position:absolute; z-index:4; left:50%; bottom:3.5rem; transform:translateX(-50%); width:max-content; max-width:95%; padding:.35rem .65rem; background:#20162e; pointer-events:none; }
+
+.life-floating-controls { flex-wrap:wrap; max-width:calc(100% - 1rem); }
+.life-ffa-shell .life-floating-controls { max-width:none; }
+#life .life-floating-controls [data-cancel-game] { flex:0 0 auto; color:#ffc0c6; }

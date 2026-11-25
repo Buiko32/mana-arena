@@ -87,6 +87,7 @@
         <div class="admin-tabs" role="tablist" aria-label="Sezioni organizzatore">
           <button type="button" role="tab" id="tab-events" aria-selected="true" aria-controls="admin-events" data-admin-tab="events">Tornei</button>
           <button type="button" role="tab" id="tab-players" aria-selected="false" aria-controls="admin-players" data-admin-tab="players">Giocatori</button>
+          <button type="button" role="tab" id="tab-trueskill" aria-selected="false" aria-controls="admin-trueskill" data-admin-tab="trueskill">TrueSkill</button>
           <button type="button" role="tab" id="tab-friendlies" aria-selected="false" aria-controls="admin-friendlies" data-admin-tab="friendlies">Amichevoli</button>
           <button type="button" role="tab" id="tab-devices" aria-selected="false" aria-controls="admin-devices" data-admin-tab="devices">Dispositivi</button>
           <button type="button" role="tab" id="tab-backup" aria-selected="false" aria-controls="admin-backup" data-admin-tab="backup">Backup</button>
@@ -111,6 +112,11 @@
           <form id="player-form" class="player-create"><label>Nome giocatore<input name="name" maxlength="100" required placeholder="Nome e cognome"></label><button class="button primary" type="submit">＋ Aggiungi</button></form>
           <div id="players-list" class="players-list" aria-live="polite"></div>
         </section>
+        <section id="admin-trueskill" class="admin-section" role="tabpanel" aria-labelledby="tab-trueskill" hidden>
+          <h3>TrueSkill sperimentale</h3>
+          <p>La classifica usa il punteggio TrueSkill, calcolato sottraendo tre volte l’incertezza all’abilità stimata.</p>
+          <div id="trueskill-results" aria-live="polite"></div>
+        </section>
         <section id="admin-friendlies" class="admin-section" role="tabpanel" aria-labelledby="tab-friendlies" hidden></section>
         <section id="admin-devices" class="admin-section" role="tabpanel" aria-labelledby="tab-devices" hidden><div class="section-heading compact"><h2>Dispositivi autorizzati</h2></div><p class="muted">Revoca l’accesso ai dispositivi che non devono più entrare nell’arena.</p><div id="devices-list" aria-live="polite"></div></section>
         <section id="admin-backup" class="admin-section" role="tabpanel" aria-labelledby="tab-backup" hidden>
@@ -121,7 +127,7 @@
       </div>
     </section>
   </main>
-  <footer><span class="brand-mini">✦ MANA ARENA</span><span class="app-version">Versione 0.01.32</span><a href="#admin-view" data-view-link="admin">Area organizzatore</a></footer>
+  <footer><span class="brand-mini">✦ MANA ARENA</span><span class="app-version">Versione 0.01.33</span><a href="#admin-view" data-view-link="admin">Area organizzatore</a></footer>
   <dialog id="identity-welcome" class="identity-welcome" aria-labelledby="identity-welcome-title" aria-describedby="identity-welcome-description">
     <p class="identity-welcome-kicker">MANA ARENA</p>
     <h2 id="identity-welcome-title">Chi sta giocando?</h2>

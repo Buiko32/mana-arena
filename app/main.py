@@ -31,6 +31,7 @@ from . import engine
 from .auth import AuthManager, hash_password, valid_bootstrap_password
 from .backup import create_backup, restore_backup
 from .db import Database, MUTATION_LOCK, _dump
+from .trueskill_ranking import trueskill_comparison
 from .service import public_rounds, safe_csv, global_elo_from_db, player_statistics, elo_snapshot, elo_changes
 
 MAX_PHOTO = 5 * 1024 * 1024
@@ -1191,6 +1192,12 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
                 "matches": row["matches"], "wins": row["wins"], "draws": row["draws"], "losses": row["losses"],
                 "photo_url": f"/photos/{row['photo']}" if row.get("photo") else None,
                 "avatar_hue": row["avatar_hue"], "avatar_color": row["avatar_color"]}
+
+    @application.get("/api/admin/trueskill")
+    def admin_trueskill(response: Response, session=Depends(admin_session)):
+        response.headers["Cache-Control"] = "no-store"
+        with db.transaction() as conn:
+            return trueskill_comparison(conn)
 
     @application.get("/api/public/ranking")
     def public_ranking():

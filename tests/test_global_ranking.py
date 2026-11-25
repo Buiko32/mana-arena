@@ -1,4 +1,5 @@
 from app.service import calculate_global_elo
+from test_api import app_factory
 
 
 def test_elo_replays_played_matches_in_order_and_ignores_nonplayed_results():
@@ -171,3 +172,31 @@ def test_free_for_all_scores_each_position_once():
         rows = calculate_global_elo(players, [{"placements": ids}])
         assert [row["rating"] for row in rows if row["id"] in ids] == expected
         assert all(row["matches"] == 1 for row in rows if row["id"] in ids)
+
+def test_trueskill_comparison_requires_admin_and_replays_results(app_factory):
+    from test_api import admin_headers, tournament_with_players
+    from test_support import TestClient
+
+    app = app_factory()
+    with TestClient(app) as admin, TestClient(app) as visitor:
+        assert visitor.get('/api/admin/trueskill').status_code == 401
+        headers = admin_headers(admin)
+        _, people = tournament_with_players(admin, headers, 3)
+        ids = [person['id'] for person in people]
+        with app.state.db.transaction() as conn:
+            import json
+            conn.execute('INSERT INTO ffa_results VALUES (?,?,?)',
+                         ('ranked-ffa', json.dumps(ids), '2026-11-25 12:00:00'))
+        response = admin.get('/api/admin/trueskill')
+        assert response.status_code == 200 and response.headers['cache-control'] == 'no-store'
+        rows = response.json()
+        assert [row['id'] for row in rows] == ids
+        assert [row['elo'] for row in rows] == [1520, 1500, 1480]
+        assert all(row['matches'] == 1 for row in rows)
+        assert rows[0]['score'] > rows[1]['score'] > rows[2]['score']
+        from app.service import player_statistics
+        with app.state.db.transaction() as conn:
+            stats = player_statistics(conn, ids[1])
+        assert stats['placement'] == {'played': 1, 'total': 30, 'remaining': 29, 'next_k': 40, 'established_k': 20}
+        assert stats['recent_results'][-1]['position'] == 2
+        assert stats['recent_results'][-1]['field_size'] == 3

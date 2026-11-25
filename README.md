@@ -4,7 +4,7 @@ Mana Arena gestisce tornei amatoriali di Magic in italiano. È pensata per una p
 
 ## Versione
 
-La versione mostrata nel footer è `0.01.32` e segue il formato `major.release.fix`: il primo numero indica la major release, il secondo la release di base e l’ultimo i fix. Per ogni modifica richiesta dall’utente si incrementa il numero dei fix; release di base e major avanzano quando viene richiesta una nuova release di quel livello. Aggiorna il valore nel footer di `app/static/index.html` insieme alla modifica.
+La versione mostrata nel footer è `0.01.33` e segue il formato `major.release.fix`: il primo numero indica la major release, il secondo la release di base e l’ultimo i fix. Per ogni modifica richiesta dall’utente si incrementa il numero dei fix; release di base e major avanzano quando viene richiesta una nuova release di quel livello. Aggiorna il valore nel footer di `app/static/index.html` insieme alla modifica.
 
 ## Scelta del giocatore
 
