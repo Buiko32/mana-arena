@@ -105,3 +105,50 @@
   .life-dice-grid { gap:.25rem; }
   .life-dice-inner { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:.3rem; }
 }
+
+/* Each side faces the edge where its player sits. */
+.life-playing .life-ffa-shell {
+  display:grid;
+  grid-template-rows:minmax(0,1fr) auto;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+.life-playing .life-ffa-table.life-seating-5 { grid-template-rows:1fr 1fr 1.35fr; }
+.life-playing .life-ffa-table > .life-side {
+  position:relative;
+  container-type:size;
+  order:var(--table-order);
+  grid-column:span 1;
+  padding:0;
+}
+.life-playing .life-ffa-table > [data-bottom-seat] { grid-column:span 2; }
+.life-playing .life-ffa-table .life-side-inner {
+  position:absolute;
+  top:50%;
+  left:50%;
+  width:100cqh;
+  height:100cqw;
+  padding:.25rem;
+  transform:translate(-50%,-50%) rotate(var(--table-turn));
+}
+.life-playing .life-ffa-table [data-bottom-seat] .life-side-inner { width:100cqw; height:100cqh; }
+.life-playing .life-ffa-table .life-counter { max-width:32rem; justify-content:center; }
+.life-playing .life-ffa-table .life-counter strong { font-size:clamp(1.7rem,min(22cqw,38cqh),9rem); }
+.life-playing .life-ffa-table [data-bottom-seat] .life-counter strong { font-size:clamp(2rem,min(24cqw,53cqh),12rem); }
+#life.life-playing .life-ffa-table .life-counter button {
+  width:44px;
+  height:44px;
+  min-height:44px;
+  border-radius:50%;
+  background:#67438e;
+  font-size:1.55rem;
+}
+.life-playing .life-ffa-shell .life-floating-controls {
+  position:static;
+  justify-content:center;
+  padding:.35rem;
+}
+#life .life-ffa-shell .life-floating-controls button { flex:1; max-width:12rem; border-radius:.6rem; }
+#life .life-ffa-shell [data-dice-open] { order:-1; font-size:inherit; }
+#life.life-playing .life-seat-pick { position:absolute; inset:0; width:100%; border:2px solid #aa81e0; background:#904ed71a; }
+#life.life-playing .life-seat-pick[aria-pressed="true"] { border-color:#fff; background:#904ed752; }
+.life-seat-help { position:absolute; z-index:4; left:50%; bottom:3.5rem; transform:translateX(-50%); width:max-content; max-width:95%; padding:.35rem .65rem; background:#20162e; pointer-events:none; }

@@ -21,6 +21,9 @@ def submit_result(db, game, cookie, csrf):
             return {'result_status': 'unauthorized'}
         previous = conn.execute('SELECT kind,result_id FROM life_result_links WHERE session_id=?', (str(game.session_id),)).fetchone()
         if previous:
+            if previous['kind'] == 'ffa':
+                exists = conn.execute('SELECT 1 FROM ffa_results WHERE id=?', (previous['result_id'],)).fetchone()
+                return {'result_status': 'confirmed', 'result_id': previous['result_id']} if exists else {'result_status': 'unavailable'}
             table = 'team_results' if previous['kind'] == 'team' else 'result_proposals'
             row = conn.execute(f'SELECT status FROM {table} WHERE id=?', (previous['result_id'],)).fetchone() if previous['result_id'] else None
             if not row or row['status'] not in ('pending', 'confirmed'):
@@ -30,9 +33,13 @@ def submit_result(db, game, cookie, csrf):
             conn.execute('INSERT INTO life_result_links VALUES (?,?,NULL)', (str(game.session_id),'none'))
             return {'result_status':'unavailable'}
         sides = [[member.id for member in side.members] for side in game.players]
-        if game.format not in ('duel','team') or game.winner is None or len(sides)!=2 or any(not pid for side in sides for pid in side):
+        if game.winner is None or any(not pid for side in sides for pid in side):
             return unavailable()
-        ids = sides[0]+sides[1]
+        if game.format == 'ffa' and (not game.placements or target.kind != 'friendly'):
+            return unavailable()
+        if game.format != 'ffa' and len(sides) != 2:
+            return unavailable()
+        ids = [pid for side in sides for pid in side]
         if len(set(ids))!=len(ids) or any(not conn.execute('SELECT 1 FROM players WHERE id=? AND active=1',(pid,)).fetchone() for pid in ids):
             return unavailable()
         if target.proposer_id not in ids:
@@ -56,7 +63,13 @@ def submit_result(db, game, cookie, csrf):
         if game.format == 'team' and (target.kind != 'friendly' or any(not 1 <= len(side) <= 3 for side in sides)):
             return unavailable()
         before = elo_snapshot(conn, ids)
-        if game.format == 'team':
+        if game.format == 'ffa':
+            by_name = {side.name: side.members[0].id for side in game.players}
+            placements = [by_name[name] for name in game.placements]
+            conn.execute('INSERT INTO ffa_results VALUES (?,?,?)', (rid, json.dumps(placements), played_at))
+            Database.audit(conn, None, 'ffa_friendly_result_recorded', {'match_id': rid})
+            kind = 'ffa'
+        elif game.format == 'team':
             conn.execute("INSERT INTO team_results(id,proposer_id,winning_team,created_at,status) VALUES(?,?,?,?,'confirmed')",(rid,target.proposer_id,'a' if winner_index==first else 'b',played_at))
             conn.executemany('INSERT INTO team_result_players(result_id,player_id,team) VALUES(?,?,?)',[(rid,pid,'a' if index==first else 'b') for index,side in enumerate(sides) for pid in side])
             Database.audit(conn, None, 'team_friendly_result_recorded', {'match_id': rid})

@@ -1058,16 +1058,18 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
                     photos = sorted(set(photos) | {p.name for p in db.photos_dir.iterdir() if re.fullmatch(r"[a-f0-9]{32}\.jpg", p.name)})
                 if scope == "results":
                     conn.execute("DELETE FROM result_proposals")
+                    conn.execute("DELETE FROM ffa_results")
                     conn.execute("DELETE FROM team_results")
                     conn.execute("DELETE FROM matches")
                     conn.execute("DELETE FROM withdrawals")
                     conn.execute("UPDATE entrants SET withdrawn=0")
-                    conn.execute("DELETE FROM audit WHERE action IN ('match_result_recorded','friendly_result_recorded','team_friendly_result_recorded','match_rollback','tournament_completed','player_withdrew')")
+                    conn.execute("DELETE FROM audit WHERE action IN ('match_result_recorded','friendly_result_recorded','team_friendly_result_recorded','ffa_friendly_result_recorded','match_rollback','tournament_completed','player_withdrew')")
                     conn.execute("UPDATE tournaments SET status='draft', archived_from=NULL, frozen_config_json=NULL, champion_id=NULL, warnings_json='[]', revision=revision+1, updated_at=CURRENT_TIMESTAMP")
                 else:
                     conn.execute("DELETE FROM tournaments")
                     if scope == "all":
                         conn.execute("DELETE FROM result_proposals")
+                        conn.execute("DELETE FROM ffa_results")
                         conn.execute("DELETE FROM team_results")
                         conn.execute("DELETE FROM players")
             for name in photos:
@@ -1129,6 +1131,10 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
                 members = list(conn.execute('SELECT player_id,team FROM team_result_players WHERE result_id=? ORDER BY player_id',(row['id'],)))
                 games.append({'id':row['id'], 'kind':'team', 'status':row['status'], 'at':row['created_at'].replace(' ','T')+'Z',
                     'sides':[[{'id':m['player_id'],'name':names.get(m['player_id'],'Giocatore')} for m in members if m['team']==side] for side in ('a','b')], 'winner':row['winning_team']})
+            for row in conn.execute("SELECT * FROM ffa_results WHERE created_at>=? AND created_at<?", bounds):
+                placements = json.loads(row['placements'])
+                games.append({'id': row['id'], 'kind': 'ffa', 'status': 'confirmed', 'at': row['created_at'].replace(' ', 'T') + 'Z',
+                              'sides': [[{'id': pid, 'name': names.get(pid, 'Giocatore')}] for pid in placements], 'winner': 'a'})
             return sorted(games, key=lambda g:(g['at'],g['id']), reverse=True)
 
     @application.patch('/api/admin/friendlies/{kind}/{result_id}')
@@ -1141,7 +1147,7 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             stamp = stamp.astimezone(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
         except (KeyError, ValueError, TypeError, AttributeError, OverflowError):
             _detail(422, 'Data e ora non valide.')
-        if kind not in ('single','team'):
+        if kind not in ('single','team','ffa'):
             _detail(404, 'Amichevole non trovata.')
         with MUTATION_LOCK, db.transaction() as conn:
             if kind == 'single':
@@ -1150,6 +1156,13 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
                 winner = body.get('winner_id')
                 if winner not in (row['proposer_id'],row['opponent_id']): _detail(422, 'Vincitore non valido.')
                 conn.execute('UPDATE result_proposals SET created_at=?,winner_id=? WHERE id=?',(stamp,winner,result_id))
+            elif kind == 'ffa':
+                row = conn.execute("SELECT placements FROM ffa_results WHERE id=?", (result_id,)).fetchone()
+                if not row: _detail(404, 'Amichevole non trovata.')
+                placements = body.get('placements')
+                if not isinstance(placements, list) or not all(isinstance(pid, str) for pid in placements) or sorted(placements) != sorted(json.loads(row['placements'])):
+                    _detail(422, 'Piazzamenti non validi.')
+                conn.execute("UPDATE ffa_results SET created_at=?,placements=? WHERE id=?", (stamp, json.dumps(placements), result_id))
             else:
                 row = conn.execute("SELECT * FROM team_results WHERE id=? AND status='confirmed'",(result_id,)).fetchone()
                 if not row: _detail(404, 'Amichevole non trovata.')
@@ -1161,10 +1174,12 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
 
     @application.delete('/api/admin/friendlies/{kind}/{result_id}')
     def admin_delete_friendly(kind: str, result_id: str, session=Depends(admin_write)):
-        if kind not in ('single','team'): _detail(404, 'Amichevole non trovata.')
+        if kind not in ('single','team','ffa'): _detail(404, 'Amichevole non trovata.')
         with MUTATION_LOCK, db.transaction() as conn:
             if kind == 'single':
                 deleted = conn.execute("DELETE FROM result_proposals WHERE id=? AND tournament_id IS NULL AND status IN ('confirmed','pending')",(result_id,)).rowcount
+            elif kind == 'ffa':
+                deleted = conn.execute("DELETE FROM ffa_results WHERE id=?", (result_id,)).rowcount
             else:
                 deleted = conn.execute("DELETE FROM team_results WHERE id=? AND status IN ('confirmed','pending')",(result_id,)).rowcount
             if not deleted: _detail(404, 'Amichevole non trovata.')

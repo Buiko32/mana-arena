@@ -25,8 +25,9 @@
     heading.append(element('h3', label));
     if (match.winner === null) heading.append(element('span', 'Pareggio', 'history-outcome'));
     const layout = element('div', '', 'history-match-layout');
+    if (match.kind === 'ffa') layout.classList.add('history-ffa');
     match.sides.forEach((side, index) => {
-      if (index === 1) {
+      if (index === 1 && match.kind !== 'ffa') {
         const separator = element('div', '', 'history-match-separator');
         if (match.score) {
           const score = element('strong', match.score.join('–'));
@@ -38,7 +39,8 @@
         layout.append(separator);
       }
       const team = element('div', '', 'history-side');
-      if (match.winner === index) team.append(element('span', 'Vittoria', 'history-outcome history-winner'));
+      if (match.kind === 'ffa') team.append(element('span', (index + 1) + '° posto', 'history-outcome'));
+      else if (match.winner === index) team.append(element('span', 'Vittoria', 'history-outcome history-winner'));
       for (const [position, name] of side.entries()) {
         const row = element('div', '', 'history-player');
         row.append(element('strong', name));

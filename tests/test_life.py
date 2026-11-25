@@ -155,3 +155,43 @@ def test_life_http_storage_error_logs_path_without_payload(app_factory, monkeypa
     assert response.status_code==503 and 'permessi' in response.json()['detail'].lower()
     assert 'life-stats.sqlite3' in caplog.text and 'errno=13' in caplog.text
     assert 'PrivateName' not in caplog.text
+
+@pytest.mark.parametrize("count", [3, 4, 5])
+def test_ranked_free_for_all_sync_history_and_removal(app_factory, count):
+    from test_api import admin_headers
+    from uuid import uuid4
+
+    app = app_factory()
+    with TestClient(app) as admin, TestClient(app) as player:
+        headers = admin_headers(admin)
+        people = [admin.post('/api/admin/players', json={'name': f'Giocatore {i}'}, headers=headers).json()
+                  for i in range(count)]
+        login = player.post('/api/player/login', json={'player_id': people[0]['id']}).json()
+        token = {'X-Player-CSRF': login['csrf_token']}
+        names = [p['name'] for p in people]
+        raw = {
+            'format': 'ffa', 'session_id': str(uuid4()), 'started_at': '2026-11-25T12:00:00Z',
+            'ended_at': '2026-11-25T12:02:00Z', 'starting_life': 20, 'changes': [],
+            'players': [{'name': p['name'], 'members': [{'id': p['id'], 'name': p['name']}],
+                         'initial_life': 20, 'final_life': 20} for p in people],
+            'winner': names[-1], 'placements': names[::-1],
+            'result_target': {'kind': 'friendly', 'proposer_id': people[0]['id']},
+        }
+        bad = {**raw, 'placements': [names[-1]] * count}
+        assert player.post('/api/life/games', json=bad, headers=token).status_code == 422
+        result = player.post('/api/life/games', json=raw, headers=token).json()
+        assert result['result_status'] == 'confirmed'
+        assert len(result['elo_changes']) == count
+        retry = player.post('/api/life/games', json=raw, headers=token).json()
+        assert retry['result_id'] == result['result_id'] and retry['duplicate']
+        history = player.get('/api/public/history', params={
+            'start': '2026-11-25T00:00:00Z', 'end': '2026-11-26T00:00:00Z',
+        }).json()
+        assert history[0]['sides'] == [[name] for name in names[::-1]]
+        assert history[0]['elo_deltas'][0] == [20]
+        path = '/api/admin/friendlies/ffa/' + result['result_id']
+        assert admin.patch(path, json={
+            'at': raw['ended_at'], 'placements': [p['id'] for p in people],
+        }, headers=headers).status_code == 200
+        assert admin.delete(path, headers=headers).status_code == 200
+        assert player.post('/api/life/games', json=raw, headers=token).json()['result_status'] == 'unavailable'

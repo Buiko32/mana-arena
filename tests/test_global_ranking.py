@@ -163,3 +163,11 @@ def test_ranking_movement_uses_latest_played_day_in_rome(tmp_path):
         assert [match['elo_delta'] for match in stats['recent_results']] == [-20, -18]
         assert stats['recent_results'][1]['opponents'][0]['photo_url'] == '/photos/abcd.jpg'
         assert [(row['opponent']['id'], row['wins'], row['losses']) for row in stats['head_to_head']] == [('b', 0, 2)]
+
+def test_free_for_all_scores_each_position_once():
+    players = [{"id": pid, "name": pid} for pid in "abcde"]
+    for count, expected in [(3, [1520, 1500, 1480]), (4, [1520, 1507, 1493, 1480]), (5, [1520, 1510, 1500, 1490, 1480])]:
+        ids = list("abcde"[:count])
+        rows = calculate_global_elo(players, [{"placements": ids}])
+        assert [row["rating"] for row in rows if row["id"] in ids] == expected
+        assert all(row["matches"] == 1 for row in rows if row["id"] in ids)

@@ -57,10 +57,42 @@ def _elo_order(row):
     return (-row['rating'], -row['wins'], row['name'].casefold(), row['id'])
 
 
+def _expected_score(own, other):
+    diff = other - own
+    if own < 2650:
+        diff = max(-400, min(400, diff))
+    return 1 / (1 + 10 ** (diff / 400))
+
+
+def _elo_factor(row):
+    return 40 if row['matches'] < 30 else 10 if row['peak_2400'] else 20
+
+
 # Internal Elo inspired by FIDE K thresholds, not an official FIDE rating.
 def calculate_global_elo(players: list[dict], matches: list[dict], *, on_game=None, before_game=None) -> list[dict]:
     rows = {p['id']: {**p, 'rating': 1500.0, 'matches': 0, 'wins': 0, 'draws': 0, 'losses': 0, 'peak_2400': False} for p in players}
     for match in matches:
+        if placements := match.get('placements'):
+            ordered = [rows.get(pid) for pid in placements]
+            if len(set(placements)) != len(placements) or not 3 <= len(ordered) <= 5 or any(row is None for row in ordered):
+                continue
+            if before_game:
+                before_game(rows, match)
+            updates = []
+            for position, row in enumerate(ordered):
+                opponents = ordered[:position] + ordered[position + 1:]
+                expected = sum(_expected_score(row['rating'], other['rating']) for other in opponents)
+                change = _elo_factor(row) * (len(ordered) - 1 - position - expected) / len(opponents)
+                average = sum(other['rating'] for other in opponents) / len(opponents)
+                updates.append((row, change, position == 0, average, opponents))
+            for row, change, won, _, _ in updates:
+                row['rating'] += change
+                row['matches'] += 1
+                row['wins' if won else 'losses'] += 1
+                row['peak_2400'] |= row['rating'] >= 2400
+            if on_game:
+                on_game(rows, match, updates)
+            continue
         if match.get('team_a') and match.get('team_b'):
             teams = [[rows.get(pid) for pid in match[key]] for key in ('team_a','team_b')]
             if any(not row for team in teams for row in team) or match.get('winner') not in ('a','b'):
@@ -98,15 +130,8 @@ def calculate_global_elo(players: list[dict], matches: list[dict], *, on_game=No
             before_game(rows, match)
         score_a = {'p1_win': 1.0, 'p2_win': 0.0}[result]
         ra, rb = a['rating'], b['rating']
-        def expected(own, other):
-            diff = other - own
-            if own < 2650:
-                diff = max(-400, min(400, diff))
-            return 1 / (1 + 10 ** (diff / 400))
-        def factor(row):
-            return 40 if row['matches'] < 30 else 10 if row['peak_2400'] else 20
-        a['rating'] += factor(a) * (score_a - expected(ra, rb))
-        b['rating'] += factor(b) * ((1 - score_a) - expected(rb, ra))
+        a['rating'] += _elo_factor(a) * (score_a - _expected_score(ra, rb))
+        b['rating'] += _elo_factor(b) * ((1 - score_a) - _expected_score(rb, ra))
         for row in (a, b):
             row['matches'] += 1
             row['peak_2400'] |= row['rating'] >= 2400
@@ -130,7 +155,7 @@ def _elo_inputs(conn):
     players = [dict(row) for row in conn.execute('SELECT id,name,active,photo,avatar_hue,avatar_color FROM players')]
     # Replay by match date. Audit sequence breaks ties when records share a second.
     events = {}
-    for row in conn.execute("SELECT id,detail_json,created_at FROM audit WHERE action IN ('match_result_recorded','friendly_result_recorded','team_friendly_result_recorded') ORDER BY id"):
+    for row in conn.execute("SELECT id,detail_json,created_at FROM audit WHERE action IN ('match_result_recorded','friendly_result_recorded','team_friendly_result_recorded','ffa_friendly_result_recorded') ORDER BY id"):
         detail = json.loads(row['detail_json'])
         if detail.get('match_id'):
             events[detail['match_id']] = (row['created_at'], row['id'])
@@ -159,6 +184,10 @@ def _elo_inputs(conn):
         event=events.get(row['id'])
         key=(row['created_at'], event[1] if event else 0, row['id'])
         matches.append((key,match))
+    for row in conn.execute("SELECT id,placements,created_at FROM ffa_results"):
+        event = events.get(row['id'])
+        key = (row['created_at'], event[1] if event else 0, row['id'])
+        matches.append((key, {'placements': json.loads(row['placements'])}))
     matches.sort(key=lambda item: item[0])
     return players, [{**match, 'elo_date': key[0], 'elo_match_id': key[2]} for key, match in matches]
 

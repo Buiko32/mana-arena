@@ -49,6 +49,12 @@ def month_matches(conn, start, end):
         sides[r["team"]].append(r["player_id"])
     for match_id, (stamp, winner, sides) in teams.items():
         add(match_id, stamp, "Amichevole", sides["a"], sides["b"], 0 if winner == "a" else 1)
+    for row in conn.execute("SELECT * FROM ffa_results WHERE created_at>=? AND created_at<?", (start, end)):
+        sides = [[pid] for pid in json.loads(row["placements"])]
+        participants[row["id"]] = (len(games), sides)
+        games.append({"at": row["created_at"].replace(" ", "T") + "Z", "label": "Amichevole · Tutti contro tutti",
+                      "kind": "ffa", "sides": [[names.get(pid, "Giocatore")] for (pid,) in sides],
+                      "winner": 0, "score": None})
     if participants:
         deltas = match_elo_deltas(conn, participants)
         for match_id, (index, sides) in participants.items():

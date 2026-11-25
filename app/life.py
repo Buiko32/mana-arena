@@ -62,6 +62,7 @@ class Game(BaseModel):
     players: list[Player] = Field(min_length=2, max_length=6)
     changes: list[Change] = Field(max_length=5000)
     winner: str | None = Field(default=None, max_length=160)
+    placements: list[str] | None = Field(default=None, max_length=5)
     result_target: ResultTarget | None = None
 
 
@@ -80,6 +81,11 @@ def _validate(game: Game) -> None:
         raise ValueError("Un profilo può partecipare una sola volta.")
     if game.winner is not None and game.winner not in names:
         raise ValueError("Il vincitore deve essere uno dei lati.")
+    if game.placements is not None and (
+        game.format != "ffa" or not 3 <= len(names) <= 5 or len(game.placements) != len(names)
+        or set(game.placements) != set(names) or game.placements[0] != game.winner
+    ):
+        raise ValueError("I piazzamenti devono includere tutti i giocatori una sola volta, a partire dal vincitore.")
     if game.starting_life != game.players[0].initial_life:
         raise ValueError("La vita iniziale non corrisponde al primo lato.")
     if any(t.tzinfo is None or t.utcoffset() is None for t in [game.started_at, game.ended_at, *(c.at for c in game.changes)]):
@@ -123,6 +129,8 @@ def _save(game: Game, data_dir: str | Path | None = None) -> bool:
     path = _path(data_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
     data = game.model_dump(mode="json")
+    if data["placements"] is None:
+        del data["placements"]
     if data["result_target"] is None:
         del data["result_target"]
     # The complete timeline is retained; these aggregates make downstream analysis easier.
