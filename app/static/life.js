@@ -411,7 +411,7 @@
   }
   function queueLive(active) {
     pendingLive.set(game.session_id, active ? {
-      format: game.format, kind: game.kind,
+      format: game.format, kind: game.kind, tournament_id: game.match?.tournament?.id,
       sides: game.sides.map(({initial, life, members}) => ({
         initial, life, members: members.map(({id, name}) => ({id, name}))
       }))
@@ -447,7 +447,7 @@
       return `style="--table-order:${position};--table-turn:${turn}deg" ${bottom ? 'data-bottom-seat' : ''}`;
     };
     root.classList.add('life-playing');
-    root.innerHTML = `<div class="life-table-shell ${layout ? 'life-ffa-shell' : ''}"><div class="life-table life-seating life-seating-${game.sides.length} ${layout ? 'life-ffa-table' : ''}">${game.sides.map((side,i)=>`<article class="life-side" ${tableSeat(i)}><div class="life-side-inner" ${editSeats ? 'inert' : ''}><div class="life-side-heading">${memberNames(side)}</div><div class="life-counter"><button type="button" data-delta="${i},-1" aria-label="Togli una vita a ${esc(side.name)}">−</button><div class="life-total"><strong data-life="${i}">${side.life}</strong><span class="life-change" data-feedback="${i}" aria-hidden="true"></span></div><button type="button" data-delta="${i},1" aria-label="Aggiungi una vita a ${esc(side.name)}">+</button></div><button class="life-undo" type="button" data-undo="${i}">Annulla</button></div>${editSeats ? `<button type="button" class="life-seat-pick" data-seat-pick="${i}" aria-label="Sposta ${esc(side.name)}" aria-pressed="${picked === i}"></button>` : ''}</article>`).join('')}</div><div class="life-floating-controls">${layout ? `<button type="button" data-seats aria-pressed="${editSeats}">${editSeats ? 'Fatto' : 'Posti'}</button>` : ''}<button type="button" data-end>Termina</button><button type="button" data-cancel-game>Annulla partita</button><button type="button" data-dice-open aria-label="Apri dadi">${layout ? 'D20' : '⚄'}</button></div>${editSeats ? '<p class="life-seat-help" role="status">Tocca due giocatori per scambiare i posti.</p>' : ''}<p class="life-error" role="alert"></p><div class="life-dice-overlay" data-dice-overlay hidden><div class="life-dice-dialog" role="dialog" aria-modal="true" aria-labelledby="life-dice-title"><div class="life-dice-header"><h2 id="life-dice-title">Tira il D20</h2><button type="button" data-dice-close aria-label="Chiudi dadi">×</button></div><p class="life-roll-result" aria-live="polite"></p><div class="life-dice-grid life-seating life-seating-${game.sides.length}">${game.sides.map((side,i)=>`<div class="life-dice-player" ${seat(i)}><div class="life-dice-inner"><div class="life-dice-name">${memberNames(side)}</div><div class="life-die-wrap"><canvas width="150" height="150" data-die="${i}" aria-label="Dado a venti facce"></canvas><span data-roll-value="${i}">—</span></div><button type="button" data-roll="${i}">Tira D20</button></div></div>`).join('')}</div></div></div></div>`;
+    root.innerHTML = `<div class="life-table-shell ${layout ? 'life-ffa-shell' : ''}"><div class="life-table life-seating life-seating-${game.sides.length} ${layout ? 'life-ffa-table' : ''}">${game.sides.map((side,i)=>`<article class="life-side" ${tableSeat(i)}><div class="life-side-inner" ${editSeats ? 'inert' : ''}><div class="life-side-heading">${memberNames(side)}</div><div class="life-counter"><button type="button" data-delta="${i},-1" aria-label="Togli una vita a ${esc(side.name)}">−</button><div class="life-total"><strong data-life="${i}">${side.life}</strong><span class="life-change" data-feedback="${i}" aria-hidden="true"></span></div><button type="button" data-delta="${i},1" aria-label="Aggiungi una vita a ${esc(side.name)}">+</button></div><button class="life-undo" type="button" data-undo="${i}">Annulla</button></div>${editSeats ? `<button type="button" class="life-seat-pick" data-seat-pick="${i}" aria-label="Sposta ${esc(side.name)}" aria-pressed="${picked === i}"></button>` : ''}</article>`).join('')}</div><div class="life-floating-controls">${layout ? `<button type="button" data-seats aria-pressed="${editSeats}">${editSeats ? 'Fatto' : 'Posti'}</button>` : ''}<button type="button" data-end>Termina partita</button><button type="button" data-cancel-game>Annulla partita</button><button type="button" data-dice-open aria-label="Apri dadi">${layout ? 'D20' : '⚄'}</button></div>${editSeats ? '<p class="life-seat-help" role="status">Tocca due giocatori per scambiare i posti.</p>' : ''}<p class="life-error" role="alert"></p><div class="life-dice-overlay" data-dice-overlay hidden><div class="life-dice-dialog" role="dialog" aria-modal="true" aria-labelledby="life-dice-title"><div class="life-dice-header"><h2 id="life-dice-title">Tira il D20</h2><button type="button" data-dice-close aria-label="Chiudi dadi">×</button></div><p class="life-roll-result" aria-live="polite"></p><div class="life-dice-grid life-seating life-seating-${game.sides.length} ${layout ? 'life-ffa-dice-grid' : ''}">${game.sides.map((side,i)=>`<div class="life-dice-player" ${tableSeat(i)}><div class="life-dice-inner"><div class="life-dice-name">${memberNames(side)}</div><div class="life-die-wrap"><canvas width="150" height="150" data-die="${i}" aria-label="Dado a venti facce"></canvas><span data-roll-value="${i}">—</span></div><button type="button" data-roll="${i}">Tira D20</button></div></div>`).join('')}</div></div></div></div>`;
     syncScreenLock();
     game.sides.forEach((_,i)=>{drawDie(root.querySelector(`[data-die="${i}"]`),0,0,0,game.rolls.values[i]);root.querySelector(`[data-roll-value="${i}"]`).textContent=game.rolls.values[i]||'—';}); updateRollStatus();
     root.onclick = e => { const b=e.target.closest('button'); if (!b || busy) return;
@@ -545,27 +545,59 @@
     };
   }
 
+  function proposePlacements() {
+    const life = new Map(game.sides.map(side => [side.name, side.initial]));
+    const firstNegative = new Map();
+    game.changes.forEach(({player, delta, undone, undo}, index) => {
+      if (undone || undo || !life.has(player)) return;
+      const total = life.get(player) + delta;
+      life.set(player, total);
+      if (total < 0 && !firstNegative.has(player)) firstNegative.set(player, index);
+    });
+
+    return game.sides.map((side, index) => ({side, index})).sort((a, b) => {
+      const aNegative = a.side.life < 0;
+      const bNegative = b.side.life < 0;
+      if (aNegative !== bNegative) return aNegative ? 1 : -1;
+      if (aNegative) {
+        const order = (firstNegative.get(b.side.name) ?? -1) - (firstNegative.get(a.side.name) ?? -1);
+        if (order) return order;
+      }
+      return b.side.life - a.side.life;
+    }).map(({index}) => index);
+  }
+
   function drawPlacements() {
     const labels = ['Primo (vincitore)', 'Secondo', 'Terzo', 'Quarto', 'Quinto'];
-    root.innerHTML = `<div class="life-shell life-winner"><h1>Risultato partita</h1><form data-placements>${game.sides.map((_, rank) => `<label>${labels[rank]}<select required><option value="">Scegli giocatore</option>${game.sides.map((side, i) => `<option value="${i}">${esc(side.name)}</option>`).join('')}</select></label>`).join('')}<p class="life-error" role="alert"></p><button type="submit" class="button primary" disabled>Salva risultato</button><button type="button" class="button quiet" data-back>Torna alla partita</button></form></div>`;
+    const order = proposePlacements();
+    const options = game.sides.map((side, i) => `<option value="${i}">${esc(side.name)}</option>`).join('');
+    root.innerHTML = `<div class="life-shell life-winner"><h1>Risultato partita</h1><form data-placements>
+      ${order.map((_, rank) => `<label>${labels[rank]}<span class="life-placement-choice">
+        <span data-placement-avatar></span><select required>${options}</select>
+      </span></label>`).join('')}
+      <p class="life-error" role="alert"></p><button type="submit" class="button primary">Salva risultato</button><button type="button" class="button quiet" data-back>Torna alla partita</button></form></div>`;
     const form = root.querySelector('[data-placements]');
     const fields = [...form.querySelectorAll('select')];
-    const update = () => {
-      const selected = fields.map(field => field.value);
-      fields.forEach((field, rank) => {
-        for (const option of field.options) {
-          option.disabled = option.value !== '' && selected.some((value, i) => i !== rank && value === option.value);
-        }
-      });
-      form.querySelector('[type="submit"]').disabled = selected.includes('') || new Set(selected).size !== fields.length;
+    const avatars = form.querySelectorAll('[data-placement-avatar]');
+    const update = rank => {
+      const index = order[rank];
+      fields[rank].value = index;
+      avatars[rank].innerHTML = avatar(game.sides[index].members[0]);
     };
+    fields.forEach((_, rank) => update(rank));
     root.onclick = e => { if (e.target.closest('[data-back]')) drawGame(); };
-    form.onchange = update;
+    form.onchange = event => {
+      const rank = fields.indexOf(event.target);
+      if (rank === -1) return;
+      const other = order.indexOf(Number(event.target.value));
+      if (other === -1 || other === rank) return;
+      [order[rank], order[other]] = [order[other], order[rank]];
+      update(rank);
+      update(other);
+    };
     form.onsubmit = e => {
       e.preventDefault();
-      const selected = fields.map(field => field.value);
-      if (selected.includes('') || new Set(selected).size !== fields.length) return;
-      const placements = selected.map(i => game.sides[Number(i)].name);
+      const placements = order.map(index => game.sides[index].name);
       finishGame(placements[0], placements);
     };
   }

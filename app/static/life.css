@@ -98,6 +98,8 @@
 .life-other-results { margin-top:1.25rem; color:#c5b8d5; }
 .life-other-results summary { cursor:pointer; }
 .life-other-results div { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:.5rem; }
+.life-placement-choice { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:.55rem; }
+.life-placement-choice [data-placement-avatar] { display:flex; }
 
 @media (max-height:450px) and (orientation:landscape) {
   .life-dice-overlay { padding:.35rem; }
@@ -156,3 +158,30 @@
 .life-floating-controls { flex-wrap:wrap; max-width:calc(100% - 1rem); }
 .life-ffa-shell .life-floating-controls { max-width:none; }
 #life .life-floating-controls [data-cancel-game] { flex:0 0 auto; color:#ffc0c6; }
+#life .life-floating-controls [data-end] { background:#a12235; border-color:#ef7480; color:#fff; }
+#life .life-floating-controls [data-end]:hover { background:#b72b40; }
+.life-playing .life-ffa-dice-grid.life-seating-5 { grid-template-rows:1fr 1fr 1.35fr; }
+.life-playing .life-ffa-dice-grid > .life-dice-player {
+  order:var(--table-order);
+  grid-column:span 1;
+  position:relative;
+  container-type:size;
+  padding:0;
+  overflow:hidden;
+}
+.life-playing .life-ffa-dice-grid > [data-bottom-seat] { grid-column:span 2; }
+.life-playing .life-ffa-dice-grid .life-dice-inner {
+  position:absolute;
+  inset:50% auto auto 50%;
+  width:100cqh;
+  height:100cqw;
+  display:flex;
+  flex-wrap:wrap;
+  align-content:center;
+  align-items:center;
+  justify-content:center;
+  gap:.25rem;
+  padding:.25rem;
+  transform:translate(-50%,-50%) rotate(var(--table-turn));
+}
+.life-playing .life-ffa-dice-grid [data-bottom-seat] .life-dice-inner { width:100cqw; height:100cqh; }

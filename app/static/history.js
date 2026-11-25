@@ -4,11 +4,16 @@
   const calendar = root.querySelector('#history-calendar');
   const games = root.querySelector('#history-games');
   const count = root.querySelector('#history-count');
+  const mine = root.querySelector('#history-mine');
+  const opponent = root.querySelector('#history-opponent');
+  const matchFormat = root.querySelector('#history-format');
+  const filterHint = root.querySelector('#history-filter-hint');
   const today = new Date();
   let month = new Date(today.getFullYear(), today.getMonth(), 1);
   let selected = today.getDate();
   let sequence = 0;
   let days = new Map();
+  let loaded = false;
   const format = (date, options) => date.toLocaleDateString('it-IT', options);
   const fullDate = date => format(date, {weekday:'long', day:'numeric', month:'long', year:'numeric'});
   function element(tag, value = '', className = '') {
@@ -19,7 +24,7 @@
   }
   function renderMatch(match) {
     const card = element('article', '', 'history-match');
-    const teamMatch = match.sides.some(side => side.length > 1);
+    const teamMatch = match.format === 'team';
     const label = teamMatch ? match.label + ' · Squadre' : match.label;
     const heading = element('header', '', 'history-match-heading');
     heading.append(element('h3', label));
@@ -58,18 +63,42 @@
     return card;
   }
 
-  function showDay(day) {
+  function showDay(day, searchMonth = false) {
     selected = day;
     calendar.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.day) === day)));
     const date = new Date(month.getFullYear(), month.getMonth(), day);
-    root.querySelector('#history-day').textContent = fullDate(date);
+    const player = window.manaArenaPlayerId();
+    const query = opponent.value.trim().toLocaleLowerCase('it-IT');
+    const active = mine.checked || query || matchFormat.value;
+    const wholeMonth = active && searchMonth;
+    filterHint.hidden = !mine.checked || Boolean(player);
+    root.querySelector('#history-day').textContent = wholeMonth ? 'Risultati del mese' : fullDate(date);
+    if (wholeMonth) calendar.querySelector('[aria-pressed="true"]')?.setAttribute('aria-pressed', 'false');
     games.replaceChildren();
-    const matches = days.get(day) || [];
+    const source = wholeMonth ? [...days.values()].flat() : days.get(day) || [];
+    const matches = source.filter(match => {
+      const ownSide = player ? match.player_ids?.findIndex(side => side.includes(player)) ?? -1 : -1;
+      return (!matchFormat.value || match.format === matchFormat.value) &&
+        (!mine.checked || ownSide >= 0) &&
+        (!query || match.sides.some((side, index) => index !== ownSide &&
+          side.some(name => name.toLocaleLowerCase('it-IT').includes(query))));
+    });
     count.textContent = matches.length === 1 ? '1 partita' : matches.length + ' partite';
-    if (!matches.length) games.append(element('p', 'Nessuna partita registrata.', 'muted'));
-    else games.append(...matches.map(renderMatch));
+    if (!matches.length) games.append(element('p', active ? 'Nessuna partita corrisponde ai filtri.' : 'Nessuna partita registrata.', 'muted'));
+    else games.append(...matches.map(match => {
+      const card = renderMatch(match);
+      if (wholeMonth) card.querySelector('header').append(element('span', formatDate(match.at), 'muted'));
+      return card;
+    }));
   }
+  const formatDate = stamp => format(new Date(stamp), {day:'numeric', month:'short'});
+  const applyFilters = () => { if (loaded) showDay(selected, true); };
+  mine.addEventListener('change', applyFilters);
+  opponent.addEventListener('input', applyFilters);
+  matchFormat.addEventListener('change', applyFilters);
+  document.addEventListener('player-identity-changed', applyFilters);
   async function load() {
+    loaded = false;
     const request = ++sequence;
     const end = new Date(month.getFullYear(), month.getMonth()+1, 1);
     root.querySelector('#history-month').textContent = format(month,{month:'long',year:'numeric'});
@@ -103,7 +132,8 @@
         button.append(marks);
         calendar.append(button);
       }
-      showDay(selected || Math.max(1,...days.keys()));
+      loaded = true;
+      showDay(selected || Math.max(1,...days.keys()), true);
     } catch {
       if (request !== sequence) return;
       games.textContent = 'Impossibile caricare le partite. ';

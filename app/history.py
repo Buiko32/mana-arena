@@ -9,11 +9,11 @@ def month_matches(conn, start, end):
     games = []
     participants = {}
 
-    def add(match_id, stamp, label, left, right, winner, kind="friendly", score=None):
+    def add(match_id, stamp, label, left, right, winner, kind="friendly", score=None, match_format="duel"):
         participants[match_id] = (len(games), (left, right))
         games.append({"at": stamp.replace(" ", "T") + "Z", "label": label, "kind": kind,
                       "sides": [[names.get(p, "Giocatore") for p in side] for side in (left, right)],
-                      "winner": winner, "score": score})
+                      "player_ids": [left, right], "winner": winner, "score": score, "format": match_format})
 
     for row in conn.execute("""
         WITH recorded AS (
@@ -48,13 +48,13 @@ def month_matches(conn, start, end):
         stamp, winner, sides = teams.setdefault(r["id"], (r["created_at"], r["winning_team"], {"a": [], "b": []}))
         sides[r["team"]].append(r["player_id"])
     for match_id, (stamp, winner, sides) in teams.items():
-        add(match_id, stamp, "Amichevole", sides["a"], sides["b"], 0 if winner == "a" else 1)
+        add(match_id, stamp, "Amichevole", sides["a"], sides["b"], 0 if winner == "a" else 1, match_format="team")
     for row in conn.execute("SELECT * FROM ffa_results WHERE created_at>=? AND created_at<?", (start, end)):
         sides = [[pid] for pid in json.loads(row["placements"])]
         participants[row["id"]] = (len(games), sides)
         games.append({"at": row["created_at"].replace(" ", "T") + "Z", "label": "Amichevole · Tutti contro tutti",
                       "kind": "ffa", "sides": [[names.get(pid, "Giocatore")] for (pid,) in sides],
-                      "winner": 0, "score": None})
+                      "player_ids": sides, "winner": 0, "score": None, "format": "ffa"})
     if participants:
         deltas = match_elo_deltas(conn, participants)
         for match_id, (index, sides) in participants.items():

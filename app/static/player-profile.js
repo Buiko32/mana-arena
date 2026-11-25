@@ -90,7 +90,7 @@
       ? `<strong class="profile-result-elo match-card-elo" data-direction="${Math.sign(delta)}">${delta > 0 ? '+' : delta < 0 ? '−' : ''}${Math.abs(delta)} Elo</strong>`
       : '';
     const date = match.date ? `<span class="muted">${historyDate.format(utcTime(match.date))}</span>` : '';
-    return `<li><button type="button" class="${match.result}" aria-label="${label}" aria-describedby="${tooltip}">${placement || (won ? 'V' : 'S')}</button>
+    return `<li><button type="button" class="${match.result}${placement ? ' profile-result-placement' : ''}" aria-label="${label}" aria-describedby="${tooltip}">${placement || (won ? 'V' : 'S')}</button>
       ${placement && points ? `<span class="profile-placement-delta">${points}</span>` : ''}
       <div class="profile-result-tooltip" id="${tooltip}" role="tooltip"><strong>${placement ? `${placement} · Avversari` : won ? 'Vittoria contro' : 'Sconfitta contro'}</strong>
       ${opponentList(match.opponents)}<div class="profile-result-meta">${date}${points}</div></div></li>`;

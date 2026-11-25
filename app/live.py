@@ -27,6 +27,7 @@ class Snapshot(BaseModel):
     format: Literal["duel", "team", "ffa"]
     kind: Literal["friendly", "tournament"]
     sides: list[Side] = Field(min_length=2, max_length=5)
+    tournament_id: str | None = Field(default=None, max_length=80)
 
     @model_validator(mode="after")
     def check_sides(self):
