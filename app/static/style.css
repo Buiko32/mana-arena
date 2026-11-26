@@ -664,14 +664,21 @@ footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:va
 .profile-placement progress { display:block; width:min(100%,24rem); accent-color:var(--amber-bright); }
 .profile-placement-delta { display:block; margin-top:.3rem; text-align:center; }
 .profile-streak-badge { width:fit-content; padding:.35rem .7rem; border:1px solid var(--line); border-radius:.5rem; }
-.weekly-missions {margin:.75rem 0 1.25rem;border:1px solid var(--line);border-radius:.5rem}
-.weekly-missions summary {padding:.8rem 1rem;cursor:pointer;font-weight:700}
+.weekly-missions {margin:.75rem 0 1.25rem;border:1px solid #92614c;border-inline-start:3px solid #e29b78;border-radius:.65rem;background:var(--panel)}
+.weekly-missions summary {display:flex;align-items:center;gap:.65rem;min-height:48px;padding:.7rem 1rem;cursor:pointer;font-weight:700;list-style:none;background:#382921;border-radius:.5rem;color:#ffe4d5}
+.weekly-missions summary::-webkit-details-marker {display:none}
+.weekly-missions summary:hover,.weekly-missions[open] summary {background:#453128}
+.weekly-missions summary:focus-visible {outline:2px solid #ffc9af;outline-offset:3px}
+.weekly-missions-title {flex:1}
+.weekly-missions-count {flex:none;padding:.2rem .55rem;border:1px solid #aa745c;border-radius:1rem;font-size:.8rem;font-variant-numeric:tabular-nums}
+.weekly-missions-chevron {flex:none;width:.55rem;height:.55rem;margin-inline:.15rem;border:solid currentColor;border-width:0 2px 2px 0;transform:rotate(45deg) translateY(-2px)}
+.weekly-missions[open] .weekly-missions-chevron {transform:rotate(225deg) translateY(-2px)}
 .weekly-missions ul {list-style:none;padding:0 1rem;margin:0}
 .weekly-mission {display:flex;align-items:flex-start;gap:.65rem;padding:.75rem 0;border-top:1px solid var(--line)}
 .weekly-mission-content {flex:1;min-width:0}
 .weekly-mission-content small {display:block;color:var(--muted);margin:.15rem 0 .4rem}
 .weekly-trophy.silver {filter:grayscale(1) brightness(1.25)}
-.weekly-trophy.bronze {filter:sepia(1) saturate(1.5) brightness(.77)}
+.weekly-trophy.bronze {filter:grayscale(1) sepia(1) saturate(2.4) hue-rotate(339deg) brightness(.78)}
 .weekly-mission-progress {display:flex;align-items:center;gap:.5rem;font-size:.8rem}
 .weekly-mission-progress progress {flex:1;min-width:0;height:.65rem;appearance:none;border:0;border-radius:1rem;background:#20212c}
 .weekly-mission-progress progress::-webkit-progress-bar {background:#20212c;border-radius:1rem}

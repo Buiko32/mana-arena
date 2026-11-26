@@ -27,7 +27,16 @@
     const teamMatch = match.format === 'team';
     const label = teamMatch ? match.label + ' · Squadre' : match.label;
     const heading = element('header', '', 'history-match-heading');
-    heading.append(element('h3', label));
+    const title = element('h3');
+    if (match.kind === 'tournament') {
+      const trophy = element('span', '🏆');
+      trophy.setAttribute('role', 'img');
+      trophy.setAttribute('aria-label', 'Partita di torneo');
+      trophy.title = 'Partita di torneo';
+      title.append(trophy, ' ');
+    }
+    title.append(label);
+    heading.append(title);
     if (match.winner === null) heading.append(element('span', 'Pareggio', 'history-outcome'));
     const layout = element('div', '', 'history-match-layout');
     if (match.kind === 'ffa') layout.classList.add('history-ffa');

@@ -110,8 +110,13 @@
 
   function weeklyMissions(missions) {
     if (!missions?.length) return '';
+    const completed = missions.filter(mission => mission.completed).length;
     return `<details class="weekly-missions">
-      <summary>Missioni settimanali</summary>
+      <summary>
+        <span class="weekly-missions-title">Missioni settimanali</span>
+        <span class="weekly-missions-count" aria-label="${completed} missioni completate su ${missions.length}">${completed}/${missions.length}</span>
+        <span class="weekly-missions-chevron" aria-hidden="true"></span>
+      </summary>
       <ul>${missions.map(mission => `<li class="weekly-mission${mission.completed ? ' is-complete' : ''}">
         <span class="weekly-trophy ${esc(mission.tier)}" aria-hidden="true">🏆</span>
         <div class="weekly-mission-content">
@@ -133,7 +138,7 @@
     const winRate = player.matches ? `${new Intl.NumberFormat('it-IT',{style:'percent',maximumFractionDigits:1}).format(player.wins/player.matches)}` : '—';
     const metrics = [
       ['Elo', player.rating], ['Posizione', `#${player.rank}`],
-      ['Record', `${player.wins} V · ${player.losses} S`], ['Vittorie', winRate],
+      ['Totale', `${player.wins} V · ${player.losses} S`], ['Vittorie', winRate],
       ['Picco Elo', stats.peak_rating], ['Miglior posizione', `#${stats.best_rank}`],
       ['Serie di vittorie attuale', stats.win_streak], ['Serie di vittorie più lunga', stats.longest_win_streak],
     ];

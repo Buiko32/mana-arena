@@ -27,7 +27,7 @@ CATALOG = (
     Mission('tournament', 'Ingresso nell’arena', 'Completa almeno una partita di torneo.', 5),
     Mission('play_5', 'Cinque scintille', 'Completa 5 partite.', 10, 5),
     Mission('play_10', 'Maratoneta', 'Completa 10 partite.', 25, 10),
-    Mission('win_3', 'Tris di vittorie', 'Vinci contro 3 avversari diversi.', 15, 3),
+    Mission('win_3', "Non c'è due senza tre", 'Vinci contro 3 avversari diversi.', 15, 3),
     Mission('win_5', 'Cinquina arcana', 'Vinci contro 5 avversari diversi.', 20, 5),
     Mission('days', 'Tre giorni di magia', 'Completa almeno una partita in 3 giorni diversi.', 5, 3),
     Mission('opponents', 'Non ho paura di nessuno', 'Gioca contro 4 avversari diversi.', 10, 4),
