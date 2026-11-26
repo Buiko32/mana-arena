@@ -155,10 +155,10 @@ def test_ranking_movement_uses_latest_played_day_in_rome(tmp_path):
         ranking = {row['id']: row for row in global_elo_from_db(conn, include_movement=True)}
 
         assert ranking['b']['rank'] == 2
-        assert ranking['b']['movement'] == {'date': '2026-07-02', 'rank': 1, 'rating': 38}
-        assert ranking['a']['movement'] == {'date': '2026-07-02', 'rank': -4, 'rating': -38}
+        assert ranking['b']['movement'] == {'date': '2026-07-05', 'rank': -1, 'rating': 0}
+        assert ranking['a']['movement'] == {'date': '2026-07-05', 'rank': 1, 'rating': 0}
         assert ranking['c']['movement']['date'] == '2026-07-05'
-        assert ranking['e']['movement'] is None
+        assert ranking['e']['movement'] == {'date': '2026-07-05', 'rank': 1, 'rating': 0}
         stats = player_statistics(conn, 'a')
         assert stats['recent_results'][1]['result'] == 'loss'
         assert [match['elo_delta'] for match in stats['recent_results']] == [-20, -18]

@@ -127,10 +127,12 @@ def calculate_global_elo(players: list[dict], matches: list[dict], *, on_game=No
             continue
         result = match.get('result')
         a, b = rows.get(match.get('p1')), rows.get(match.get('p2'))
-        if result not in ('p1_win', 'p2_win') or not a or not b or a is b or match.get('bye') or match.get('void'):
+        if result not in ('p1_win', 'p2_win', 'draw') or not a or not b or a is b or match.get('bye') or match.get('void'):
             continue
         if before_game:
             before_game(rows, match)
+        if result == 'draw':
+            continue
         score_a = {'p1_win': 1.0, 'p2_win': 0.0}[result]
         ra, rb = a['rating'], b['rating']
         a['rating'] += _elo_factor(a) * (score_a - _expected_score(ra, rb))
@@ -269,24 +271,10 @@ def global_elo_from_db(conn, *, include_movement=False):
     rome = ZoneInfo('Europe/Rome')
     day = None
     opening = {}
-    played = set()
-    movement = {}
 
     def standings(rows):
         active = sorted((row for row in rows if row['active']), key=_elo_order)
         return {row['id']: (rank, round(row['rating'])) for rank, row in enumerate(active, 1)}
-
-    def close_day(closing):
-        for pid in played:
-            if pid in closing:
-                start_rank, start_rating = opening[pid]
-                end_rank, end_rating = closing[pid]
-                movement[pid] = {
-                    'date': day.isoformat(),
-                    'rank': start_rank - end_rank,
-                    'rating': end_rating - start_rating,
-                }
-        played.clear()
 
     def before_game(rows, match):
         nonlocal day, opening
@@ -295,19 +283,24 @@ def global_elo_from_db(conn, *, include_movement=False):
             timestamp = timestamp.replace(tzinfo=timezone.utc)
         match_day = timestamp.astimezone(rome).date()
         if match_day != day:
-            opening_next = standings(rows.values())
-            close_day(opening_next)
-            opening, day = opening_next, match_day
+            opening, day = standings(rows.values()), match_day
 
-    def after_game(rows, match, updates):
-        played.update(row['id'] for row, *_ in updates)
+    def after_game(_rows, match, updates):
         fragments.record(match, updates)
 
     rows = calculate_global_elo(players, matches, before_game=before_game, on_game=after_game)
     active = [row for row in rows if row['active']]
-    close_day({row['id']: (rank, row['rating']) for rank, row in enumerate(active, 1)})
-    return [{**row, 'movement': movement.get(row['id']), 'mana_fragments': fragments.balance(row['id'])}
-            for row in active]
+    for rank, row in enumerate(active, 1):
+        pid = row['id']
+        row['mana_fragments'] = fragments.balance(pid)
+        row['movement'] = None
+        if day is not None:
+            opening_rank, opening_rating = opening[pid]
+            rank_change = opening_rank - rank
+            rating_change = row['rating'] - opening_rating
+            if rank_change or rating_change:
+                row['movement'] = {'date': day.isoformat(), 'rank': rank_change, 'rating': rating_change}
+    return active
 
 
 def _opponent_profile(row):

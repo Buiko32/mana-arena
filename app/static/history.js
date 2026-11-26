@@ -45,10 +45,12 @@
       }
       const team = element('div', '', 'history-side');
       if (match.kind === 'ffa') team.append(element('span', (index + 1) + '° posto', 'history-outcome'));
-      else if (match.winner === index) team.append(element('span', 'Vittoria', 'history-outcome history-winner'));
       for (const [position, name] of side.entries()) {
         const row = element('div', '', 'history-player');
         row.append(element('strong', name));
+        if (match.kind !== 'ffa' && match.winner === index && position === 0) {
+          row.append(element('span', 'Vittoria', 'history-outcome history-winner'));
+        }
         const delta = match.elo_deltas?.[index]?.[position];
         if (Number.isInteger(delta)) {
           const points = element('span', (delta > 0 ? '+' : delta < 0 ? '−' : '') + Math.abs(delta) + ' Elo', 'match-card-elo');
