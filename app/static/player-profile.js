@@ -80,20 +80,16 @@
     return opponents.map(player => `<span class="profile-opponent">${window.renderPlayerAvatar(player)}<strong>${esc(player.name)}</strong></span>`).join('');
   }
 
-  function recentResult(match, index) {
+  function recentResult(match) {
     const won = match.result === 'win';
     const placement = Number.isInteger(match.position) ? `${match.position}° su ${match.field_size}` : null;
     const label = placement || (won ? 'Vittoria' : 'Sconfitta');
-    const tooltip = `profile-result-${index}`;
     const delta = match.elo_delta;
     const points = Number.isInteger(delta)
       ? `<strong class="profile-result-elo match-card-elo" data-direction="${Math.sign(delta)}">${delta > 0 ? '+' : delta < 0 ? '−' : ''}${Math.abs(delta)} Elo</strong>`
       : '';
-    const date = match.date ? `<span class="muted">${historyDate.format(utcTime(match.date))}</span>` : '';
-    return `<li><button type="button" class="${match.result}${placement ? ' profile-result-placement' : ''}" aria-label="${label}" aria-describedby="${tooltip}">${placement || (won ? 'V' : 'S')}</button>
-      ${placement && points ? `<span class="profile-placement-delta">${points}</span>` : ''}
-      <div class="profile-result-tooltip" id="${tooltip}" role="tooltip"><strong>${placement ? `${placement} · Avversari` : won ? 'Vittoria contro' : 'Sconfitta contro'}</strong>
-      ${opponentList(match.opponents)}<div class="profile-result-meta">${date}${points}</div></div></li>`;
+    const date = match.date ? historyDate.format(utcTime(match.date)) : '';
+    return `<li title="${esc(date)}"><span class="profile-match-outcome ${esc(match.result)}" role="img" aria-label="${label}">${placement || (won ? 'V' : 'S')}</span><span class="profile-match-opponents">${opponentList(match.opponents)}</span>${points}</li>`;
   }
 
   function headToHead(records = []) {
@@ -111,10 +107,10 @@
   function weeklyMissions(missions) {
     if (!missions?.length) return '';
     const completed = missions.filter(mission => mission.completed).length;
-    return `<details class="weekly-missions">
+    return `<details class="weekly-missions" open>
       <summary>
-        <span class="weekly-missions-title">Missioni settimanali</span>
-        <span class="weekly-missions-count" aria-label="${completed} missioni completate su ${missions.length}">${completed}/${missions.length}</span>
+        <svg class="profile-magic-mark" viewBox="0 0 32 40" aria-hidden="true"><path fill="currentColor" d="M1 22 3 6l5 13 3-16 5 14L21 0l3 15 6-10 1 16c-8 2-12 8-15 19C13 30 9 25 1 22Z"/></svg><span class="weekly-missions-title">Missioni settimanali</span>
+        <span class="weekly-missions-count" aria-label="${completed} missioni completate su ${missions.length}">${completed} di ${missions.length} completate</span>
         <span class="weekly-missions-chevron" aria-hidden="true"></span>
       </summary>
       <ul>${missions.map(mission => `<li class="weekly-mission${mission.completed ? ' is-complete' : ''}">
@@ -137,7 +133,6 @@
     const {player,history,best_win:bestWin,recent_results:results} = stats;
     const winRate = player.matches ? `${new Intl.NumberFormat('it-IT',{style:'percent',maximumFractionDigits:1}).format(player.wins/player.matches)}` : '—';
     const metrics = [
-      ['Elo', player.rating], ['Posizione', `#${player.rank}`],
       ['Totale', `${player.wins} V · ${player.losses} S`], ['Vittorie', winRate],
       ['Picco Elo', stats.peak_rating], ['Miglior posizione', `#${stats.best_rank}`],
       ['Serie di vittorie attuale', stats.win_streak], ['Serie di vittorie più lunga', stats.longest_win_streak],
@@ -158,26 +153,24 @@
       </details>` : '<p class="muted">Lo storico appare dopo la prima partita valida per l’Elo.</p>';
     document.title = `${player.name} · Mana Arena`;
     $('#profile-heading').innerHTML = `${window.renderPlayerAvatar(player)}<h1>${esc(player.name)}</h1>`;
-    $('#profile-summary').innerHTML = `
-      <dl class="profile-metrics">${metrics.map(([label,value])=>`<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')}
-        <div><dt>Frammenti Mana</dt><dd class="mana-balance"><span class="mana-fragment-icon" aria-hidden="true"></span>${player.mana_fragments ?? 0}</dd>
-          ${player.can_spend_mana_fragments === false ? '<dd class="mana-spend-note muted">Uso sospeso nelle prime 3 posizioni</dd>' : ''}
-        </div>
-      </dl>
-      ${placementContent}
+    const summary = $('#profile-summary');
+    const open = new Set([...summary.querySelectorAll('details[open]')].map(item => item.id));
+    const disclosure = (id, title, body) => `<details id="${id}" class="profile-disclosure"${open.has(id) ? ' open' : ''}><summary>${title}</summary><div>${body}</div></details>`;
+    const missionsOpen = summary.querySelector('.weekly-missions')?.open ?? true;
+    const number = new Intl.NumberFormat('it-IT', {useGrouping:'always'});
+    $('#profile-key-metrics').innerHTML = `<div><dt>Elo</dt><dd>${number.format(player.rating)}</dd></div>
+      <div><dt>Frammenti Mana</dt><dd class="mana-balance"><span class="mana-fragment-icon" aria-hidden="true"></span>${number.format(player.mana_fragments ?? 0)}</dd>
+        ${player.can_spend_mana_fragments === false ? '<dd class="mana-spend-note muted">Uso sospeso nelle prime 3 posizioni</dd>' : ''}</div>
+      <div><dt>Classifica</dt><dd>#${player.rank}</dd></div>`;
+    summary.innerHTML = `
       ${weeklyMissions(stats.weekly_missions)}
-      ${streakBadge ? `<p class="profile-streak-badge">Traguardo · ${streakBadge} vittorie di fila</p>` : ''}
-      ${historyContent}
-      ${results?.length ? `<h3>Ultime 5 partite Elo</h3><ol class="profile-form-results">${results.map(recentResult).join('')}</ol>` : ''}
-      ${bestWin ? `<section class="profile-best-win"><div><h3>Miglior vittoria</h3>
-        <div class="profile-best-opponents">${bestWin.opponent_profiles ? opponentList(bestWin.opponent_profiles) : esc(bestWin.opponents.join(' e '))}</div></div>
-        <strong class="profile-best-gain">+${bestWin.gain} Elo</strong></section>` : ''}
-      ${headToHead(stats.head_to_head)}`;
-    const recent = $('.profile-form-results');
-    recent?.addEventListener('click', event => event.target.closest('button')?.focus());
-    recent?.addEventListener('keydown', event => {
-      if (event.key === 'Escape') event.target.blur();
-    });
+      ${results?.length ? `<section class="profile-recent"><h2>Ultime 5 partite Elo</h2><ol class="profile-recent-matches">${results.map(recentResult).join('')}</ol></section>` : ''}
+      ${disclosure('profile-performance', 'Andamento Elo e storico', `<dl class="profile-metrics">${metrics.map(([label,value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')}</dl>
+        ${placementContent}${streakBadge ? `<p class="profile-streak-badge">Traguardo · ${streakBadge} vittorie di fila</p>` : ''}${historyContent}`)}
+      ${bestWin ? disclosure('profile-record', 'Miglior vittoria', `<div class="profile-best-win"><div class="profile-best-opponents">${bestWin.opponent_profiles ? opponentList(bestWin.opponent_profiles) : esc(bestWin.opponents.join(' e '))}</div><strong class="profile-best-gain">+${bestWin.gain} Elo</strong></div>`) : ''}
+      ${disclosure('profile-rivals', 'Testa a testa', headToHead(stats.head_to_head))}`;
+    const missions = summary.querySelector('.weekly-missions');
+    if (missions) missions.open = missionsOpen;
   }
 
   async function refreshEditedProfile(notice) {
@@ -201,9 +194,9 @@
         return;
       }
       const stats = requestedStats || await api(statsUrl(playerId));
-      profileContent.innerHTML = '<div id="profile-heading" class="profile-header"></div>' + (session?.player_id === playerId
-        ? '<details class="profile-edit"><summary>Modifica foto e colore</summary><div id="profile-editor"></div></details>' : '') +
-        '<div id="profile-summary"></div>';
+      profileContent.innerHTML = '<div class="profile-overview"><div id="profile-heading" class="profile-header"></div><dl id="profile-key-metrics" class="profile-key-metrics"></dl>' + (session?.player_id === playerId
+        ? '<details class="profile-edit"><summary>Modifica profilo</summary><div id="profile-editor"></div></details>' : '') +
+        '</div><div id="profile-summary"></div>';
       renderStatistics(stats);
       const edit = profileContent.querySelector('.profile-edit');
       edit?.addEventListener('toggle', async () => {

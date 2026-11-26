@@ -691,3 +691,45 @@ footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:va
 .weekly-mission.is-complete progress::-moz-progress-bar {background:#3a5951}
 .weekly-check,.elo-mission-reward {color:#9df7ac;font-weight:700}
 .elo-mission-reward {grid-column:1/-1;font-size:.85rem}
+
+/* Player profile overview */
+.profile-overview{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.7fr);align-items:center;column-gap:1rem;margin:1.25rem 0 1.75rem}
+.profile-overview .profile-header{margin:0;min-width:0}
+.profile-overview .profile-header .avatar{width:clamp(3.75rem,8vw,5.75rem);height:clamp(3.75rem,8vw,5.75rem);flex:none;border:2px solid #e29b78}
+.profile-overview h1{font-size:clamp(1.75rem,4vw,3rem);color:#ffe4cb}
+.profile-overview .profile-edit{grid-column:1/-1;border:0;margin:.35rem 0 0}
+.profile-overview .profile-edit>summary{color:var(--amber-bright);width:fit-content}
+.profile-key-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:0;text-align:center}
+.profile-key-metrics>div{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:0;padding:0 .4rem;border-inline-start:1px solid var(--line)}
+.profile-key-metrics dt{order:1;color:#ffe4cb;font-size:.85rem}
+.profile-key-metrics dd{margin:0;color:#ffe4cb;font-size:clamp(1.35rem,4vw,2.4rem);font-weight:750;font-variant-numeric:tabular-nums}
+.profile-key-metrics .mana-fragment-icon{width:.65em;height:.75em}
+.profile-key-metrics .mana-spend-note{order:2;color:var(--muted);font-size:.7rem;font-weight:400;margin-top:.25rem}
+.profile-magic-mark{width:1.15rem;height:1.5rem;color:#ffad72;flex:none}
+.player-profile-page .weekly-missions-count{border:0;padding:0;text-align:end}
+.player-profile-page .weekly-mission-progress .mana-balance{min-width:3.25rem;justify-content:flex-end;color:var(--amber-bright);font-size:1rem;font-weight:750}
+.profile-recent{margin:1.5rem 0}
+.profile-recent h2{color:#ffe4cb}
+.profile-recent-matches{padding:0;margin:0;list-style:none}
+.profile-recent-matches li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:.65rem;min-height:44px;padding:.3rem 0;border-bottom:1px solid var(--line)}
+.profile-match-outcome{min-width:2rem;padding:.15rem .4rem;border-radius:.35rem;background:#253141;text-align:center;font-size:.8rem;font-weight:750}
+.profile-match-outcome.win{background:#19362d;color:#a6e8c1}
+.profile-match-outcome.loss{background:#422629;color:#ffc1ba}
+.profile-match-opponents{display:flex;flex-wrap:wrap;gap:.25rem .65rem;min-width:0}
+.profile-match-opponents .profile-opponent{min-width:0}
+.profile-match-opponents strong{overflow-wrap:anywhere}
+.profile-recent-matches .profile-result-elo{white-space:nowrap}
+.profile-disclosure{border-top:1px solid var(--line)}
+.profile-disclosure:last-child{border-bottom:1px solid var(--line)}
+.profile-disclosure>summary{display:flex;justify-content:space-between;align-items:center;min-height:48px;cursor:pointer;color:#ffe4cb;font-weight:650;list-style:none}
+.profile-disclosure>summary::-webkit-details-marker{display:none}
+.profile-disclosure>summary::after{content:"";width:.55rem;height:.55rem;margin-inline-end:.4rem;border:solid currentColor;border-width:2px 2px 0 0;transform:rotate(45deg)}
+.profile-disclosure[open]>summary::after{transform:rotate(135deg)}
+.profile-disclosure>summary:hover{color:var(--amber-bright)}
+.profile-disclosure>div{padding:.35rem 0 1rem}
+@media(max-width:640px){
+  .profile-overview{grid-template-columns:minmax(0,1fr);row-gap:.75rem}
+  .profile-overview .profile-edit{grid-row:2;margin:0}
+  .profile-key-metrics>div:first-child{border-inline-start:0}
+  .player-profile-page .weekly-missions summary{padding-inline:.65rem;gap:.45rem}
+}
