@@ -16,14 +16,21 @@ function fixture({offline = false, matches = [match('uno','b'),match('due','c')]
   const nodes = new Map();
   const field = (value = '') => ({value,innerHTML:'',hidden:false,disabled:false,textContent:'',focus(){}});
   const submit = field();
+  const sides = {...field(), classList: {add() {}, remove() {}}};
   const form = {
     elements:{kind:field('friendly'),format:field('duel'),tournament_player:field(),match:field(),life_mode:field('same')},
-    querySelector:() => submit, addEventListener(event, callback){this[event] = callback;},
+    querySelector(selector) {
+      if (selector === '.life-setup-sides') return sides;
+      if (selector === '.life-error') return root.querySelector(selector);
+      return submit;
+    },
+    addEventListener(event, callback){this[event] = callback;},
   };
   const root = {
     addEventListener(){}, querySelectorAll:() => [],
     querySelector(selector) {
       if (selector === '#life-setup' || selector === 'form') return form;
+      if (selector === '.life-setup-sides') return sides;
       if (!nodes.has(selector)) nodes.set(selector,field());
       return nodes.get(selector);
     },
@@ -57,7 +64,7 @@ test('loads and selects the first tournament match with fixed players',async () 
   const sides = root.querySelector('.life-setup-sides');
   assert.match(sides.innerHTML,/Ada.*Bruno/);
   assert.doesNotMatch(sides.innerHTML,/Aggiungi|data-remove-member|Nome ospite/);
-  assert.equal(root.querySelector('[data-add-side]').hidden,true);
+  assert.doesNotMatch(root.innerHTML,/data-add-side/);
   form.elements.match.value = 'due';
   form.elements.match.onchange();
   assert.match(sides.innerHTML,/Ada.*Carla/);
@@ -65,7 +72,7 @@ test('loads and selects the first tournament match with fixed players',async () 
   form.elements.kind.onchange();
   assert.match(sides.innerHTML,/data-profile="0"/);
   assert.doesNotMatch(sides.innerHTML,/data-add-profile/);
-  form.change({target:{value:'b',dataset:{profile:'0'},matches:() => true}});
+  form.change({target:{value:'b',dataset:{profile:'0'},matches:selector => selector === '[data-profile]'}});
   assert.match(sides.innerHTML,/data-remove-member="0,0"/);
   assert.doesNotMatch(root.innerHTML,/I risultati con un vincitore|Carica abbinamenti/);
 });
