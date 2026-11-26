@@ -7,6 +7,13 @@
 #life label { display: grid; gap: .4rem; font-weight: 600; }
 #life input,#life select { width: 100%; min-height: 44px; padding: .6rem; border: 1px solid #625779; border-radius: .5rem; background: #1c1828; color: white; }
 .life-setup-sides { display: grid; grid-template-columns: repeat(auto-fit,minmax(240px,1fr)); gap: 1rem; }
+.life-setup-sides.life-setup-ffa { grid-template-columns:minmax(0,1fr); }
+.life-ffa-player { display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; padding:.45rem 0; border-bottom:1px solid var(--line); }
+.life-ffa-player .life-person { flex:1 1 8rem; }
+.life-ffa-player label { flex:0 1 6rem; }
+.life-ffa-add { display:grid; gap:.65rem; }
+.life-ffa-add .life-add-member { align-items:end; flex-wrap:wrap; }
+.life-ffa-add .life-add-member label { flex:1 1 8rem; }
 #life fieldset { border: 1px solid #544b63; border-radius: .8rem; padding: 1rem; display: grid; gap: .7rem; min-width: 0; }
 .life-add-member,.life-member,.life-setup-actions,.life-toolbar,.life-side-actions { display: flex; gap: .5rem; align-items: center; }
 .life-member { justify-content: space-between; padding: .3rem 0; }

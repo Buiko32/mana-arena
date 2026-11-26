@@ -135,7 +135,9 @@
     $('#profile-heading').innerHTML = `${window.renderPlayerAvatar(player)}<h1>${esc(player.name)}</h1>`;
     $('#profile-summary').innerHTML = `
       <dl class="profile-metrics">${metrics.map(([label,value])=>`<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')}
-        <div><dt>Frammenti Mana</dt><dd class="mana-balance"><span class="mana-fragment-icon" aria-hidden="true"></span>${player.mana_fragments ?? 0}</dd></div>
+        <div><dt>Frammenti Mana</dt><dd class="mana-balance"><span class="mana-fragment-icon" aria-hidden="true"></span>${player.mana_fragments ?? 0}</dd>
+          ${player.can_spend_mana_fragments === false ? '<dd class="mana-spend-note muted">Uso sospeso nelle prime 3 posizioni</dd>' : ''}
+        </div>
       </dl>
       ${placementContent}
       ${streakBadge ? `<p class="profile-streak-badge">Traguardo · ${streakBadge} vittorie di fila</p>` : ''}

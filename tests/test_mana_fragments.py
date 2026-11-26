@@ -1,7 +1,7 @@
 import sqlite3
 
 from app.db import Database
-from app.service import ManaFragments, global_elo_from_db, player_statistics
+from app.service import ManaFragments, elo_changes, elo_snapshot, global_elo_from_db, player_statistics
 
 
 def test_fragments_reward_wins_repeatable_streaks_and_completed_tournaments():
@@ -12,19 +12,22 @@ def test_fragments_reward_wins_repeatable_streaks_and_completed_tournaments():
             ("a", "archived", "completed"),
             ("b", "active", None),
         ])
-        fragments = ManaFragments(conn)
+        fragments = ManaFragments(conn, [
+            {"p1": "b", "p2": "c", "result": "draw"},
+            {"p1": "b", "p2": "c", "result": "draw", "void": True},
+        ])
         player = {"id": "a"}
         for won in [True] * 6 + [False] + [True] * 3:
             fragments.record({}, [(player, 0, won)])
 
-        assert fragments.balance("a") == 118  # 18 wins, 40 streak, 60 tournament
-        assert fragments.balance("b") == 0
+        assert fragments.balance("a") == 128  # 10 participation, 18 wins, 40 streak, 60 tournament
+        assert fragments.balance("b") == fragments.balance("c") == 1
 
         fragments.record({"tournament_match": True}, [(player, 0, False)])
         fragments.record({"tournament_match": True}, [(player, 0, True)])
         fragments.record({}, [(player, 0, True)])
         fragments.record({}, [(player, 0, True)])
-        assert fragments.balance("a") == 144  # +6 wins and the five-win milestone
+        assert fragments.balance("a") == 158  # +4 participation, +6 wins, +20 streak
 
 
 def test_ranking_and_profile_replay_the_same_confirmed_rewards(tmp_path):
@@ -48,11 +51,16 @@ def test_ranking_and_profile_replay_the_same_confirmed_rewards(tmp_path):
         conn.executemany("""
             INSERT INTO team_result_players (result_id, player_id, team) VALUES ('team', ?, ?)
         """, [("a", "a"), ("b", "b")])
+        before = elo_snapshot(conn, ("a", "b", "c"))
         conn.execute("""
             INSERT INTO ffa_results (id, placements, created_at)
             VALUES ('ffa', '["a","b","c"]', '2026-11-25 16:03:00')
         """)
+        assert {row["id"]: row["mana_fragments_delta"] for row in elo_changes(conn, before)} == {
+            "a": 13, "b": 1, "c": 1,
+        }
         for _ in range(2):
             ranking = global_elo_from_db(conn, include_movement=True)
-            assert {row["id"]: row["mana_fragments"] for row in ranking} == {"a": 16, "b": 0, "c": 0}
-            assert player_statistics(conn, "a")["player"]["mana_fragments"] == 16
+            assert {row["id"]: row["mana_fragments"] for row in ranking} == {"a": 19, "b": 3, "c": 1}
+            assert player_statistics(conn, "a")["player"]["mana_fragments"] == 19
+            assert player_statistics(conn, "b")["player"]["mana_fragments"] == 3

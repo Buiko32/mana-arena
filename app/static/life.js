@@ -9,6 +9,15 @@
   }
   function memberNames(side) { return (side.members||[{name:side.name}]).map(member=>`<span class="life-person">${avatar(member)}<span>${esc(member.name)}</span></span>`).join(''); }
   let profiles = [], sides = [[], []], game = null, busy = false;
+  const playerNameKey = name => name.trim().normalize('NFC').toLocaleLowerCase('it-IT');
+  function alreadyAtTable(player) {
+    return sides.some(([member]) => member && ((player.id && member.id === player.id) ||
+      playerNameKey(member.name) === playerNameKey(player.name)));
+  }
+  function profileOptions(unique = false) {
+    return '<option value="">Scegli profilo</option>' + profiles.map(player =>
+      `<option value="${esc(player.id)}"${unique && alreadyAtTable(player) ? ' disabled' : ''}>${esc(player.name)}</option>`).join('');
+  }
   const key='mana-life-draft-v1', outboxKey='mana-life-outbox-v1', rosterKey='mana-life-roster-v1';
   let draining=null, storageProblem='', setupGeneration=0, sessionPlayer=null, cachedMatches=[], queueMessage='';
   function reportStorage(message){storageProblem=message;const el=root.querySelector('.life-error');if(el)el.textContent=message;}
@@ -137,7 +146,11 @@
       write(rosterKey,list);
       if(generation!==setupGeneration || game || !root.querySelector('#life-setup'))return;
       profiles=list;updateTournamentPlayers();updateMatchChoices();
-      root.querySelectorAll('[data-profile]').forEach(select=>{const value=select.value;select.innerHTML='<option value="">Scegli profilo</option>'+profiles.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');select.value=value;});
+      root.querySelectorAll('[data-profile], [data-ffa-profile]').forEach(select=>{
+        const value = select.value;
+        select.innerHTML = profileOptions(select.hasAttribute('data-ffa-profile'));
+        select.value = value;
+      });
     }).catch(()=>{});
   }
   function updateTournamentPlayers() {
@@ -221,17 +234,59 @@
     select.onchange();
   }
   function drawSetup() {
-    root.innerHTML = `<div class="life-shell"><header><p class="life-kicker">MANA ARENA · AL TAVOLO</p><h1>Segnapunti vita</h1><p>Un telefono al centro del tavolo, un contatore per ogni lato.</p></header><form id="life-setup"><label>Tipo partita<select name="kind"><option value="friendly">Amichevole</option><option value="tournament">🏆 Partita di torneo</option></select></label><label data-tournament-player hidden>Il tuo profilo<select name="tournament_player"><option value="">Seleziona profilo</option></select></label><label data-match-label hidden>Incontro<select name="match"><option value="">Nessun abbinamento disponibile</option></select></label><p data-match-hint role="status" hidden></p><label data-friendly-format>Formato<select name="format"><option value="duel">Duello 1v1</option><option value="team">Squadre</option><option value="ffa">Tutti contro tutti</option></select></label><label>Vita iniziale<select name="life_mode"><option value="same">Uguale per tutti</option><option value="different">Diversa per ogni lato</option></select></label><label data-common>Vita iniziale comune<input type="number" name="common_life" min="1" max="999" value="20" required></label><div class="life-setup-sides"></div><div class="life-setup-actions"><button type="button" class="button secondary" data-add-side hidden>Aggiungi lato</button><button type="submit" class="button primary">Inizia partita</button></div><p data-queue-status role="status"></p><button type="button" class="button secondary" data-queue-retry hidden>Riprova sincronizzazione</button><button type="button" class="button secondary" data-queue-login hidden>Accedi come proponente e sincronizza</button><p class="life-error" role="alert"></p></form></div>`;
+    root.innerHTML = `<div class="life-shell"><header><p class="life-kicker">MANA ARENA · AL TAVOLO</p><h1>Segnapunti vita</h1><p>Un telefono al centro del tavolo, un contatore per ciascun giocatore o squadra.</p></header><form id="life-setup"><label>Tipo partita<select name="kind"><option value="friendly">Amichevole</option><option value="tournament">🏆 Partita di torneo</option></select></label><label data-tournament-player hidden>Il tuo profilo<select name="tournament_player"><option value="">Seleziona profilo</option></select></label><label data-match-label hidden>Incontro<select name="match"><option value="">Nessun abbinamento disponibile</option></select></label><p data-match-hint role="status" hidden></p><label data-friendly-format>Formato<select name="format"><option value="duel">Duello 1v1</option><option value="team">Squadre</option><option value="ffa">Tutti contro tutti</option></select></label><label>Vita iniziale<select name="life_mode"><option value="same">Uguale per tutti</option><option value="different">Personalizzata</option></select></label><label data-common>Vita iniziale comune<input type="number" name="common_life" min="1" max="999" value="20" required></label><div class="life-setup-sides"></div><div class="life-setup-actions"><button type="submit" class="button primary">Inizia partita</button></div><p data-queue-status role="status"></p><button type="button" class="button secondary" data-queue-retry hidden>Riprova sincronizzazione</button><button type="button" class="button secondary" data-queue-login hidden>Accedi come proponente e sincronizza</button><p class="life-error" role="alert"></p></form></div>`;
     const form = root.querySelector('form');
+    const startingLife = new WeakMap();
+    const playerList = form.querySelector('.life-setup-sides');
+    const isFreeForAll = () => form.elements.format.value === 'ffa';
+    const error = form.querySelector('.life-error');
+    function renderFreeForAll() {
+      const full = sides.length >= 5;
+      const sameLife = form.elements.life_mode.value === 'same';
+      form.querySelector('[type="submit"]').disabled = sides.length < 3;
+      playerList.classList.add('life-setup-ffa');
+      playerList.innerHTML = `<fieldset><legend>Giocatori · ${sides.length}/5</legend>
+        ${sides.length < 3 ? '<p class="muted">Aggiungi almeno 3 giocatori.</p>' : ''}
+        ${sides.map(([member], index) => `<div class="life-ffa-player">
+          ${memberNames({members:[member]})}
+          <label ${sameLife ? 'hidden' : ''}>Vita iniziale <input type="number" data-initial="${index}" min="1" max="999" value="${esc(startingLife.get(member) ?? 20)}" required></label>
+          <button type="button" class="button quiet" data-remove-player="${index}" aria-label="Rimuovi ${esc(member.name)}">Rimuovi</button>
+        </div>`).join('')}
+        <div class="life-ffa-add" ${full ? 'hidden' : ''}>
+          <label>Profilo <select data-ffa-profile>${profileOptions(true)}</select></label>
+          <div class="life-add-member">
+            <label>Nome ospite <input data-ffa-guest maxlength="60"></label>
+            <button type="button" data-add-ffa-guest>Aggiungi ospite</button>
+          </div>
+        </div>
+      </fieldset>`;
+    }
+
+    function addFreeForAllPlayer(player, source) {
+      if (sides.length >= 5 || alreadyAtTable(player)) {
+        error.textContent = 'Questo giocatore è già al tavolo.';
+        return;
+      }
+      sides.push([player]);
+      error.textContent = '';
+      renderFreeForAll();
+      const next = sides.length === 5 ? '[type="submit"]' : source;
+      form.querySelector(next).focus();
+    }
+
     function renderSides() {
       const editable = form.elements.kind.value !== 'tournament';
       const format = form.elements.format.value;
+      if (editable && format === 'ffa') {
+        renderFreeForAll();
+        return;
+      }
+      playerList.classList.remove('life-setup-ffa');
       const initial = [...root.querySelectorAll('[data-initial]')].map(input => input.value);
-      root.querySelector('[data-add-side]').hidden = !editable || format !== 'ffa' || sides.length >= 5;
-      root.querySelector('.life-setup-sides').innerHTML = sides.map((members, i) => {
+      playerList.innerHTML = sides.map((members, i) => {
         if (!editable && !members.length) return '';
-        const controls = editable ? `<div class="life-add-member"><select aria-label="Profilo lato ${i+1}" data-profile="${i}"><option value="">Scegli profilo</option>${profiles.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div><div class="life-add-member"><input data-guest="${i}" maxlength="60" placeholder="Nome ospite" aria-label="Nome ospite lato ${i+1}"><button type="button" data-add-guest="${i}">Aggiungi</button></div>` : '';
-        return `<fieldset><legend>${format === 'team' ? 'Squadra' : 'Lato'} ${i + 1}</legend><div class="life-members">${members.map((m, j) => `<div class="life-member"><span class="life-person">${avatar(m)}<span>${esc(m.name)}</span></span>${editable ? `<button type="button" data-remove-member="${i},${j}" aria-label="Rimuovi ${esc(m.name)}">×</button>` : ''}</div>`).join('')}</div>${controls}<label ${form.elements.life_mode.value === 'same' ? 'hidden' : ''}>Vita iniziale<input type="number" data-initial="${i}" min="1" max="999" value="${esc(initial[i] ?? 20)}" required></label>${editable && format === 'ffa' && sides.length > 3 ? `<button type="button" data-remove-side="${i}">Rimuovi lato</button>` : ''}</fieldset>`;
+        const controls = editable ? `<div class="life-add-member"><select aria-label="Profilo lato ${i+1}" data-profile="${i}">${profileOptions()}</select></div><div class="life-add-member"><input data-guest="${i}" maxlength="60" placeholder="Nome ospite" aria-label="Nome ospite lato ${i+1}"><button type="button" data-add-guest="${i}">Aggiungi</button></div>` : '';
+        return `<fieldset><legend>${format === 'team' ? 'Squadra' : 'Lato'} ${i + 1}</legend><div class="life-members">${members.map((m, j) => `<div class="life-member"><span class="life-person">${avatar(m)}<span>${esc(m.name)}</span></span>${editable ? `<button type="button" data-remove-member="${i},${j}" aria-label="Rimuovi ${esc(m.name)}">×</button>` : ''}</div>`).join('')}</div>${controls}<label ${form.elements.life_mode.value === 'same' ? 'hidden' : ''}>Vita iniziale<input type="number" data-initial="${i}" min="1" max="999" value="${esc(initial[i] ?? 20)}" required></label></fieldset>`;
       }).join('');
     }
     updateTournamentPlayers();
@@ -274,6 +329,12 @@
     };
     form.addEventListener('change', event => {
       const select = event.target;
+      if (select.matches('[data-ffa-profile]') && select.value) {
+        const person = profiles.find(player => String(player.id) === select.value);
+        if (person) addFreeForAllPlayer({...person, id: select.value}, '[data-ffa-profile]');
+        select.value = '';
+        return;
+      }
       if (!select.matches('[data-profile]') || !select.value) return;
       const i = Number(select.dataset.profile), id = select.value;
       const person = profiles.find(p => String(p.id) === id);
@@ -300,15 +361,40 @@
       root.querySelector(`[data-profile="${i}"]`).focus();
     });
     form.elements.life_mode.onchange = () => { root.querySelector('[data-common]').hidden=form.elements.life_mode.value!=='same'; renderSides(); };
-    form.elements.format.onchange = () => { sides = form.elements.format.value === 'ffa' ? [[], [], []] : [[], []]; renderSides(); };
+    form.elements.format.onchange = () => {
+      sides = isFreeForAll() ? [] : [[], []];
+      error.textContent = '';
+      form.querySelector('[type="submit"]').disabled = false;
+      renderSides();
+    };
+    form.addEventListener('input', event => {
+      if (!isFreeForAll() || !event.target.matches('[data-initial]')) return;
+      const [member] = sides[Number(event.target.dataset.initial)];
+      startingLife.set(member, event.target.value);
+    });
+    form.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' || !event.target.matches('[data-ffa-guest]')) return;
+      event.preventDefault();
+      form.querySelector('[data-add-ffa-guest]').click();
+    });
     root.onclick = e => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.hasAttribute('data-queue-retry')) { drainOutbox(); return; }
       if (b.hasAttribute('data-queue-login')) { loginAndDrain(); return; }
       if (form.elements.kind.value === 'tournament') return;
-      if (b.hasAttribute('data-add-side') && sides.length < 5) sides.push([]);
-      else if (b.hasAttribute('data-remove-side') && sides.length > 3) sides.splice(Number(b.dataset.removeSide), 1);
-      else if (b.hasAttribute('data-remove-member')) { const [i,j] = b.dataset.removeMember.split(',').map(Number); sides[i].splice(j,1); }
+      if (b.hasAttribute('data-add-ffa-guest')) {
+        const name = form.querySelector('[data-ffa-guest]').value.trim();
+        if (name) addFreeForAllPlayer({name}, '[data-ffa-guest]');
+        return;
+      }
+      if (b.hasAttribute('data-remove-player')) {
+        sides.splice(Number(b.dataset.removePlayer), 1);
+        error.textContent = '';
+        renderFreeForAll();
+        form.querySelector('[data-ffa-profile]').focus();
+        return;
+      }
+      if (b.hasAttribute('data-remove-member')) { const [i,j] = b.dataset.removeMember.split(',').map(Number); sides[i].splice(j,1); }
       else if (b.hasAttribute('data-add-guest')) { const i = Number(b.dataset.addGuest), name = root.querySelector(`[data-guest="${i}"]`).value.trim(); if (!name) return; sides[i].push({name}); }
       else return;
       renderSides();
@@ -317,6 +403,10 @@
       e.preventDefault(); if (busy || game) return; const format = form.elements.format.value, kind=form.elements.kind.value;
       const match = kind === 'tournament' ? cachedMatches.find(item => item.id === form.elements.match.value) : null;
       if (kind === 'tournament' && (matchLoading || !match || !sessionPlayer)) return;
+      if (format === 'ffa' && (sides.length < 3 || sides.length > 5)) {
+        error.textContent = 'Aggiungi da 3 a 5 giocatori.';
+        return;
+      }
       if (sides.some(s => !s.length || s.length > 6 || (format !== 'team' && s.length !== 1))) { root.querySelector('.life-error').textContent = format === 'team' ? 'Aggiungi da uno a sei giocatori per squadra.' : 'Aggiungi un solo giocatore per ogni lato.'; return; }
       const names = sides.map(s => s.map(m => m.name).join(' + '));
       if (names.some(n => n.length > 160)) { root.querySelector('.life-error').textContent = 'Il nome di un lato è troppo lungo (massimo 160 caratteri).'; return; }

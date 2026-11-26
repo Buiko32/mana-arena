@@ -1191,6 +1191,7 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
         return {"rank": rank, "id": row["id"], "name": row["name"], "rating": row["rating"],
                 "matches": row["matches"], "wins": row["wins"], "draws": row["draws"], "losses": row["losses"],
                 "mana_fragments": row["mana_fragments"],
+                "can_spend_mana_fragments": rank > 3,
                 "photo_url": f"/photos/{row['photo']}" if row.get("photo") else None,
                 "avatar_hue": row["avatar_hue"], "avatar_color": row["avatar_color"]}
 

@@ -200,11 +200,12 @@ def _displayed_elo_delta(rating, change):
 
 
 class ManaFragments:
+    PARTICIPATION_REWARD = 1
     WIN_REWARD = 2
     STREAK_REWARDS = {3: 10, 5: 20}
     TOURNAMENT_REWARD = 30
 
-    def __init__(self, conn):
+    def __init__(self, conn, matches):
         self.balances = {
             champion: count * self.TOURNAMENT_REWARD
             for champion, count in conn.execute("""
@@ -215,12 +216,20 @@ class ManaFragments:
             """)
         }
         self.streaks = {}
+        # Draws award participation even though Elo skips them.
+        for match in matches:
+            if match.get('result') != 'draw' or match.get('bye') or match.get('void'):
+                continue
+            first, second = match.get('p1'), match.get('p2')
+            if first and second and first != second:
+                for player_id in (first, second):
+                    self.balances[player_id] = self.balance(player_id) + self.PARTICIPATION_REWARD
 
     def record(self, match, updates):
         for player, _, won, *_ in updates:
             player_id = player['id']
-            if won:
-                self.balances[player_id] = self.balance(player_id) + self.WIN_REWARD
+            earned = self.PARTICIPATION_REWARD + (self.WIN_REWARD if won else 0)
+            self.balances[player_id] = self.balance(player_id) + earned
             if match.get('tournament_match'):
                 continue
             streak = self.streaks.get(player_id, 0) + 1 if won else 0
@@ -252,7 +261,7 @@ def global_elo_from_db(conn, *, include_movement=False):
     if not include_movement:
         return [row for row in calculate_global_elo(players, matches) if row['active']]
 
-    fragments = ManaFragments(conn)
+    fragments = ManaFragments(conn, matches)
     rome = ZoneInfo('Europe/Rome')
     day = None
     opening = {}
@@ -308,20 +317,26 @@ def _opponent_profile(row):
 
 def elo_snapshot(conn, player_ids):
     ids = set(player_ids)
+    players, matches = _elo_inputs(conn)
+    fragments = ManaFragments(conn, matches)
+    rows = calculate_global_elo(players, matches, on_game=lambda _rows, match, updates: fragments.record(match, updates))
+    active = [row for row in rows if row['active']]
     return {
         row['id']: {
             'id': row['id'], 'name': row['name'], 'rating': row['rating'], 'rank': rank,
+            'mana_fragments': fragments.balance(row['id']),
             'photo_url': f"/photos/{row['photo']}" if row['photo'] else None,
             'avatar_hue': row['avatar_hue'], 'avatar_color': row['avatar_color'],
         }
-        for rank, row in enumerate(global_elo_from_db(conn), 1) if row['id'] in ids
+        for rank, row in enumerate(active, 1) if row['id'] in ids
     }
 
 
 def elo_changes(conn, before):
     after = elo_snapshot(conn, before)
     return [
-        {**row, 'previous_rating': before[pid]['rating'], 'previous_rank': before[pid]['rank']}
+        {**row, 'previous_rating': before[pid]['rating'], 'previous_rank': before[pid]['rank'],
+         'mana_fragments_delta': row['mana_fragments'] - before[pid]['mana_fragments']}
         for pid, row in after.items()
     ]
 
@@ -332,7 +347,7 @@ def player_statistics(conn, player_id):
     if player_id not in active_ids:
         return None
 
-    fragments = ManaFragments(conn)
+    fragments = ManaFragments(conn, matches)
     history = []
     recent_results = []
     head_to_head = {}

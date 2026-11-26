@@ -13,6 +13,7 @@
     const gain = player.previous_rank - player.rank;
     const position = gain ? `#${player.previous_rank} → <b class="elo-rank-updated"${gain > 0 ? ' data-up' : ''}>#${player.rank}</b>` : `#${player.rank} · invariata`;
     const color = elo > 0 ? 'positive' : elo < 0 ? 'negative' : '';
+    const fragments = player.mana_fragments_delta;
     return `<li class="elo-result-row${podium(player) ? ' elo-podium-row' : ''}">
       <div class="elo-result-player">${window.renderPlayerAvatar(player)}<strong>${esc(player.name)}</strong></div>
       <div class="elo-result-rating"><span>Elo</span>
@@ -21,6 +22,9 @@
         <span class="elo-result-delta ${color}">${signed(elo)}</span>
       </div>
       <div class="elo-result-rank"><span>Posizione</span><strong>${position}</strong></div>
+      ${Number.isInteger(fragments) ? `<div class="elo-result-fragments"><span>Frammenti Mana</span>
+        <strong class="mana-balance"><span class="mana-fragment-icon" aria-hidden="true"></span>${signed(fragments)}</strong>
+      </div>` : ''}
     </li>`;
   }
 

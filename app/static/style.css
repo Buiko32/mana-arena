@@ -479,6 +479,7 @@ footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:va
 .global-table .ranking-own-row td:first-child{box-shadow:inset 3px 0 var(--amber)}
 .mana-balance{display:inline-flex;align-items:center;gap:.35rem;color:#c9f5ed;font-variant-numeric:tabular-nums;white-space:nowrap}
 .mana-fragment-icon{display:inline-block;width:1.15em;height:1.3em;background:url('/static/mana-fragment.svg') center/contain no-repeat;flex:none}
+.profile-metrics .mana-spend-note{font-size:.77rem;font-weight:400}
 .ranking-movement{font-size:.76rem;font-weight:700}
 .ranking-movement.is-up{color:var(--green)}
 .ranking-movement.is-down{color:var(--red)}
@@ -504,10 +505,11 @@ footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:va
 .elo-result-heading p{margin:0;color:var(--amber-bright);font-weight:700;overflow-wrap:anywhere}
 .elo-result-list{display:grid;gap:.45rem;list-style:none;padding:0;margin:0}
 .elo-result-row{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr);align-items:center;gap:.45rem;padding:.65rem .55rem;border:1px solid var(--line);border-radius:.65rem;background:var(--panel-2)}
+.elo-result-row:has(.elo-result-fragments){grid-template-columns:minmax(0,1.3fr) repeat(3,minmax(0,1fr))}
 .elo-result-player{display:flex;align-items:center;min-width:0;gap:.4rem}
 .elo-result-player strong{overflow-wrap:anywhere}
-.elo-result-rating,.elo-result-rank{display:grid;justify-items:start;gap:.2rem;font-size:clamp(.75rem,2.4vw,.95rem);font-variant-numeric:tabular-nums}
-.elo-result-rating>span:first-child,.elo-result-rank>span{color:var(--muted)}
+.elo-result-rating,.elo-result-rank,.elo-result-fragments{display:grid;justify-items:start;gap:.2rem;font-size:clamp(.75rem,2.4vw,.95rem);font-variant-numeric:tabular-nums}
+.elo-result-rating>span:first-child,.elo-result-rank>span,.elo-result-fragments>span{color:var(--muted)}
 .elo-result-delta{font-weight:800}
 .elo-result-delta.positive,.elo-rank-updated[data-up]{color:var(--green)}
 .elo-result-delta.negative{color:var(--red)}
@@ -519,7 +521,7 @@ footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:va
 .elo-podium-emblem i:nth-child(3n){background:#a9daff}
 .elo-podium-emblem i:nth-child(3n+1){background:#f8a6ac}
 @media (max-width:430px){
-  .elo-result-row{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .elo-result-row,.elo-result-row:has(.elo-result-fragments){grid-template-columns:repeat(2,minmax(0,1fr))}
   .elo-result-player{grid-column:1 / -1}
 }
 @media (prefers-reduced-motion:no-preference){
