@@ -226,9 +226,13 @@ class ManaFragments:
                     self.balances[player_id] = self.balance(player_id) + self.PARTICIPATION_REWARD
 
     def record(self, match, updates):
+        placements = match.get('placements', [])
+        placement_rewards = {pid: len(placements) - index for index, pid in enumerate(placements)}
         for player, _, won, *_ in updates:
             player_id = player['id']
-            earned = self.PARTICIPATION_REWARD + (self.WIN_REWARD if won else 0)
+            earned = placement_rewards.get(player_id, self.PARTICIPATION_REWARD)
+            if won:
+                earned += self.WIN_REWARD
             self.balances[player_id] = self.balance(player_id) + earned
             if match.get('tournament_match'):
                 continue

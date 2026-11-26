@@ -182,6 +182,9 @@ def test_ranked_free_for_all_sync_history_and_removal(app_factory, count):
         result = player.post('/api/life/games', json=raw, headers=token).json()
         assert result['result_status'] == 'confirmed'
         assert len(result['elo_changes']) == count
+        assert [row['id'] for row in result['elo_changes']] == [person['id'] for person in people[::-1]]
+        assert [row['match_position'] for row in result['elo_changes']] == list(range(1, count + 1))
+        assert [row['mana_fragments_delta'] for row in result['elo_changes']] == [count + 2, *range(count - 1, 0, -1)]
         retry = player.post('/api/life/games', json=raw, headers=token).json()
         assert retry['result_id'] == result['result_id'] and retry['duplicate']
         history = player.get('/api/public/history', params={

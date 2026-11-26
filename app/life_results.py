@@ -88,4 +88,11 @@ def submit_result(db, game, cookie, csrf):
                 Database.audit(conn, None, 'friendly_result_recorded', {'match_id': rid})
             kind='single'
         conn.execute('INSERT INTO life_result_links VALUES (?,?,?)',(str(game.session_id),kind,rid))
-        return {'result_status':'confirmed','result_id':rid,'elo_changes':elo_changes(conn, before)}
+        changes = elo_changes(conn, before)
+        if kind == 'ffa':
+            by_player = {row['id']: row for row in changes}
+            changes = [
+                {**by_player[pid], 'match_position': position}
+                for position, pid in enumerate(placements, 1)
+            ]
+        return {'result_status':'confirmed','result_id':rid,'elo_changes':changes}

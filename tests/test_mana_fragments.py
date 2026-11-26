@@ -1,5 +1,7 @@
 import sqlite3
 
+import pytest
+
 from app.db import Database
 from app.service import ManaFragments, elo_changes, elo_snapshot, global_elo_from_db, player_statistics
 
@@ -57,10 +59,22 @@ def test_ranking_and_profile_replay_the_same_confirmed_rewards(tmp_path):
             VALUES ('ffa', '["a","b","c"]', '2026-11-25 16:03:00')
         """)
         assert {row["id"]: row["mana_fragments_delta"] for row in elo_changes(conn, before)} == {
-            "a": 13, "b": 1, "c": 1,
+            "a": 15, "b": 2, "c": 1,
         }
         for _ in range(2):
             ranking = global_elo_from_db(conn, include_movement=True)
-            assert {row["id"]: row["mana_fragments"] for row in ranking} == {"a": 19, "b": 3, "c": 1}
-            assert player_statistics(conn, "a")["player"]["mana_fragments"] == 19
-            assert player_statistics(conn, "b")["player"]["mana_fragments"] == 3
+            assert {row["id"]: row["mana_fragments"] for row in ranking} == {"a": 21, "b": 4, "c": 1}
+            assert player_statistics(conn, "a")["player"]["mana_fragments"] == 21
+            assert player_statistics(conn, "b")["player"]["mana_fragments"] == 4
+
+
+@pytest.mark.parametrize("expected", [[5, 2, 1], [6, 3, 2, 1], [7, 4, 3, 2, 1]])
+def test_free_for_all_fragments_by_placement(expected):
+    with sqlite3.connect(":memory:") as conn:
+        conn.execute("CREATE TABLE tournaments (champion_id, status, archived_from)")
+        fragments = ManaFragments(conn, [])
+        players = [str(index) for index in range(len(expected))]
+        fragments.record({"placements": players}, [
+            ({"id": player}, 0, index == 0) for index, player in enumerate(players)
+        ])
+        assert [fragments.balance(player) for player in players] == expected
