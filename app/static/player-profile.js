@@ -108,6 +108,26 @@
       <tbody>${rows}</tbody></table></div>`;
   }
 
+  function weeklyMissions(missions) {
+    if (!missions?.length) return '';
+    return `<details class="weekly-missions">
+      <summary>Missioni settimanali</summary>
+      <ul>${missions.map(mission => `<li class="weekly-mission${mission.completed ? ' is-complete' : ''}">
+        <span class="weekly-trophy ${esc(mission.tier)}" aria-hidden="true">🏆</span>
+        <div class="weekly-mission-content">
+          <strong>${esc(mission.title)}</strong>
+          <small>${esc(mission.description)}</small>
+          <div class="weekly-mission-progress">
+            <progress aria-label="${esc(mission.title)}" value="${mission.progress}" max="${mission.target}"></progress>
+            <span>${mission.progress}/${mission.target}</span>
+            <span class="mana-balance" aria-label="${mission.reward} frammenti di mana"><span class="mana-fragment-icon" aria-hidden="true"></span>+${mission.reward}</span>
+            ${mission.completed ? '<span class="weekly-check" role="img" aria-label="Completata">✓</span>' : ''}
+          </div>
+        </div>
+      </li>`).join('')}</ul>
+    </details>`;
+  }
+
   function renderStatistics(stats) {
     const {player,history,best_win:bestWin,recent_results:results} = stats;
     const winRate = player.matches ? `${new Intl.NumberFormat('it-IT',{style:'percent',maximumFractionDigits:1}).format(player.wins/player.matches)}` : '—';
@@ -140,6 +160,7 @@
         </div>
       </dl>
       ${placementContent}
+      ${weeklyMissions(stats.weekly_missions)}
       ${streakBadge ? `<p class="profile-streak-badge">Traguardo · ${streakBadge} vittorie di fila</p>` : ''}
       ${historyContent}
       ${results?.length ? `<h3>Ultime 5 partite Elo</h3><ol class="profile-form-results">${results.map(recentResult).join('')}</ol>` : ''}

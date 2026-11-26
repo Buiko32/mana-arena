@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from .engine import calculate_standings
+from .weekly_missions import WeeklyMissions
 
 
 def champion_id(config: dict, entrants: list[dict], matches: list[dict]) -> str | None:
@@ -157,7 +158,11 @@ def calculate_global_elo(players: list[dict], matches: list[dict], *, on_game=No
 
 def _elo_inputs(conn):
     import json
-    players = [dict(row) for row in conn.execute('SELECT id,name,active,photo,avatar_hue,avatar_color FROM players')]
+    players = [dict(row) for row in conn.execute('''
+        SELECT id,name,active,photo,avatar_hue,avatar_color,created_at,
+               CASE WHEN active=0 THEN updated_at END AS inactive_at
+        FROM players
+    ''')]
     # Replay by match date. Audit sequence breaks ties when records share a second.
     events = {}
     for row in conn.execute("SELECT id,detail_json,created_at FROM audit WHERE action IN ('match_result_recorded','friendly_result_recorded','team_friendly_result_recorded','ffa_friendly_result_recorded') ORDER BY id"):
@@ -208,6 +213,8 @@ class ManaFragments:
     TOURNAMENT_REWARD = 30
 
     def __init__(self, conn, matches):
+        self.weekly = WeeklyMissions()
+        self.first = self.last = None
         self.balances = {
             champion: count * self.TOURNAMENT_REWARD
             for champion, count in conn.execute("""
@@ -227,15 +234,33 @@ class ManaFragments:
                 for player_id in (first, second):
                     self.balances[player_id] = self.balance(player_id) + self.PARTICIPATION_REWARD
 
+    def before_game(self, rows, match):
+        timestamp = match['elo_date']
+        active = [row for row in rows.values() if row['created_at'] <= timestamp
+                  and (row['inactive_at'] is None or timestamp < row['inactive_at'])]
+        self.first = min(active, key=_elo_order)['id'] if active else None
+        self.last = max(active, key=_elo_order)['id'] if active else None
+        if match.get('result') == 'draw':
+            for player_id, opponent in ((match['p1'], match['p2']), (match['p2'], match['p1'])):
+                self.weekly.record(timestamp, player_id, {opponent}, first=self.first,
+                                   last=self.last, tournament=match.get('tournament_match', False))
+
     def record(self, match, updates):
         placements = match.get('placements', [])
         placement_rewards = {pid: len(placements) - index for index, pid in enumerate(placements)}
-        for player, _, won, *_ in updates:
+        for player, _, won, *details in updates:
             player_id = player['id']
+            if 'elo_date' in match:
+                self.weekly.record(
+                    match['elo_date'], player_id, {row['id'] for row in details[-1]},
+                    won=won, first=self.first, last=self.last, tournament=match.get('tournament_match', False),
+                    team=bool(match.get('team_a')),
+                    podium=len(placements) >= 4 and player_id in placements[:3],
+                )
             earned = placement_rewards.get(player_id, self.PARTICIPATION_REWARD)
             if won:
                 earned += self.WIN_REWARD
-            self.balances[player_id] = self.balance(player_id) + earned
+            self.balances[player_id] = self.balances.get(player_id, 0) + earned
             if match.get('tournament_match'):
                 continue
             streak = self.streaks.get(player_id, 0) + 1 if won else 0
@@ -244,7 +269,7 @@ class ManaFragments:
                 self.balances[player_id] += self.STREAK_REWARDS[streak]
 
     def balance(self, player_id):
-        return self.balances.get(player_id, 0)
+        return self.balances.get(player_id, 0) + self.weekly.balance(player_id)
 
 
 def match_elo_deltas(conn, ids):
@@ -278,6 +303,7 @@ def global_elo_from_db(conn, *, include_movement=False):
 
     def before_game(rows, match):
         nonlocal day, opening
+        fragments.before_game(rows, match)
         timestamp = datetime.fromisoformat(match['elo_date'])
         if timestamp.tzinfo is None:
             timestamp = timestamp.replace(tzinfo=timezone.utc)
@@ -316,12 +342,14 @@ def elo_snapshot(conn, player_ids):
     ids = set(player_ids)
     players, matches = _elo_inputs(conn)
     fragments = ManaFragments(conn, matches)
-    rows = calculate_global_elo(players, matches, on_game=lambda _rows, match, updates: fragments.record(match, updates))
+    rows = calculate_global_elo(players, matches, before_game=fragments.before_game,
+                                on_game=lambda _rows, match, updates: fragments.record(match, updates))
     active = [row for row in rows if row['active']]
     return {
         row['id']: {
             'id': row['id'], 'name': row['name'], 'rating': row['rating'], 'rank': rank,
             'mana_fragments': fragments.balance(row['id']),
+            'mission_fragments': fragments.weekly.balance(row['id']),
             'photo_url': f"/photos/{row['photo']}" if row['photo'] else None,
             'avatar_hue': row['avatar_hue'], 'avatar_color': row['avatar_color'],
         }
@@ -333,7 +361,8 @@ def elo_changes(conn, before):
     after = elo_snapshot(conn, before)
     return [
         {**row, 'previous_rating': before[pid]['rating'], 'previous_rank': before[pid]['rank'],
-         'mana_fragments_delta': row['mana_fragments'] - before[pid]['mana_fragments']}
+         'mana_fragments_delta': row['mana_fragments'] - before[pid]['mana_fragments'],
+         'mission_fragments_delta': row['mission_fragments'] - before[pid]['mission_fragments']}
         for pid, row in after.items()
     ]
 
@@ -393,11 +422,12 @@ def player_statistics(conn, player_id):
                 best_win = {'date': date, 'opponents': [profile['name'] for profile in profiles],
                             'opponent_profiles': profiles, 'gap': round(gap), 'gain': round(change)}
 
-    rows = calculate_global_elo(players, matches, on_game=after_game)
+    rows = calculate_global_elo(players, matches, before_game=fragments.before_game, on_game=after_game)
     active = [row for row in rows if row['active']]
     rank, player = next((rank, row) for rank, row in enumerate(active, 1) if row['id'] == player_id)
     return {
         'player': {**player, 'rank': rank, 'mana_fragments': fragments.balance(player_id)},
+        'weekly_missions': fragments.weekly.current(player_id),
         'history': history,
         'placement': {
             'played': player['matches'], 'total': ELO_PLACEMENT_MATCHES,

@@ -13,6 +13,12 @@
     return gain ? `#${player.previous_rank} → <b class="elo-rank-updated"${gain > 0 ? ' data-up' : ''}>#${player.rank}</b>` : `#${player.rank} · invariata`;
   }
 
+  function missionReward(player) {
+    return player.mission_fragments_delta > 0
+      ? `<span class="elo-mission-reward"><span aria-hidden="true">✓</span> Missione completata +${player.mission_fragments_delta}</span>`
+      : '';
+  }
+
   function playerRow(player) {
     const elo = player.rating - player.previous_rating;
     const color = elo > 0 ? 'positive' : elo < 0 ? 'negative' : '';
@@ -28,6 +34,7 @@
       ${Number.isInteger(fragments) ? `<div class="elo-result-fragments"><span>Frammenti Mana</span>
         <strong class="mana-balance"><span class="mana-fragment-icon" aria-hidden="true"></span>${signed(fragments)}</strong>
       </div>` : ''}
+      ${missionReward(player)}
     </li>`;
   }
 
@@ -40,6 +47,7 @@
       ${window.renderPlayerAvatar(player)}<strong class="ffa-result-name">${esc(player.name)}</strong>
       <span class="elo-result-delta ${color}">${signed(elo)} Elo</span>
       ${Number.isInteger(fragments) ? `<span class="mana-balance"><span class="mana-fragment-icon" aria-hidden="true"></span>${signed(fragments)}<span class="visually-hidden"> Frammenti Mana</span></span>` : ''}
+      ${missionReward(player)}
     </li>`;
   }
 

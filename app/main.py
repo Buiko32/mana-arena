@@ -567,7 +567,7 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
             if conn.execute("SELECT 1 FROM entrants WHERE player_id=? LIMIT 1", (player_id,)).fetchone():
                 _detail(409, "Il giocatore è già iscritto a uno o più tornei e non può essere eliminato.")
             old_photo = row["photo"]
-            conn.execute("UPDATE players SET active=0,photo=NULL WHERE id=?", (player_id,))
+            conn.execute("UPDATE players SET active=0,photo=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?", (player_id,))
         if old_photo:
             (db.photos_dir / old_photo).unlink(missing_ok=True)
         return {"ok": True}

@@ -664,3 +664,20 @@ footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:va
 .profile-placement progress { display:block; width:min(100%,24rem); accent-color:var(--amber-bright); }
 .profile-placement-delta { display:block; margin-top:.3rem; text-align:center; }
 .profile-streak-badge { width:fit-content; padding:.35rem .7rem; border:1px solid var(--line); border-radius:.5rem; }
+.weekly-missions {margin:.75rem 0 1.25rem;border:1px solid var(--line);border-radius:.5rem}
+.weekly-missions summary {padding:.8rem 1rem;cursor:pointer;font-weight:700}
+.weekly-missions ul {list-style:none;padding:0 1rem;margin:0}
+.weekly-mission {display:flex;align-items:flex-start;gap:.65rem;padding:.75rem 0;border-top:1px solid var(--line)}
+.weekly-mission-content {flex:1;min-width:0}
+.weekly-mission-content small {display:block;color:var(--muted);margin:.15rem 0 .4rem}
+.weekly-trophy.silver {filter:grayscale(1) brightness(1.25)}
+.weekly-trophy.bronze {filter:sepia(1) saturate(1.5) brightness(.77)}
+.weekly-mission-progress {display:flex;align-items:center;gap:.5rem;font-size:.8rem}
+.weekly-mission-progress progress {flex:1;min-width:0;height:.65rem;appearance:none;border:0;border-radius:1rem;background:#20212c}
+.weekly-mission-progress progress::-webkit-progress-bar {background:#20212c;border-radius:1rem}
+.weekly-mission-progress progress::-webkit-progress-value {background:#9df7e2;border-radius:1rem}
+.weekly-mission-progress progress::-moz-progress-bar {background:#9df7e2;border-radius:1rem}
+.weekly-mission.is-complete progress::-webkit-progress-value {background:#3a5951}
+.weekly-mission.is-complete progress::-moz-progress-bar {background:#3a5951}
+.weekly-check,.elo-mission-reward {color:#9df7ac;font-weight:700}
+.elo-mission-reward {grid-column:1/-1;font-size:.85rem}
