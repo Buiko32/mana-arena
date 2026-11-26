@@ -198,7 +198,7 @@
 #life-setup p:empty:not([data-match-hint]) {display:none}
 .life-segments {display:flex;overflow:hidden;border:1px solid var(--line);border-radius:.65rem;background:var(--panel)}
 #life .life-segments button {flex:1;min-width:0;padding:.4rem .3rem;border:0;border-radius:0;background:transparent;font-size:clamp(.8rem,3.55vw,1rem);font-weight:650;line-height:1.15}
-#life .life-segments button+button {border-inline-start:1px solid var(--line)}
+#life .life-segments button+button:not([hidden]) {border-inline-start:1px solid var(--line)}
 #life .life-segments button[data-format="ffa"] {flex:1.35}
 #life .life-segments button[aria-pressed="true"],#life-setup [type="submit"] {background:var(--amber);color:#211510}
 #life .life-segments button:focus-visible {outline-offset:-3px}

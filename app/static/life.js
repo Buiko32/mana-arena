@@ -11,12 +11,12 @@
   let profiles = [], sides = [[], []], game = null, busy = false;
   const playerNameKey = name => name.trim().normalize('NFC').toLocaleLowerCase('it-IT');
   function alreadyAtTable(player) {
-    return sides.some(([member]) => member && ((player.id && member.id === player.id) ||
-      playerNameKey(member.name) === playerNameKey(player.name)));
+    return sides.flat().some(member => (player.id && member.id === player.id) ||
+      playerNameKey(member.name) === playerNameKey(player.name));
   }
-  function profileOptions(unique = false, prompt = 'Scegli giocatore') {
+  function profileOptions(prompt = 'Scegli giocatore') {
     return `<option value="">${esc(prompt)}</option>` + profiles.map(player =>
-      `<option value="${esc(player.id)}"${unique && alreadyAtTable(player) ? ' disabled' : ''}>${esc(player.name)}</option>`).join('')
+      `<option value="${esc(player.id)}"${alreadyAtTable(player) ? ' disabled' : ''}>${esc(player.name)}</option>`).join('')
       + '<option value="_guest">Aggiungi ospite</option>';
   }
   const key='mana-life-draft-v1', outboxKey='mana-life-outbox-v1', rosterKey='mana-life-roster-v1';
@@ -149,7 +149,7 @@
       profiles=list;updateTournamentPlayers();updateMatchChoices();
       root.querySelectorAll('[data-profile], [data-ffa-profile]').forEach(select=>{
         const value = select.value;
-        select.innerHTML = profileOptions(select.hasAttribute('data-ffa-profile'), select.options?.[0]?.text);
+        select.innerHTML = profileOptions(select.options?.[0]?.text);
         select.value = value;
       });
     }).catch(()=>{});
@@ -220,7 +220,15 @@
   }
   function updateMatchChoices() {
     const form = root.querySelector('#life-setup');
-    if (!form || form.elements.kind.value !== 'tournament') return;
+    if (!form) return;
+    const tournamentButton = root.querySelector('[data-kind="tournament"]');
+    tournamentButton.hidden = !cachedMatches.length || (matchLoading && form.elements.kind.value !== 'tournament');
+    if (form.elements.kind.value !== 'tournament') return;
+    if (!matchLoading && !cachedMatches.length) {
+      form.elements.kind.value = 'friendly';
+      form.elements.kind.onchange();
+      return;
+    }
     const select = form.elements.match, previous = select.value;
     select.innerHTML = cachedMatches.length ? cachedMatches.map(match =>
       `<option value="${esc(match.id)}">🏆 ${esc(match.tournament?.config?.name || 'Torneo')} · ${esc(profiles.find(p => p.id === match.p1)?.name || 'Giocatore')} – ${esc(profiles.find(p => p.id === match.p2)?.name || 'Giocatore')}</option>`
@@ -239,14 +247,14 @@
       <select name="kind" hidden><option value="friendly">Amichevole</option><option value="tournament">Torneo</option></select>
       <div class="life-segments" role="group" aria-label="Tipo partita">
         <button type="button" data-kind="friendly" aria-pressed="true">Amichevole</button>
-        <button type="button" data-kind="tournament" aria-pressed="false">Torneo</button>
+        <button type="button" data-kind="tournament" aria-pressed="false" hidden><span aria-hidden="true">🏆</span> Torneo</button>
       </div>
       <label data-tournament-player hidden>Il tuo profilo<select name="tournament_player"><option value="">Seleziona profilo</option></select></label>
       <label data-match-label hidden>Incontro<select name="match"><option value="">Nessun abbinamento disponibile</option></select></label>
       <p data-match-hint role="status" hidden></p>
-      <select name="format" hidden><option value="duel">Duello</option><option value="team">Squadre</option><option value="ffa">Tutti contro tutti</option></select>
+      <select name="format" hidden><option value="duel">Duello 1v1</option><option value="team">Squadre</option><option value="ffa">Tutti contro tutti</option></select>
       <div data-friendly-format class="life-segments" role="group" aria-label="Formato">
-        <button type="button" data-format="duel" aria-pressed="true">Duello</button>
+        <button type="button" data-format="duel" aria-pressed="true">Duello 1v1</button>
         <button type="button" data-format="team" aria-pressed="false">Squadre</button>
         <button type="button" data-format="ffa" aria-pressed="false">Tutti contro tutti</button>
       </div>
@@ -287,7 +295,7 @@
           <button type="button" class="button quiet" data-remove-player="${index}" aria-label="Rimuovi ${esc(member.name)}">Rimuovi</button>
         </div>`).join('')}
         <div class="life-ffa-add" ${full ? 'hidden' : ''}>
-          <select aria-label="Aggiungi giocatore" data-ffa-profile>${profileOptions(true, 'Aggiungi giocatore')}</select>
+          <select aria-label="Aggiungi giocatore" data-ffa-profile>${profileOptions('Aggiungi giocatore')}</select>
           <div class="life-add-member" data-guest-editor hidden>
             <label>Nome ospite <input data-ffa-guest maxlength="60"></label>
             <button type="button" data-add-ffa-guest>Aggiungi ospite</button>
@@ -324,7 +332,7 @@
         const prompt = team ? 'Aggiungi giocatore' : members[0]?.name || 'Scegli giocatore';
         const controls = editable ? `<div class="life-player-choice">
           ${team ? '' : `<span aria-hidden="true">${i + 1}</span>`}
-          <select aria-label="${team ? 'Aggiungi a squadra' : 'Scegli giocatore'} ${i + 1}" data-profile="${i}">${profileOptions(false, prompt)}</select>
+          <select aria-label="${team ? 'Aggiungi a squadra' : 'Scegli giocatore'} ${i + 1}" data-profile="${i}">${profileOptions(prompt)}</select>
           ${!team && members.length ? `<button type="button" class="button quiet" data-remove-member="${i},0" aria-label="Rimuovi ${esc(members[0].name)}">×</button>` : ''}
           </div><div class="life-add-member" data-guest-editor hidden><input data-guest="${i}" maxlength="60" placeholder="Nome ospite" aria-label="Nome ospite lato ${i+1}"><button type="button" data-add-guest="${i}">Aggiungi</button></div>` : '';
         const memberList = team || !editable ? members.map((m, j) => `<div class="life-member"><span class="life-person">${avatar(m)}<span>${esc(m.name)}</span></span>${editable ? `<button type="button" data-remove-member="${i},${j}" aria-label="Rimuovi ${esc(m.name)}">×</button>` : ''}</div>`).join('') : '';
@@ -349,6 +357,7 @@
     };
     form.elements.kind.onchange = () => {
       const tournament = form.elements.kind.value === 'tournament';
+      form.querySelectorAll?.('[data-kind]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.kind === form.elements.kind.value)));
       root.querySelector('[data-tournament-player]').hidden = !tournament;
       root.querySelector('[data-match-label]').hidden = !tournament;
       root.querySelector('[data-match-hint]').hidden = !tournament;
@@ -390,7 +399,7 @@
       const person = profiles.find(p => String(p.id) === id);
       if (!person) return;
       const error = root.querySelector('.life-error');
-      if (sides.flat().some(member => member.id === id)) {
+      if (alreadyAtTable(person)) {
         error.textContent = 'Questo profilo è già stato aggiunto.';
         select.value = '';
         return;
@@ -473,6 +482,7 @@
       else if (b.hasAttribute('data-add-guest')) {
         const i = Number(b.dataset.addGuest), name = root.querySelector(`[data-guest="${i}"]`).value.trim();
         if (!name) return;
+        if (alreadyAtTable({name})) { error.textContent = 'Questo giocatore è già al tavolo.'; return; }
         if (form.elements.format.value !== 'team') sides[i] = [{name}];
         else if (sides[i].length < 6) sides[i].push({name});
         else { error.textContent = 'La squadra ha già sei giocatori.'; return; }

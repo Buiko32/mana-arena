@@ -54,6 +54,7 @@ function fixture({offline = false, matches = [match('uno','b'),match('due','c')]
 test('loads and selects the first tournament match with fixed players',async () => {
   const {api,root,form,submit,calls} = fixture();
   api.setup();
+  assert.equal(root.querySelector('[data-kind="tournament"]').hidden,true);
   form.elements.kind.value = 'tournament';
   form.elements.kind.onchange();
   assert.equal(submit.disabled,true);
@@ -61,6 +62,7 @@ test('loads and selects the first tournament match with fixed players',async () 
   assert.equal(calls.filter(path => path === '/api/player/matches').length,1);
   assert.equal(form.elements.match.value,'uno');
   assert.equal(submit.disabled,false);
+  assert.equal(root.querySelector('[data-kind="tournament"]').hidden,false);
   const sides = root.querySelector('.life-setup-sides');
   assert.match(sides.innerHTML,/Ada.*Bruno/);
   assert.doesNotMatch(sides.innerHTML,/Aggiungi|data-remove-member|Nome ospite/);
@@ -74,7 +76,34 @@ test('loads and selects the first tournament match with fixed players',async () 
   assert.doesNotMatch(sides.innerHTML,/data-add-profile/);
   form.change({target:{value:'b',dataset:{profile:'0'},matches:selector => selector === '[data-profile]'}});
   assert.match(sides.innerHTML,/data-remove-member="0,0"/);
+  assert.equal((sides.innerHTML.match(/value="b" disabled/g) || []).length, 2);
   assert.doesNotMatch(root.innerHTML,/I risultati con un vincitore|Carica abbinamenti/);
+});
+
+test('offers only friendly when the active player has no tournament match', async () => {
+  const {api,root,form} = fixture({matches:[]});
+  api.setup();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(root.querySelector('[data-kind="tournament"]').hidden,true);
+  assert.equal(form.elements.kind.value,'friendly');
+});
+
+test('disables every selected team member and enables them again on removal', () => {
+  const {api,root,form} = fixture({offline:true});
+  api.setup();
+  form.elements.format.value = 'team';
+  form.elements.format.onchange();
+  for (const value of ['a','b']) {
+    form.change({target:{value,dataset:{profile:'0'},matches:selector => selector === '[data-profile]'}});
+  }
+  const sides = root.querySelector('.life-setup-sides');
+  for (const value of ['a','b']) {
+    assert.equal(sides.innerHTML.split(`value="${value}" disabled`).length - 1, 2);
+  }
+  root.onclick({target:{closest:() => ({
+    dataset:{removeMember:'0,1'}, hasAttribute:name => name === 'data-remove-member',
+  })}});
+  assert.doesNotMatch(sides.innerHTML,/value="b" disabled/);
 });
 
 test('selects the first cached match when offline',() => {
