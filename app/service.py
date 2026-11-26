@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from heapq import nlargest, nsmallest
 from zoneinfo import ZoneInfo
 
 from .engine import calculate_standings
@@ -214,7 +215,7 @@ class ManaFragments:
 
     def __init__(self, conn, matches):
         self.weekly = WeeklyMissions()
-        self.first = self.last = None
+        self.top_two = self.bottom_two = ()
         self.balances = {
             champion: count * self.TOURNAMENT_REWARD
             for champion, count in conn.execute("""
@@ -238,12 +239,18 @@ class ManaFragments:
         timestamp = match['elo_date']
         active = [row for row in rows.values() if row['created_at'] <= timestamp
                   and (row['inactive_at'] is None or timestamp < row['inactive_at'])]
-        self.first = min(active, key=_elo_order)['id'] if active else None
-        self.last = max(active, key=_elo_order)['id'] if active else None
+        self.top_two = tuple(row['id'] for row in nsmallest(2, active, key=_elo_order))
+        self.bottom_two = tuple(row['id'] for row in nlargest(2, active, key=_elo_order))
         if match.get('result') == 'draw':
             for player_id, opponent in ((match['p1'], match['p2']), (match['p2'], match['p1'])):
-                self.weekly.record(timestamp, player_id, {opponent}, first=self.first,
-                                   last=self.last, tournament=match.get('tournament_match', False))
+                first, last = self._ranking_opponents(player_id)
+                self.weekly.record(timestamp, player_id, {opponent}, first=first, last=last,
+                                   tournament=match.get('tournament_match', False))
+
+    def _ranking_opponents(self, player_id):
+        first = next((pid for pid in self.top_two if pid != player_id), None)
+        last = next((pid for pid in self.bottom_two if pid != player_id), None)
+        return first, last
 
     def record(self, match, updates):
         placements = match.get('placements', [])
@@ -251,9 +258,10 @@ class ManaFragments:
         for player, _, won, *details in updates:
             player_id = player['id']
             if 'elo_date' in match:
+                first, last = self._ranking_opponents(player_id)
                 self.weekly.record(
                     match['elo_date'], player_id, {row['id'] for row in details[-1]},
-                    won=won, first=self.first, last=self.last, tournament=match.get('tournament_match', False),
+                    won=won, first=first, last=last, tournament=match.get('tournament_match', False),
                     team=bool(match.get('team_a')),
                     podium=len(placements) >= 4 and player_id in placements[:3],
                 )
@@ -329,7 +337,7 @@ def global_elo_from_db(conn, *, include_movement=False):
     return active
 
 
-def _opponent_profile(row):
+def opponent_profile(row):
     return {
         'name': row['name'],
         'photo_url': f"/photos/{row['photo']}" if row['photo'] else None,
@@ -396,7 +404,7 @@ def player_statistics(conn, player_id):
             fragments.record(match, [own])
             reached_2400 = player['peak_2400']
             _, change, won, opponent_rating, opponents = own
-            profiles = [_opponent_profile(opponent) for opponent in opponents]
+            profiles = [opponent_profile(opponent) for opponent in opponents]
             if match.get('p1'):
                 opponent = {**profiles[0], 'id': opponents[0]['id']}
                 record = head_to_head.setdefault(opponent['id'], {

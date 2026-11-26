@@ -22,8 +22,8 @@ class Mission:
 
 
 CATALOG = (
-    Mission('first', 'Assalto al trono', 'Gioca contro il primo in classifica.', 15),
-    Mission('last', 'Duello in coda', 'Gioca contro l’ultimo in classifica.', 5),
+    Mission('first', 'Assalto al trono', 'Gioca contro il giocatore più in alto in classifica tra gli altri partecipanti.', 15),
+    Mission('last', 'Duello in coda', 'Gioca contro il giocatore più in basso in classifica tra gli altri partecipanti.', 5),
     Mission('tournament', 'Ingresso nell’arena', 'Completa almeno una partita di torneo.', 5),
     Mission('play_5', 'Cinque scintille', 'Completa 5 partite.', 10, 5),
     Mission('play_10', 'Maratoneta', 'Completa 10 partite.', 25, 10),
@@ -102,7 +102,8 @@ class WeeklyMissions:
         progress.opponents.update(opponents)
         if won:
             progress.defeated.update(opponents)
-        milestones = {'first': first in opponents, 'last': last in opponents, 'tournament': tournament,
+        milestones = {'first': first != player_id and first in opponents,
+                      'last': last != player_id and last in opponents, 'tournament': tournament,
                       'team': team and won, 'podium': podium}
         progress.milestones.update(key for key, achieved in milestones.items() if achieved)
         reward = sum(m.reward for m in incomplete if progress.value(m.key) >= m.target)

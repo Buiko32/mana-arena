@@ -210,7 +210,8 @@
 #life-setup .life-setup-player > :is(.life-add-member,label,.life-member) {padding:0 .65rem .45rem}
 #life-setup .life-member {min-height:44px}
 .life-player-choice {display:flex;align-items:center;min-width:0}
-.life-player-choice > span {padding-inline:.75rem .4rem;font-weight:700}
+.life-player-choice > .life-player-slot {padding-inline:.75rem .4rem;font-weight:700}
+.life-player-choice > .life-avatar {margin-inline-start:.5rem}
 #life-setup .life-player-choice select {border:0;background:transparent}
 #life-setup .life-player-choice option {background:var(--panel)}
 #life-setup .life-player-choice button {flex:none;min-width:44px;min-height:44px;border:0}

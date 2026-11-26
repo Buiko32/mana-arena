@@ -56,16 +56,20 @@
       if (match.kind === 'ffa') team.append(element('span', (index + 1) + '° posto', 'history-outcome'));
       for (const [position, name] of side.entries()) {
         const row = element('div', '', 'history-player');
-        row.append(element('strong', name));
+        const profile = match.player_profiles?.[index]?.[position] ?? {};
+        row.insertAdjacentHTML('beforeend', window.renderPlayerAvatar(profile));
+        const details = element('div', '', 'history-player-details');
+        details.append(element('strong', name));
         if (match.kind !== 'ffa' && match.winner === index && position === 0) {
-          row.append(element('span', 'Vittoria', 'history-outcome history-winner'));
+          details.append(element('span', 'Vittoria', 'history-outcome history-winner'));
         }
         const delta = match.elo_deltas?.[index]?.[position];
         if (Number.isInteger(delta)) {
           const points = element('span', (delta > 0 ? '+' : delta < 0 ? '−' : '') + Math.abs(delta) + ' Elo', 'match-card-elo');
           points.dataset.direction = Math.sign(delta);
-          row.append(points);
+          details.append(points);
         }
+        row.append(details);
         team.append(row);
       }
       layout.append(team);

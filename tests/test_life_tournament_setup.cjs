@@ -6,7 +6,7 @@ const test = require('node:test');
 const source = fs.readFileSync('app/static/life.js','utf8').replace(
   '  window.openLifeCounter =', '  globalThis.setupTest = {setup, enqueue, drainOutbox, refreshQueueStatus};\n  window.openLifeCounter =',
 );
-const profiles = [{id:'a',name:'Ada'},{id:'b',name:'Bruno'},{id:'c',name:'Carla'}];
+const profiles = [{id:'a',name:'Ada'},{id:'b',name:'Bruno',photo_url:'/photos/abcd.jpg'},{id:'c',name:'Carla'}];
 const match = (id,p2) => ({id,p1:'a',p2,tournament:{id,config:{name:'Torneo ' + id}}});
 
 function fixture({offline = false, matches = [match('uno','b'),match('due','c')], cached = false} = {}) {
@@ -76,6 +76,7 @@ test('loads and selects the first tournament match with fixed players',async () 
   assert.doesNotMatch(sides.innerHTML,/data-add-profile/);
   form.change({target:{value:'b',dataset:{profile:'0'},matches:selector => selector === '[data-profile]'}});
   assert.match(sides.innerHTML,/data-remove-member="0,0"/);
+  assert.match(sides.innerHTML, /class="life-player-choice">\s*<span class="life-avatar"[^>]*>.*?<img src="\/photos\/abcd\.jpg"[^>]*><\/span>\s*<select[^>]*data-profile="0"[^>]*><option value="">Bruno<\/option>/s);
   assert.equal((sides.innerHTML.match(/value="b" disabled/g) || []).length, 2);
   assert.doesNotMatch(root.innerHTML,/I risultati con un vincitore|Carica abbinamenti/);
 });

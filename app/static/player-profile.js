@@ -164,7 +164,7 @@
       <div><dt>Classifica</dt><dd>#${player.rank}</dd></div>`;
     summary.innerHTML = `
       ${weeklyMissions(stats.weekly_missions)}
-      ${results?.length ? `<section class="profile-recent"><h2>Ultime 5 partite Elo</h2><ol class="profile-recent-matches">${results.map(recentResult).join('')}</ol></section>` : ''}
+      ${results?.length ? `<section class="profile-recent"><h2>Ultime 5 partite Elo</h2><ol class="profile-recent-matches">${results.slice().reverse().map(recentResult).join('')}</ol></section>` : ''}
       ${disclosure('profile-performance', 'Andamento Elo e storico', `<dl class="profile-metrics">${metrics.map(([label,value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')}</dl>
         ${placementContent}${streakBadge ? `<p class="profile-streak-badge">Traguardo · ${streakBadge} vittorie di fila</p>` : ''}${historyContent}`)}
       ${bestWin ? disclosure('profile-record', 'Miglior vittoria', `<div class="profile-best-win"><div class="profile-best-opponents">${bestWin.opponent_profiles ? opponentList(bestWin.opponent_profiles) : esc(bestWin.opponents.join(' e '))}</div><strong class="profile-best-gain">+${bestWin.gain} Elo</strong></div>`) : ''}

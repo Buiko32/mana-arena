@@ -1,18 +1,20 @@
 """Public history of played matches, grouped by the client in local time."""
 import json
 
-from .service import match_elo_deltas
+from .service import match_elo_deltas, opponent_profile
 
 
 def month_matches(conn, start, end):
-    names = {r["id"]: r["name"] for r in conn.execute("SELECT id,name FROM players")}
+    profiles = {row["id"]: opponent_profile(row) for row in conn.execute(
+        "SELECT id, name, photo, avatar_hue, avatar_color FROM players"
+    )}
     games = []
     participants = {}
 
     def add(match_id, stamp, label, left, right, winner, kind="friendly", score=None, match_format="duel"):
         participants[match_id] = (len(games), (left, right))
         games.append({"at": stamp.replace(" ", "T") + "Z", "label": label, "kind": kind,
-                      "sides": [[names.get(p, "Giocatore") for p in side] for side in (left, right)],
+                      "sides": [[profiles.get(p, {}).get("name", "Giocatore") for p in side] for side in (left, right)],
                       "player_ids": [left, right], "winner": winner, "score": score, "format": match_format})
 
     for row in conn.execute("""
@@ -53,11 +55,12 @@ def month_matches(conn, start, end):
         sides = [[pid] for pid in json.loads(row["placements"])]
         participants[row["id"]] = (len(games), sides)
         games.append({"at": row["created_at"].replace(" ", "T") + "Z", "label": "Amichevole · Tutti contro tutti",
-                      "kind": "ffa", "sides": [[names.get(pid, "Giocatore")] for (pid,) in sides],
+                      "kind": "ffa", "sides": [[profiles.get(pid, {}).get("name", "Giocatore")] for (pid,) in sides],
                       "player_ids": sides, "winner": 0, "score": None, "format": "ffa"})
     if participants:
         deltas = match_elo_deltas(conn, participants)
         for match_id, (index, sides) in participants.items():
             changes = deltas.get(match_id, {})
+            games[index]["player_profiles"] = [[profiles.get(pid) for pid in side] for side in sides]
             games[index]["elo_deltas"] = [[changes.get(pid, 0) for pid in side] for side in sides]
     return sorted(games, key=lambda game: game["at"], reverse=True)

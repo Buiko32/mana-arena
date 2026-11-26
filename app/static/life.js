@@ -331,7 +331,7 @@
         const sameLife = form.elements.life_mode.value === 'same';
         const prompt = team ? 'Aggiungi giocatore' : members[0]?.name || 'Scegli giocatore';
         const controls = editable ? `<div class="life-player-choice">
-          ${team ? '' : `<span aria-hidden="true">${i + 1}</span>`}
+          ${team ? '' : members[0] ? avatar(members[0]) : `<span class="life-player-slot" aria-hidden="true">${i + 1}</span>`}
           <select aria-label="${team ? 'Aggiungi a squadra' : 'Scegli giocatore'} ${i + 1}" data-profile="${i}">${profileOptions(prompt)}</select>
           ${!team && members.length ? `<button type="button" class="button quiet" data-remove-member="${i},0" aria-label="Rimuovi ${esc(members[0].name)}">×</button>` : ''}
           </div><div class="life-add-member" data-guest-editor hidden><input data-guest="${i}" maxlength="60" placeholder="Nome ospite" aria-label="Nome ospite lato ${i+1}"><button type="button" data-add-guest="${i}">Aggiungi</button></div>` : '';
