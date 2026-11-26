@@ -119,7 +119,7 @@
     const liveOpen = publicPage && (location.hash === '#live' || location.hash.startsWith('#live/'));
     const historyOpen = publicPage && location.hash === '#history';
     if (publicPage && location.hash === '#life') {
-      location.replace('/segnavita#life');
+      location.replace('/segnavita');
       return;
     }
     const ranking = publicPage && location.hash === '#global-ranking';

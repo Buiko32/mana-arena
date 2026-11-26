@@ -450,13 +450,16 @@ footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:va
 }
 @media(max-width:540px){
   .brand-logo{width:30px;height:30px}
-  .global-table{table-layout:fixed}
-  .global-table th:nth-child(1){width:15%}
-  .global-table th:nth-child(3){width:20%}
-  .global-table th:nth-child(4){width:18%}
-  .global-table th:nth-child(5){width:13%}
+  .global-table th:is(:nth-child(1),:nth-child(3),:nth-child(6)){width:1%}
+  .global-table :is(th,td):is(:nth-child(4),:nth-child(5)){display:none}
+  .global-table th,.global-table td{padding-inline:.25rem}
+  .global-table th:nth-child(6){white-space:normal}
   .global-table .ranking-player{gap:.35rem}
-  .global-table .ranking-player .avatar{width:30px;height:30px;flex-basis:30px}
+  .global-table .ranking-player .avatar{width:26px;height:26px;flex-basis:26px}
+  .global-table .ranking-name{overflow:visible}
+}
+@media(max-width:380px){
+  .global-table :is(th,td):nth-child(6){display:none}
 }
 
 .avatar > .avatar-mascot, .avatar > img { grid-area:1 / 1; }

@@ -14,9 +14,10 @@
     return sides.some(([member]) => member && ((player.id && member.id === player.id) ||
       playerNameKey(member.name) === playerNameKey(player.name)));
   }
-  function profileOptions(unique = false) {
-    return '<option value="">Scegli profilo</option>' + profiles.map(player =>
-      `<option value="${esc(player.id)}"${unique && alreadyAtTable(player) ? ' disabled' : ''}>${esc(player.name)}</option>`).join('');
+  function profileOptions(unique = false, prompt = 'Scegli giocatore') {
+    return `<option value="">${esc(prompt)}</option>` + profiles.map(player =>
+      `<option value="${esc(player.id)}"${unique && alreadyAtTable(player) ? ' disabled' : ''}>${esc(player.name)}</option>`).join('')
+      + '<option value="_guest">Aggiungi ospite</option>';
   }
   const key='mana-life-draft-v1', outboxKey='mana-life-outbox-v1', rosterKey='mana-life-roster-v1';
   let draining=null, storageProblem='', setupGeneration=0, sessionPlayer=null, cachedMatches=[], queueMessage='';
@@ -148,7 +149,7 @@
       profiles=list;updateTournamentPlayers();updateMatchChoices();
       root.querySelectorAll('[data-profile], [data-ffa-profile]').forEach(select=>{
         const value = select.value;
-        select.innerHTML = profileOptions(select.hasAttribute('data-ffa-profile'));
+        select.innerHTML = profileOptions(select.hasAttribute('data-ffa-profile'), select.options?.[0]?.text);
         select.value = value;
       });
     }).catch(()=>{});
@@ -234,7 +235,40 @@
     select.onchange();
   }
   function drawSetup() {
-    root.innerHTML = `<div class="life-shell"><header><p class="life-kicker">MANA ARENA · AL TAVOLO</p><h1>Segnapunti vita</h1><p>Un telefono al centro del tavolo, un contatore per ciascun giocatore o squadra.</p></header><form id="life-setup"><label>Tipo partita<select name="kind"><option value="friendly">Amichevole</option><option value="tournament">🏆 Partita di torneo</option></select></label><label data-tournament-player hidden>Il tuo profilo<select name="tournament_player"><option value="">Seleziona profilo</option></select></label><label data-match-label hidden>Incontro<select name="match"><option value="">Nessun abbinamento disponibile</option></select></label><p data-match-hint role="status" hidden></p><label data-friendly-format>Formato<select name="format"><option value="duel">Duello 1v1</option><option value="team">Squadre</option><option value="ffa">Tutti contro tutti</option></select></label><label>Vita iniziale<select name="life_mode"><option value="same">Uguale per tutti</option><option value="different">Personalizzata</option></select></label><label data-common>Vita iniziale comune<input type="number" name="common_life" min="1" max="999" value="20" required></label><div class="life-setup-sides"></div><div class="life-setup-actions"><button type="submit" class="button primary">Inizia partita</button></div><p data-queue-status role="status"></p><button type="button" class="button secondary" data-queue-retry hidden>Riprova sincronizzazione</button><button type="button" class="button secondary" data-queue-login hidden>Accedi come proponente e sincronizza</button><p class="life-error" role="alert"></p></form></div>`;
+    root.innerHTML = `<div class="life-shell"><h1>Nuova partita</h1><form id="life-setup">
+      <select name="kind" hidden><option value="friendly">Amichevole</option><option value="tournament">Torneo</option></select>
+      <div class="life-segments" role="group" aria-label="Tipo partita">
+        <button type="button" data-kind="friendly" aria-pressed="true">Amichevole</button>
+        <button type="button" data-kind="tournament" aria-pressed="false">Torneo</button>
+      </div>
+      <label data-tournament-player hidden>Il tuo profilo<select name="tournament_player"><option value="">Seleziona profilo</option></select></label>
+      <label data-match-label hidden>Incontro<select name="match"><option value="">Nessun abbinamento disponibile</option></select></label>
+      <p data-match-hint role="status" hidden></p>
+      <select name="format" hidden><option value="duel">Duello</option><option value="team">Squadre</option><option value="ffa">Tutti contro tutti</option></select>
+      <div data-friendly-format class="life-segments" role="group" aria-label="Formato">
+        <button type="button" data-format="duel" aria-pressed="true">Duello</button>
+        <button type="button" data-format="team" aria-pressed="false">Squadre</button>
+        <button type="button" data-format="ffa" aria-pressed="false">Tutti contro tutti</button>
+      </div>
+      <section class="life-setup-players" aria-labelledby="life-players-title">
+        <h2 id="life-players-title">Giocatori</h2><div class="life-setup-sides"></div>
+      </section>
+      <select name="life_mode" hidden><option value="same">Uguale per tutti</option><option value="different">Personalizzata</option></select>
+      <div class="life-initial-row" data-common>
+        <label for="life-common">Vita iniziale</label>
+        <div class="life-stepper">
+          <button type="button" data-life-step="-1" aria-label="Diminuisci vita iniziale">−</button>
+          <input id="life-common" type="number" name="common_life" min="1" max="999" value="20" required>
+          <button type="button" data-life-step="1" aria-label="Aumenta vita iniziale">+</button>
+        </div>
+      </div>
+      <button type="button" class="button quiet life-customize" data-life-customize aria-pressed="false">Personalizza per giocatore</button>
+      <p class="life-error" role="alert"></p>
+      <div class="life-setup-actions"><button type="submit" class="button primary">Inizia partita</button></div>
+      <p data-queue-status role="status"></p>
+      <button type="button" class="button secondary" data-queue-retry hidden>Riprova sincronizzazione</button>
+      <button type="button" class="button secondary" data-queue-login hidden>Accedi come proponente e sincronizza</button>
+    </form></div>`;
     const form = root.querySelector('form');
     const startingLife = new WeakMap();
     const playerList = form.querySelector('.life-setup-sides');
@@ -249,12 +283,12 @@
         ${sides.length < 3 ? '<p class="muted">Aggiungi almeno 3 giocatori.</p>' : ''}
         ${sides.map(([member], index) => `<div class="life-ffa-player">
           ${memberNames({members:[member]})}
-          <label ${sameLife ? 'hidden' : ''}>Vita iniziale <input type="number" data-initial="${index}" min="1" max="999" value="${esc(startingLife.get(member) ?? 20)}" required></label>
+          <label ${sameLife ? 'hidden' : ''}>Vita iniziale <input type="number" data-initial="${index}" min="1" max="999" value="${esc(startingLife.get(member) ?? form.elements.common_life?.value ?? 20)}" ${sameLife ? 'disabled' : ''} required></label>
           <button type="button" class="button quiet" data-remove-player="${index}" aria-label="Rimuovi ${esc(member.name)}">Rimuovi</button>
         </div>`).join('')}
         <div class="life-ffa-add" ${full ? 'hidden' : ''}>
-          <label>Profilo <select data-ffa-profile>${profileOptions(true)}</select></label>
-          <div class="life-add-member">
+          <select aria-label="Aggiungi giocatore" data-ffa-profile>${profileOptions(true, 'Aggiungi giocatore')}</select>
+          <div class="life-add-member" data-guest-editor hidden>
             <label>Nome ospite <input data-ffa-guest maxlength="60"></label>
             <button type="button" data-add-ffa-guest>Aggiungi ospite</button>
           </div>
@@ -282,11 +316,19 @@
         return;
       }
       playerList.classList.remove('life-setup-ffa');
-      const initial = [...root.querySelectorAll('[data-initial]')].map(input => input.value);
+      const initial = [...root.querySelectorAll('[data-initial]')].map(input => input.disabled ? undefined : input.value);
       playerList.innerHTML = sides.map((members, i) => {
         if (!editable && !members.length) return '';
-        const controls = editable ? `<div class="life-add-member"><select aria-label="Profilo lato ${i+1}" data-profile="${i}">${profileOptions()}</select></div><div class="life-add-member"><input data-guest="${i}" maxlength="60" placeholder="Nome ospite" aria-label="Nome ospite lato ${i+1}"><button type="button" data-add-guest="${i}">Aggiungi</button></div>` : '';
-        return `<fieldset><legend>${format === 'team' ? 'Squadra' : 'Lato'} ${i + 1}</legend><div class="life-members">${members.map((m, j) => `<div class="life-member"><span class="life-person">${avatar(m)}<span>${esc(m.name)}</span></span>${editable ? `<button type="button" data-remove-member="${i},${j}" aria-label="Rimuovi ${esc(m.name)}">×</button>` : ''}</div>`).join('')}</div>${controls}<label ${form.elements.life_mode.value === 'same' ? 'hidden' : ''}>Vita iniziale<input type="number" data-initial="${i}" min="1" max="999" value="${esc(initial[i] ?? 20)}" required></label></fieldset>`;
+        const team = format === 'team';
+        const sameLife = form.elements.life_mode.value === 'same';
+        const prompt = team ? 'Aggiungi giocatore' : members[0]?.name || 'Scegli giocatore';
+        const controls = editable ? `<div class="life-player-choice">
+          ${team ? '' : `<span aria-hidden="true">${i + 1}</span>`}
+          <select aria-label="${team ? 'Aggiungi a squadra' : 'Scegli giocatore'} ${i + 1}" data-profile="${i}">${profileOptions(false, prompt)}</select>
+          ${!team && members.length ? `<button type="button" class="button quiet" data-remove-member="${i},0" aria-label="Rimuovi ${esc(members[0].name)}">×</button>` : ''}
+          </div><div class="life-add-member" data-guest-editor hidden><input data-guest="${i}" maxlength="60" placeholder="Nome ospite" aria-label="Nome ospite lato ${i+1}"><button type="button" data-add-guest="${i}">Aggiungi</button></div>` : '';
+        const memberList = team || !editable ? members.map((m, j) => `<div class="life-member"><span class="life-person">${avatar(m)}<span>${esc(m.name)}</span></span>${editable ? `<button type="button" data-remove-member="${i},${j}" aria-label="Rimuovi ${esc(m.name)}">×</button>` : ''}</div>`).join('') : '';
+        return `<fieldset class="${team ? '' : 'life-setup-player'}"><legend class="${team ? '' : 'visually-hidden'}">${team ? 'Squadra' : 'Giocatore'} ${i + 1}</legend>${memberList}${controls}<label ${sameLife ? 'hidden' : ''}>Vita iniziale<input type="number" data-initial="${i}" min="1" max="999" value="${esc(initial[i] ?? form.elements.common_life?.value ?? 20)}" ${sameLife ? 'disabled' : ''} required></label></fieldset>`;
       }).join('');
     }
     updateTournamentPlayers();
@@ -312,6 +354,7 @@
       root.querySelector('[data-match-hint]').hidden = !tournament;
       root.querySelector('[data-friendly-format]').hidden = tournament;
       form.elements.format.value = 'duel';
+      form.querySelectorAll?.('[data-format]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.format === 'duel')));
       sides = [[],[]];
       if (tournament) updateMatchChoices();
       else {
@@ -329,6 +372,13 @@
     };
     form.addEventListener('change', event => {
       const select = event.target;
+      if (select.value === '_guest' && (select.matches('[data-profile]') || select.matches('[data-ffa-profile]'))) {
+        const editor = select.closest('fieldset').querySelector('[data-guest-editor]');
+        editor.hidden = false;
+        editor.querySelector('input').focus({preventScroll:true});
+        select.value = '';
+        return;
+      }
       if (select.matches('[data-ffa-profile]') && select.value) {
         const person = profiles.find(player => String(player.id) === select.value);
         if (person) addFreeForAllPlayer({...person, id: select.value}, '[data-ffa-profile]');
@@ -360,7 +410,12 @@
       renderSides();
       root.querySelector(`[data-profile="${i}"]`).focus();
     });
-    form.elements.life_mode.onchange = () => { root.querySelector('[data-common]').hidden=form.elements.life_mode.value!=='same'; renderSides(); };
+    form.elements.life_mode.onchange = () => {
+      const personalized = form.elements.life_mode.value === 'different';
+      root.querySelector('[data-common]').hidden = personalized;
+      form.elements.common_life.disabled = personalized;
+      renderSides();
+    };
     form.elements.format.onchange = () => {
       sides = isFreeForAll() ? [] : [[], []];
       error.textContent = '';
@@ -373,18 +428,38 @@
       startingLife.set(member, event.target.value);
     });
     form.addEventListener('keydown', event => {
-      if (event.key !== 'Enter' || !event.target.matches('[data-ffa-guest]')) return;
+      if (event.key !== 'Enter' || !event.target.matches('[data-ffa-guest], [data-guest]')) return;
       event.preventDefault();
-      form.querySelector('[data-add-ffa-guest]').click();
+      event.target.closest('[data-guest-editor]').querySelector('button').click();
     });
     root.onclick = e => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.hasAttribute('data-queue-retry')) { drainOutbox(); return; }
       if (b.hasAttribute('data-queue-login')) { loginAndDrain(); return; }
+      for (const field of ['kind', 'format']) {
+        if (!b.dataset[field] || form.elements[field].value === b.dataset[field]) continue;
+        form.elements[field].value = b.dataset[field];
+        b.parentElement.querySelectorAll('button').forEach(button => button.setAttribute('aria-pressed', String(button === b)));
+        form.elements[field].onchange();
+        return;
+      }
+      if (b.hasAttribute('data-life-customize')) {
+        const customize = form.elements.life_mode.value === 'same';
+        form.elements.life_mode.value = customize ? 'different' : 'same';
+        b.setAttribute('aria-pressed', String(customize));
+        b.textContent = customize ? 'Usa la stessa vita iniziale' : 'Personalizza per giocatore';
+        form.elements.life_mode.onchange();
+        return;
+      }
+      if (b.hasAttribute('data-life-step')) {
+        const input = form.elements.common_life;
+        input.value = Math.max(1, Math.min(999, (Number(input.value) || 20) + Number(b.dataset.lifeStep)));
+        return;
+      }
       if (form.elements.kind.value === 'tournament') return;
       if (b.hasAttribute('data-add-ffa-guest')) {
         const name = form.querySelector('[data-ffa-guest]').value.trim();
-        if (name) addFreeForAllPlayer({name}, '[data-ffa-guest]');
+        if (name) addFreeForAllPlayer({name}, '[data-ffa-profile]');
         return;
       }
       if (b.hasAttribute('data-remove-player')) {
@@ -395,7 +470,14 @@
         return;
       }
       if (b.hasAttribute('data-remove-member')) { const [i,j] = b.dataset.removeMember.split(',').map(Number); sides[i].splice(j,1); }
-      else if (b.hasAttribute('data-add-guest')) { const i = Number(b.dataset.addGuest), name = root.querySelector(`[data-guest="${i}"]`).value.trim(); if (!name) return; sides[i].push({name}); }
+      else if (b.hasAttribute('data-add-guest')) {
+        const i = Number(b.dataset.addGuest), name = root.querySelector(`[data-guest="${i}"]`).value.trim();
+        if (!name) return;
+        if (form.elements.format.value !== 'team') sides[i] = [{name}];
+        else if (sides[i].length < 6) sides[i].push({name});
+        else { error.textContent = 'La squadra ha già sei giocatori.'; return; }
+        error.textContent = '';
+      }
       else return;
       renderSides();
     };

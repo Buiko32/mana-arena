@@ -192,3 +192,37 @@
   transform:translate(-50%,-50%) rotate(var(--table-turn));
 }
 .life-playing .life-ffa-dice-grid [data-bottom-seat] .life-dice-inner { width:100cqw; height:100cqh; }
+
+#life #life-setup {gap:.6rem;margin-top:1rem}
+#life-setup p {margin:0}
+#life-setup p:empty:not([data-match-hint]) {display:none}
+.life-segments {display:flex;overflow:hidden;border:1px solid var(--line);border-radius:.65rem;background:var(--panel)}
+#life .life-segments button {flex:1;min-width:0;padding:.4rem .3rem;border:0;border-radius:0;background:transparent;font-size:clamp(.8rem,3.55vw,1rem);font-weight:650;line-height:1.15}
+#life .life-segments button+button {border-inline-start:1px solid var(--line)}
+#life .life-segments button[data-format="ffa"] {flex:1.35}
+#life .life-segments button[aria-pressed="true"],#life-setup [type="submit"] {background:var(--amber);color:#211510}
+#life .life-segments button:focus-visible {outline-offset:-3px}
+.life-setup-players {margin-top:.45rem}
+.life-setup-players h2 {margin:0 0 .4rem;font-size:1.2rem}
+#life-setup .life-setup-sides {grid-template-columns:minmax(0,1fr);gap:.45rem}
+#life-setup fieldset {margin:0;padding:.55rem .65rem;gap:.45rem;background:var(--panel)}
+#life-setup .life-setup-player {padding:0;border-color:var(--line)}
+#life-setup .life-setup-player > :is(.life-add-member,label,.life-member) {padding:0 .65rem .45rem}
+#life-setup .life-member {min-height:44px}
+.life-player-choice {display:flex;align-items:center;min-width:0}
+.life-player-choice > span {padding-inline:.75rem .4rem;font-weight:700}
+#life-setup .life-player-choice select {border:0;background:transparent}
+#life-setup .life-player-choice option {background:var(--panel)}
+#life-setup .life-player-choice button {flex:none;min-width:44px;min-height:44px;border:0}
+.life-initial-row {display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.3rem .6rem;border:1px solid var(--line);border-radius:.65rem;background:var(--panel)}
+.life-stepper {display:flex;align-items:center}
+#life .life-stepper input {width:3.2rem;text-align:center;padding:.3rem;appearance:textfield;border-radius:0;background:var(--bg);border-color:var(--line);font-weight:700}
+.life-stepper input::-webkit-inner-spin-button,.life-stepper input::-webkit-outer-spin-button {appearance:none;margin:0}
+#life .life-stepper button {padding:0;background:var(--panel-2);border-color:var(--line);font-size:1.15rem}
+#life .life-stepper button:first-child {border-radius:.45rem 0 0 .45rem}
+#life .life-stepper button:last-child {border-radius:0 .45rem .45rem 0}
+.life-customize {justify-self:start;min-height:44px;padding-inline:.35rem;color:var(--muted);text-decoration:underline;text-underline-offset:.18em}
+#life-setup [type="submit"] {width:100%;min-height:46px;font-size:1rem}
+@media(min-width:640px) {
+  #life-setup .life-setup-sides:has(fieldset:not(.life-setup-player)):not(.life-setup-ffa) {grid-template-columns:repeat(2,minmax(0,1fr))}
+}
