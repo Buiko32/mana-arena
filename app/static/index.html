@@ -32,7 +32,7 @@
     </a>
     <nav aria-label="Navigazione principale" class="main-nav">
       <a href="#public-view" data-view-link="public" aria-current="page"><svg class="mobile-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8m-4-4v4M7 4h10v7a5 5 0 0 1-10 0V4Zm0 2H4v2a4 4 0 0 0 3 4m10-6h3v2a4 4 0 0 1-3 4"/></svg>Tornei</a>
-      <a href="#live" data-live-link hidden><svg class="mobile-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="2"/><path d="M8 8a6 6 0 0 0 0 8m8-8a6 6 0 0 1 0 8M5 5a10 10 0 0 0 0 14M19 5a10 10 0 0 1 0 14"/></svg>LIVE</a>
+      <a href="#live" data-live-link><svg class="mobile-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="2"/><path d="M8 8a6 6 0 0 0 0 8m8-8a6 6 0 0 1 0 8M5 5a10 10 0 0 0 0 14M19 5a10 10 0 0 1 0 14"/></svg>LIVE<span class="live-nav-dot" hidden aria-hidden="true"></span></a>
       <a href="#global-ranking" data-ranking-link aria-current="false"><svg class="mobile-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16M7 17v-6m5 6V7m5 10V4"/></svg>Classifica globale</a>
       <a href="#history" data-history-link><svg class="mobile-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11a9 9 0 1 1 3 7m-3-7V5m0 6h6m3-4v5l3 2"/></svg>Storico</a>
       <a href="#admin-view" data-view-link="admin"><svg class="mobile-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h14M8 4v4m8 2v4m-6 2v4"/></svg>Organizza</a>
@@ -63,10 +63,13 @@
     </div>
 
     <section id="live" class="wrap" aria-labelledby="live-title" hidden>
-      <header class="section-heading public-heading"><h2 id="live-title">Partite live</h2></header>
+      <header class="section-heading public-heading"><h2 id="live-title">Partite LIVE</h2><strong id="live-balance" hidden></strong></header>
       <a id="live-back" class="button quiet" href="#live" hidden>← Tutte le partite</a>
       <p id="live-status" role="status">Caricamento partite…</p>
       <div id="live-games"></div>
+      <section id="live-scheduled"><h3>In programma</h3><div id="live-upcoming"></div></section>
+      <section id="live-tickets" hidden><h3>Le tue puntate</h3><div id="live-receipts"></div></section>
+      <dialog id="live-bet-dialog" aria-labelledby="live-bet-title"></dialog>
     </section>
     <section id="history" class="wrap" aria-labelledby="history-title" hidden>
       <h1 id="history-title">Storico partite</h1>
@@ -136,7 +139,7 @@
       </div>
     </section>
   </main>
-  <footer><span class="brand-mini">✦ MANA ARENA</span><span class="app-version">Versione 0.01.61</span><a href="#admin-view" data-view-link="admin">Area organizzatore</a></footer>
+  <footer><span class="brand-mini">✦ MANA ARENA</span><span class="app-version">Versione 0.01.64</span><a href="#admin-view" data-view-link="admin">Area organizzatore</a></footer>
   <dialog id="identity-welcome" class="identity-welcome" aria-labelledby="identity-welcome-title" aria-describedby="identity-welcome-description">
     <p class="identity-welcome-kicker">MANA ARENA</p>
     <h2 id="identity-welcome-title">Chi sta giocando?</h2>

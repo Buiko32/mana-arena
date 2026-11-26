@@ -6,6 +6,7 @@ from heapq import nlargest, nsmallest
 from zoneinfo import ZoneInfo
 
 from .engine import calculate_standings
+from .live_bets import balance_changes
 from .weekly_missions import WeeklyMissions
 
 
@@ -213,8 +214,9 @@ class ManaFragments:
     STREAK_REWARDS = {3: 10, 5: 20}
     TOURNAMENT_REWARD = 30
 
-    def __init__(self, conn, matches):
+    def __init__(self, conn, matches, *, bet_changes=None):
         self.weekly = WeeklyMissions()
+        self.bet_changes = bet_changes or {}
         self.top_two = self.bottom_two = ()
         self.balances = {
             champion: count * self.TOURNAMENT_REWARD
@@ -233,7 +235,7 @@ class ManaFragments:
             first, second = match.get('p1'), match.get('p2')
             if first and second and first != second:
                 for player_id in (first, second):
-                    self.balances[player_id] = self.balance(player_id) + self.PARTICIPATION_REWARD
+                    self.balances[player_id] = self.balances.get(player_id, 0) + self.PARTICIPATION_REWARD
 
     def before_game(self, rows, match):
         timestamp = match['elo_date']
@@ -277,7 +279,7 @@ class ManaFragments:
                 self.balances[player_id] += self.STREAK_REWARDS[streak]
 
     def balance(self, player_id):
-        return self.balances.get(player_id, 0) + self.weekly.balance(player_id)
+        return self.balances.get(player_id, 0) + self.weekly.balance(player_id) + self.bet_changes.get(player_id, 0)
 
 
 def match_elo_deltas(conn, ids):
@@ -300,7 +302,7 @@ def global_elo_from_db(conn, *, include_movement=False):
     if not include_movement:
         return [row for row in calculate_global_elo(players, matches) if row['active']]
 
-    fragments = ManaFragments(conn, matches)
+    fragments = ManaFragments(conn, matches, bet_changes=balance_changes(conn))
     rome = ZoneInfo('Europe/Rome')
     day = None
     opening = {}
@@ -349,7 +351,7 @@ def opponent_profile(row):
 def elo_snapshot(conn, player_ids):
     ids = set(player_ids)
     players, matches = _elo_inputs(conn)
-    fragments = ManaFragments(conn, matches)
+    fragments = ManaFragments(conn, matches, bet_changes=balance_changes(conn))
     rows = calculate_global_elo(players, matches, before_game=fragments.before_game,
                                 on_game=lambda _rows, match, updates: fragments.record(match, updates))
     active = [row for row in rows if row['active']]
@@ -381,7 +383,7 @@ def player_statistics(conn, player_id):
     if player_id not in active_ids:
         return None
 
-    fragments = ManaFragments(conn, matches)
+    fragments = ManaFragments(conn, matches, bet_changes=balance_changes(conn))
     history = []
     recent_results = []
     head_to_head = {}

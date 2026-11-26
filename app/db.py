@@ -83,6 +83,16 @@ class Database:
                 CREATE TABLE IF NOT EXISTS team_results (id TEXT PRIMARY KEY, proposer_id TEXT NOT NULL REFERENCES players(id), winning_team TEXT NOT NULL CHECK(winning_team IN ('a','b')), status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
                 CREATE TABLE IF NOT EXISTS team_result_players (result_id TEXT NOT NULL REFERENCES team_results(id) ON DELETE CASCADE, player_id TEXT NOT NULL REFERENCES players(id), team TEXT NOT NULL CHECK(team IN ('a','b')), confirmed INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(result_id,player_id));
                 CREATE TABLE IF NOT EXISTS ffa_results (id TEXT PRIMARY KEY, placements TEXT NOT NULL, created_at TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS mana_bets (
+                    id INTEGER PRIMARY KEY, market TEXT NOT NULL, match_id TEXT NOT NULL, tournament_id TEXT,
+                    p1 TEXT NOT NULL, p2 TEXT NOT NULL, bettor TEXT NOT NULL, selection TEXT NOT NULL,
+                    amount INTEGER NOT NULL CHECK(amount >= 5 AND amount % 5 = 0), multiplier INTEGER NOT NULL,
+                    created_at INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending'
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS mana_active_bet ON mana_bets(market,bettor) WHERE status!='refunded';
+                CREATE TABLE IF NOT EXISTS live_tournament_markets (
+                    match_id TEXT PRIMARY KEY REFERENCES matches(id) ON DELETE CASCADE, session_id TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS life_result_links (session_id TEXT PRIMARY KEY, kind TEXT NOT NULL, result_id TEXT);
             """)
             player_columns = {row[1] for row in conn.execute("PRAGMA table_info(players)")}

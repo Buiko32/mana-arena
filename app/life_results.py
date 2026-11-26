@@ -21,6 +21,8 @@ def submit_result(db, game, cookie, csrf):
             return {'result_status': 'unauthorized'}
         previous = conn.execute('SELECT kind,result_id FROM life_result_links WHERE session_id=?', (str(game.session_id),)).fetchone()
         if previous:
+            if previous['kind'] == 'draw':
+                return {'result_status': 'stats_only'}
             if previous['kind'] == 'ffa':
                 exists = conn.execute('SELECT 1 FROM ffa_results WHERE id=?', (previous['result_id'],)).fetchone()
                 return {'result_status': 'confirmed', 'result_id': previous['result_id']} if exists else {'result_status': 'unavailable'}
@@ -33,6 +35,16 @@ def submit_result(db, game, cookie, csrf):
             conn.execute('INSERT INTO life_result_links VALUES (?,?,NULL)', (str(game.session_id),'none'))
             return {'result_status':'unavailable'}
         sides = [[member.id for member in side.members] for side in game.players]
+        wager = conn.execute("SELECT p1,p2 FROM mana_bets WHERE market=? LIMIT 1",
+                             (f'live:{game.session_id}',)).fetchone()
+        if wager and (game.format != 'duel' or target.kind != 'friendly' or
+                      {pid for side in sides for pid in side} != {wager['p1'], wager['p2']} or
+                      target.proposer_id not in {wager['p1'], wager['p2']}):
+            return {'result_status':'unavailable'}
+        if game.winner is None and target.kind == 'friendly' and game.format == 'duel':
+            if wager:
+                conn.execute("INSERT INTO life_result_links VALUES (?,'draw',NULL)", (str(game.session_id),))
+            return {'result_status': 'stats_only'}
         if game.winner is None or any(not pid for side in sides for pid in side):
             return unavailable()
         if game.format == 'ffa' and (not game.placements or target.kind != 'friendly'):

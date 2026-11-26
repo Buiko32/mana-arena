@@ -1057,6 +1057,10 @@ def create_app(*, data_dir=None, admin_username=None, admin_password=None, sessi
                 if scope == "all" and db.photos_dir.exists():
                     # Include orphaned files owned by the app, but never arbitrary paths.
                     photos = sorted(set(photos) | {p.name for p in db.photos_dir.iterdir() if re.fullmatch(r"[a-f0-9]{32}\.jpg", p.name)})
+                if scope in ("results", "all"):
+                    conn.execute("DELETE FROM mana_bets")
+                else:
+                    conn.execute("DELETE FROM mana_bets WHERE tournament_id IS NOT NULL")
                 if scope == "results":
                     conn.execute("DELETE FROM result_proposals")
                     conn.execute("DELETE FROM ffa_results")

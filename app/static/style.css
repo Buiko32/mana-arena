@@ -462,7 +462,9 @@ footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:va
   .global-table :is(th,td):nth-child(6){display:none}
 }
 
-.avatar > .avatar-mascot, .avatar > img { grid-area:1 / 1; }
+.avatar {position:relative;grid-template: minmax(0,1fr) / minmax(0,1fr)}
+.avatar > .avatar-mascot {grid-area:1 / 1;min-width:0;min-height:0}
+.avatar > img {position:absolute;inset:0;display:block;width:100%;height:100%;object-fit:cover}
 
 .profile-header{display:flex;align-items:center;gap:.8rem;margin:1.1rem 0}
 .profile-header .avatar{width:56px;height:56px}
@@ -597,7 +599,7 @@ footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:va
 .live-sides{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,8.5rem),1fr));gap:.5rem}
 .live-summary,.live-detail{display:grid;align-content:start;gap:.65rem}
 .live-side{align-content:start;overflow-wrap:anywhere;background:var(--panel);border-radius:8px;padding:.65rem}
-.live-player{justify-content:flex-start;align-items:center;font-size:.88rem}
+.live-player{grid-template-columns:24px minmax(0,1fr);align-items:center;font-size:.88rem}
 .live-player .avatar{width:24px;height:24px;flex:none}
 .live-members{display:grid;gap:.2rem}
 .live-score{position:relative;width:fit-content;padding-inline-end:2.1rem}
@@ -698,7 +700,7 @@ footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:va
 .profile-overview{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.7fr);align-items:center;column-gap:1rem;margin:1.25rem 0 1.75rem}
 .profile-overview .profile-header{margin:0;min-width:0}
 .profile-overview .profile-header .avatar{width:clamp(5rem,11vw,7.25rem);height:clamp(5rem,11vw,7.25rem);flex:none;border:2px solid #e29b78}
-.profile-overview h1{font-size:clamp(1.75rem,4vw,3rem);color:#ffe4cb}
+.profile-overview h1{min-width:0;font-size:clamp(1.75rem,4vw,3rem);color:#ffe4cb;overflow-wrap:break-word}
 .profile-overview .profile-edit{grid-column:1/-1;border:0;margin:.35rem 0 0}
 .profile-overview .profile-edit>summary{color:var(--amber-bright);width:fit-content}
 .profile-key-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:0;text-align:center}
@@ -730,9 +732,55 @@ footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:va
 .profile-disclosure[open]>summary::after{transform:rotate(135deg)}
 .profile-disclosure>summary:hover{color:var(--amber-bright)}
 .profile-disclosure>div{padding:.35rem 0 1rem}
-@media(max-width:640px){
+@media(max-width:760px){
   .profile-overview{grid-template-columns:minmax(0,1fr);row-gap:.75rem}
   .profile-overview .profile-edit{grid-row:2;margin:0}
   .profile-key-metrics>div:first-child{border-inline-start:0}
   .player-profile-page .weekly-missions summary{padding-inline:.65rem;gap:.45rem}
 }
+
+.live-nav-dot{inline-size:.55rem;block-size:.55rem;border-radius:50%;background:#ff574b;box-shadow:0 0 .45rem #ff574b;animation:live-nav-pulse 1.4s ease-in-out infinite}
+.topbar [data-live-link]{display:flex;align-items:center;justify-content:center;gap:.3rem}
+@keyframes live-nav-pulse{50%{opacity:.3}}
+@media(prefers-reduced-motion:reduce){.live-nav-dot{animation:none}}
+#live-balance{color:var(--amber-bright);font-size:.92rem;text-align:right}
+#live-scheduled,#live-tickets{margin-top:1.75rem}
+#live-upcoming,#live-receipts{display:grid;gap:.7rem}
+.live-market-host:not(:empty),.live-upcoming-card .live-market{margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--line)}
+.live-market{min-width:0}
+.live-market > p,.live-market > h4{margin:.65rem 0 0}
+.live-quote-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.55rem}
+.live-quote{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:.4rem;padding:.65rem;border:1px solid var(--line);border-radius:.6rem;min-width:0;background:var(--panel)}
+.live-quote .avatar{width:clamp(2rem,7vw,3.75rem);height:clamp(2rem,7vw,3.75rem);border:1px solid var(--amber)}
+.live-quote-info{display:grid;gap:.15rem;min-width:0;overflow-wrap:anywhere}
+.live-quote-info b{color:var(--amber-bright);font-size:1.15rem;font-variant-numeric:tabular-nums}
+.live-quote-info small{color:var(--muted)}
+.live-quote button{grid-column:1/-1;min-height:44px}
+.live-receipt{display:flex;flex-wrap:wrap;justify-content:space-between;gap:.45rem 1rem;padding:.65rem;border:1px solid var(--line);border-radius:.55rem;font-size:.86rem}
+.live-market h4+.live-receipt{margin-top:.35rem}
+#live-bet-dialog form{display:flex;flex-wrap:wrap;gap:.8rem}
+#live-bet-dialog form > :is(label,output,p){flex-basis:100%;margin:0}
+#live-bet-dialog input[type=range]{display:block;width:100%;padding:0;accent-color:var(--amber-bright);touch-action:pan-y}
+#live-bet-dialog output{color:var(--amber-bright);font-weight:700}
+.live-bet-error{color:var(--red)}
+.live-bet-error:empty{display:none}
+@media(min-width:850px){
+  :is(.live-detail,.live-summary):has(.live-market-host:not(:empty)){grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:.65rem 1.25rem}
+  :is(.live-detail,.live-summary):has(.live-market-host:not(:empty)) > :not(.live-market-host){grid-column:1}
+  :is(.live-detail,.live-summary) .live-market-host:not(:empty){grid-column:2;grid-row:1/span 3;margin:0;padding:0 0 0 1rem;border-top:0;border-left:1px solid var(--line)}
+}
+
+.live-in-progress{display:inline-flex;align-items:center;gap:.35rem;color:var(--amber-bright);margin-inline-end:.4rem;font-size:.85em}
+.live-in-progress::before{content:"";width:.47rem;height:.47rem;border-radius:50%;background:#ff574b;flex:none}
+.live-sides.live-duel{grid-template-columns:repeat(2,minmax(0,1fr))}
+.live-duel .live-score{max-width:100%;padding-inline-end:1.55rem}
+
+.live-side-market{display:grid;gap:.12rem;margin-block-start:.2rem}
+.live-side-market:empty{display:none}
+.live-side-market b{color:var(--amber-bright);font-size:1.15rem;font-variant-numeric:tabular-nums}
+.live-side-market small{color:var(--muted)}
+.live-duel:has(.live-side-market:not(:empty)) .live-player{grid-template-columns:clamp(2rem,7vw,3.75rem) minmax(0,1fr)}
+.live-duel:has(.live-side-market:not(:empty)) .live-player .avatar{width:clamp(2rem,7vw,3.75rem);height:clamp(2rem,7vw,3.75rem);border:1px solid var(--amber)}
+.live-market-host .live-quote{padding:0;border:0;background:none}
+.live-market-host .live-quote button{overflow-wrap:anywhere}
+.live-market-host h4:first-child,.live-market-host p:first-child{margin-top:0}

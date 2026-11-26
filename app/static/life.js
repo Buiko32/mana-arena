@@ -581,23 +581,23 @@
     const [id, snapshot] = pendingLive.entries().next().value;
     pendingLive.delete(id);
     const headers = {'X-Mana-Live':'1'};
-    if (snapshot) headers['Content-Type'] = 'application/json';
-    liveRequest = fetch('/api/life/live/' + encodeURIComponent(id), {
-      method: snapshot ? 'PUT' : 'DELETE', headers,
-      body: snapshot ? JSON.stringify(snapshot) : undefined,
+    if (snapshot && snapshot !== 'cancel') headers['Content-Type'] = 'application/json';
+    liveRequest = fetch('/api/life/live/' + encodeURIComponent(id) + (snapshot === 'cancel' ? '?cancel=true' : ''), {
+      method: snapshot && snapshot !== 'cancel' ? 'PUT' : 'DELETE', headers,
+      body: snapshot && snapshot !== 'cancel' ? JSON.stringify(snapshot) : undefined,
       signal: globalThis.AbortSignal?.timeout?.(7000)
     }).catch(() => {}).finally(() => {
       liveRequest = null;
       flushLive();
     });
   }
-  function queueLive(active) {
+  function queueLive(active, cancel = false) {
     pendingLive.set(game.session_id, active ? {
-      format: game.format, kind: game.kind, tournament_id: game.match?.tournament?.id,
+      format: game.format, kind: game.kind, tournament_id: game.match?.tournament?.id, match_id: game.match?.id,
       sides: game.sides.map(({initial, life, members}) => ({
         initial, life, members: members.map(({id, name}) => ({id, name}))
       }))
-    } : null);
+    } : cancel ? 'cancel' : null);
     flushLive();
   }
   function scheduleLive(delay) {
@@ -693,7 +693,7 @@
       return;
     }
     clearTimeout(liveTimer);
-    queueLive(false);
+    queueLive(false, true);
     for (const {timer} of tapFeedback.values()) clearTimeout(timer);
     tapFeedback.clear();
     game = null;
@@ -788,7 +788,16 @@
     game.payload={session_id:game.session_id,started_at:game.started_at,ended_at:stamp(),starting_life:game.sides[0].initial,format:game.format,players:game.sides.map(side=>({name:side.name,initial_life:side.initial,final_life:side.life,members:side.members.map(member=>({id:member.id||null,name:member.name}))})),changes:game.changes.map(({at,player,delta,life,undo})=>({at,player,delta,life,undo:!!undo})),winner:winner};
     if (placements) game.payload.placements = placements;
     const signedInPlayer = placements && game.sides.some(side => side.members[0].id === game.proposer) ? game.proposer : null;
-    if(game.payload.winner && (game.format!=='ffa' || placements) && game.sides.every(side=>side.members.length<=3 && side.members.every(member=>member.id))){const proposer=game.kind==='tournament'?game.proposer:(signedInPlayer || game.sides[0].members[0].id);if(proposer)game.payload.result_target=game.kind==='tournament'?{kind:'tournament',tournament_id:game.match.tournament.id,match_id:game.match.id,proposer_id:proposer}:{kind:'friendly',proposer_id:proposer};}
+    const friendlyDraw = !winner && game.kind === 'friendly' && game.format === 'duel' &&
+      game.proposer && game.sides.some(side => side.members[0].id === game.proposer);
+    if ((winner || friendlyDraw) && (game.format !== 'ffa' || placements) &&
+        game.sides.every(side => side.members.length <= 3 && side.members.every(member => member.id))) {
+      const proposer = game.kind === 'tournament' || friendlyDraw
+        ? game.proposer : (signedInPlayer || game.sides[0].members[0].id);
+      if (proposer) game.payload.result_target = game.kind === 'tournament'
+        ? {kind:'tournament', tournament_id:game.match.tournament.id, match_id:game.match.id, proposer_id:proposer}
+        : {kind:'friendly', proposer_id:proposer};
+    }
     if(!enqueue(game.payload)){game.payload=null;return;}persist();savePending();
   }
   function savePending(){
