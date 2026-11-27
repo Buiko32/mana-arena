@@ -784,3 +784,137 @@ footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:va
 .live-market-host .live-quote{padding:0;border:0;background:none}
 .live-market-host .live-quote button{overflow-wrap:anywhere}
 .live-market-host h4:first-child,.live-market-host p:first-child{margin-top:0}
+
+/* LIVE scoreboard */
+#live {
+  --live-ink: #fff0d9;
+  --live-muted: #c1c6cf;
+  --live-accent: #ff9a54;
+  --live-surface: #121820;
+  --live-border: #424a56;
+  color: var(--live-ink);
+}
+#live .public-heading h2 {
+  font-size: clamp(2.15rem, 5vw, 4.15rem);
+  line-height: 1;
+  letter-spacing: -.025em;
+  text-transform: none;
+}
+#live-balance { color: var(--live-accent); }
+#live-scheduled, #live-tickets { border-top: 1px solid var(--live-border); padding-top: 1rem; }
+#live-scheduled > h3, #live-tickets > h3 { font-size: clamp(1.55rem, 3vw, 2.25rem); }
+#live :is(.live-summary, .live-detail, .live-upcoming-card) {
+  padding: 0;
+  background: var(--live-surface);
+  border-color: var(--live-border);
+  border-radius: .65rem;
+}
+#live :is(.live-summary, .live-detail) {
+  grid-column: 1 / -1;
+  grid-template-areas: "heading" "duel" "footer" "market";
+  gap: 0;
+}
+.live-card-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: .35rem .7rem;
+  padding: .8rem 1rem;
+  margin: 0;
+  border-bottom: 1px solid var(--live-border);
+  font-size: 1rem;
+}
+:is(.live-summary, .live-detail) > .live-card-heading { grid-area: heading; }
+.live-card-heading > span:last-child { color: var(--live-muted); font: 600 .85rem system-ui, sans-serif; }
+.live-in-progress { color: var(--live-accent); font-size: 1.12rem; }
+#live .live-sides { grid-area: duel; position: relative; padding: 1rem; gap: .65rem; }
+#live .live-side { background: transparent; padding: .25rem; }
+#live .live-duel { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(1.25rem, 7vw, 3rem); }
+#live .live-duel .live-side {
+  --portrait: clamp(2.75rem, 12vw, 8rem);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: var(--portrait) auto;
+  align-items: center;
+  justify-items: center;
+  gap: .3rem .4rem;
+  text-align: center;
+}
+#live .live-duel .live-side:nth-child(2) { grid-template-columns: auto minmax(0, 1fr); }
+#live .live-duel :is(.live-members, .live-player) { display: contents; }
+#live .live-duel .live-player .avatar {
+  grid-column: 1;
+  grid-row: 1;
+  width: min(100%, var(--portrait));
+  height: auto;
+  aspect-ratio: 1;
+  border: 1px solid #d59858;
+}
+#live .live-duel .live-player strong {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  min-width: 0;
+  font-family: Georgia, serif;
+  font-size: clamp(1rem, 2.6vw, 1.75rem);
+}
+#live .live-duel .live-score {
+  grid-column: 2;
+  grid-row: 1;
+  padding: 0;
+  min-width: 2.2rem;
+  border: 1px solid var(--live-border);
+  border-radius: .45rem;
+  background: #0f141b;
+}
+#live .live-duel .live-side:nth-child(2) .avatar { grid-column: 2; }
+#live .live-duel .live-side:nth-child(2) .live-score { grid-column: 1; }
+.live-duel .live-total { display: block; padding: .15rem .38rem; color: var(--live-ink); font: 700 clamp(1.05rem, 3.2vw, 2.55rem) Georgia, serif; }
+.live-duel .live-change { inset-inline-end: auto; inset-inline-start: 50%; top: -1rem; }
+.live-duel-mark { position: absolute; width: clamp(.85rem, 2.75vw, 1.6rem); left: 50%; top: calc(1.25rem + clamp(2.75rem, 12vw, 8rem) / 2); transform: translate(-50%, -50%); }
+.live-duel :is(.live-side-market,.muted) { grid-column: 1 / -1; }
+#live .live-side-market b, #live .live-quote-info b { color: var(--live-accent); }
+#live .live-side-market small, #live .live-quote-info small { color: var(--live-muted); }
+#live :is(.live-open,.live-estimate) { grid-area: footer; margin: 0 1rem .75rem; }
+#live .live-open { justify-self: start; min-height: 44px; display: inline-flex; align-items: center; }
+#live .live-market-host:not(:empty) { grid-area: market; margin: 0; padding: 1rem; border-top: 1px solid var(--live-border); border-left: 0; }
+#live .live-market h4 { font: 700 clamp(1.2rem, 2.5vw, 1.75rem) Georgia, serif; }
+#live .live-upcoming-card .live-market { display: grid; gap: .75rem; margin: 0; padding: .85rem 1rem; border-top: 0; align-items: center; }
+#live .live-upcoming-card .live-quote-grid { column-gap: .85rem; }
+#live .live-upcoming-card .live-quote { border: 0; padding: 0; background: transparent; }
+#live .live-upcoming-card .live-quote-info strong { font-family: Georgia, serif; font-size: 1.12rem; }
+#live .live-receipt { display: block; padding: .8rem; border-color: var(--live-border); background: #171e28; }
+#live .live-receipt > strong { display: block; font: 700 1.15rem Georgia, serif; overflow-wrap: anywhere; }
+.live-receipt dl { margin: .55rem 0 0; }
+.live-receipt dl div { display: flex; justify-content: space-between; gap: .55rem; padding: .45rem 0; border-top: 1px solid var(--live-border); }
+.live-receipt dd { margin: 0; white-space: nowrap; color: var(--live-accent); font-weight: 750; }
+#live .live-upcoming-bet { min-height: 44px; }
+#live .button.primary { background: #c57031; border-color: #e29154; color: #19110b; }
+#live-bet-dialog { background: var(--live-surface); border-color: var(--live-border); }
+#live-bet-dialog input[type=range], #live-bet-dialog output { accent-color: var(--live-accent); color: var(--live-accent); }
+@media (min-width: 850px) {
+  #live :is(.live-summary, .live-detail):has(.live-market-host:not(:empty)) {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    grid-template-areas: "heading market" "duel market" "footer market";
+  }
+  #live :is(.live-summary, .live-detail):has(.live-market-host:not(:empty)) > * { grid-column: auto; }
+  #live .live-market-host:not(:empty) { border-top: 0; border-left: 1px solid var(--live-border); }
+  #live .live-upcoming-card .live-market:has(.live-upcoming-bet) { grid-template-columns: minmax(0, 1fr) minmax(8rem, 13rem); }
+  #live .live-upcoming-card .live-market > p { grid-column: 1 / -1; }
+}
+@media (max-width: 420px) {
+  #live .live-sides, #live .live-market-host:not(:empty), #live .live-upcoming-card .live-market { padding-inline: .62rem; }
+  .live-card-heading { padding-inline: .62rem; }
+  #live .live-duel { gap: 1rem; }
+}
+
+#live { scroll-margin-block-start: 5rem; }
+@media (max-width: 760px) {
+  .topbar [data-live-link] .live-nav-dot {
+    position: absolute;
+    inset-block-start: .45rem;
+    inset-inline-end: calc(50% - 1rem);
+    inline-size: .4rem;
+    block-size: .4rem;
+  }
+}

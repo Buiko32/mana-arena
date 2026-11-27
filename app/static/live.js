@@ -29,6 +29,7 @@
     .then(rows => {
       players = new Map(rows.map(player => [player.id, player]));
       layout = undefined;
+      marketLayout = undefined;
       if (!section.hidden) render();
     }).catch(() => {});
 
@@ -51,20 +52,24 @@
     return row;
   }
 
+  function gameHeading(game, tag) {
+    const heading = element(tag, undefined, 'live-card-heading');
+    heading.append(element('span', 'In corso', 'live-in-progress'), element('span', label(game)));
+    return heading;
+  }
+
   function renderSummary(game) {
     const card = element('article', undefined, 'history-match live-summary');
     const open = element('a', 'Apri partita →', 'live-open');
     open.href = '#live/' + encodeURIComponent(game.id);
-    const heading = element('strong', label(game));
-    heading.prepend(element('span', 'In corso', 'live-in-progress'), ' ');
+    const heading = gameHeading(game, 'h3');
     card.append(heading, renderSides(game, false), open, element('div', undefined, 'live-market-host'));
     return card;
   }
 
   function renderDetail(game) {
     const card = element('article', undefined, 'history-match live-detail');
-    const heading = element('h2', label(game));
-    heading.prepend(element('span', 'In corso', 'live-in-progress'), ' ');
+    const heading = gameHeading(game, 'h3');
     card.append(heading, renderSides(game, true));
     const estimate = element('p', 'Stima basata su vita residua, Elo e scontri diretti.', 'live-estimate muted');
     card.append(estimate, element('div', undefined, 'live-market-host'));
@@ -74,6 +79,12 @@
   function renderSides(game, detail) {
     const sides = element('div', undefined, game.format === 'duel' ? 'live-sides live-duel' : 'live-sides');
     sides.append(...game.sides.map(side => renderSide(side, detail)));
+    if (game.format === 'duel') {
+      const mark = element('img', undefined, 'live-duel-mark');
+      mark.src = '/static/mana-fragment.svg';
+      mark.alt = '';
+      sides.append(mark);
+    }
     return sides;
   }
 
@@ -91,7 +102,8 @@
       }
       if (delta !== 0) {
         total.dataset.life = life;
-        total.textContent = `${life} PV`;
+        total.textContent = life;
+        total.setAttribute('aria-label', life + ' punti vita');
       }
       const odds = row.querySelector('.live-odds');
       if (odds) {
@@ -142,9 +154,17 @@
 
   function receipt(bet) {
     const row = element('div', undefined, 'live-receipt');
-    row.append(element('strong', (bet.name || playerName(bet.selection)) + ' · ' + bet.amount + ' Mana'),
-      element('span', 'Quota fissata ' + multiplier(bet.multiplier)),
-      element('span', bet.status === 'pending' ? 'Ritorno potenziale ' + payout(bet.amount, bet.multiplier) + ' Mana' : statusLabels[bet.status]));
+    row.append(element('strong', (bet.name || playerName(bet.selection)) + ' · ' + bet.amount + ' Mana'));
+    const details = element('dl');
+    const add = (label, value) => {
+      const line = element('div');
+      line.append(element('dt', label), element('dd', value));
+      details.append(line);
+    };
+    add('Quota fissata', multiplier(bet.multiplier));
+    if (bet.status === 'pending') add('Ritorno potenziale', payout(bet.amount, bet.multiplier) + ' Mana');
+    else add('Esito', statusLabels[bet.status]);
+    row.append(details);
     return row;
   }
 
@@ -174,7 +194,7 @@
           element('small', market.totals[i] + ' Mana puntati'));
         row.append(info);
       }
-      if (markets.viewer && !market.participant && !market.own) {
+      if (inline && markets.viewer && !market.participant && !market.own) {
         const button = element('button', inline ? 'Punta su ' + name : 'Punta', 'button primary');
         button.type = 'button';
         button.disabled = markets.viewer.balance < 5;
@@ -185,6 +205,13 @@
       if (row.childElementCount) choices.append(row);
     });
     if (choices.childElementCount) panel.append(choices);
+    if (!inline && markets.viewer && !market.participant && !market.own) {
+      const button = element('button', 'Punta', 'button primary live-upcoming-bet');
+      button.type = 'button';
+      button.disabled = markets.viewer.balance < 5;
+      button.addEventListener('click', () => openBet(market, null, button));
+      panel.append(button);
+    }
     if (market.own) panel.append(element('h4', 'La tua puntata'), receipt(market.own));
     else if (market.participant) panel.append(element('p', 'Stai giocando questa partita.', 'muted'));
     else if (!markets.viewer) panel.append(element('p', 'Accedi al tuo profilo per puntare.', 'muted'));
@@ -201,7 +228,7 @@
     marketLayout = key;
     upcoming.replaceChildren(...(markets?.scheduled.length ? markets.scheduled.map(market => {
       const card = element('article', undefined, 'history-match live-upcoming-card');
-      card.append(element('strong', market.title), renderMarket(market));
+      card.append(element('h4', market.title, 'live-card-heading'), renderMarket(market));
       return card;
     }) : [element('p', marketsUnavailable && !markets ? 'Incontri in programma non disponibili.' : markets ? 'Nessun incontro in programma.' : 'Caricamento incontri…', 'muted')]));
     tickets.hidden = !markets?.tickets.length;
@@ -209,10 +236,12 @@
   }
 
   function openBet(market, index, trigger) {
-    const quote = market.quotes[index];
+    const choose = index === null;
+    let selected = index ?? 0;
+    const quote = () => market.quotes[selected];
     const max = Math.floor(markets.viewer.balance / 5) * 5;
-    const name = market.names?.[index] || playerName(market.players[index]);
-    const heading = element('h3', 'Punta su ' + name);
+    const name = i => market.names?.[i] || playerName(market.players[i]);
+    const heading = element('h3', choose ? 'Scegli su chi puntare' : 'Punta su ' + name(selected));
     heading.id = 'live-bet-title';
     const form = element('form');
     const label = element('label', 'Frammenti Mana');
@@ -220,8 +249,10 @@
     Object.assign(range, {type:'range', min:'5', max:String(max), step:'5', value:'5'});
     label.append(range);
     const total = element('output');
+    const price = element('p');
     const update = () => {
-      total.textContent = range.value + ' Mana · Ritorno potenziale ' + payout(Number(range.value), quote) + ' Mana';
+      price.textContent = 'Quota ' + multiplier(quote());
+      total.textContent = range.value + ' Mana · Ritorno potenziale ' + payout(Number(range.value), quote()) + ' Mana';
     };
     range.addEventListener('input', update);
     update();
@@ -232,18 +263,32 @@
     cancel.onclick = () => dialog.close();
     const submit = element('button', 'Conferma puntata', 'button primary');
     submit.type = 'submit';
-    form.append(element('p', 'Quota ' + multiplier(quote)), label, total, error, cancel, submit);
+    if (choose) {
+      const playerLabel = element('label', 'Giocatore');
+      const select = element('select');
+      market.players.forEach((_, i) => {
+        const option = element('option', name(i));
+        option.value = i;
+        select.append(option);
+      });
+      select.addEventListener('change', () => { selected = Number(select.value); update(); });
+      playerLabel.append(select);
+      form.append(playerLabel);
+    }
+    form.append(price, label, total, error, cancel, submit);
     dialog.replaceChildren(heading, form);
     dialog.addEventListener('close', () => { if (trigger.isConnected) trigger.focus(); }, {once:true});
     dialog.showModal();
     form.onsubmit = async event => {
       event.preventDefault();
       submit.disabled = true;
+      const select = form.querySelector('select');
+      if (select) select.disabled = true;
       error.textContent = '';
       try {
         const response = await fetch('/api/player/live-bets', {
           method:'POST', headers:{'Content-Type':'application/json','X-Player-CSRF':markets.viewer?.csrf || ''},
-          body:JSON.stringify({market:market.id, selection:market.players[index], amount:Number(range.value), multiplier:quote})
+          body:JSON.stringify({market:market.id, selection:market.players[selected], amount:Number(range.value), multiplier:quote()})
         });
         if (!response.ok) {
           const data = await response.json();
@@ -256,6 +301,7 @@
         error.textContent = failure.message;
       } finally {
         submit.disabled = false;
+        if (select) select.disabled = false;
       }
     };
   }
