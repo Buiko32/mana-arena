@@ -2,6 +2,7 @@
 import hashlib
 import json
 import secrets
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from math import exp, log
@@ -61,18 +62,34 @@ def duel_strength(conn, snapshot):
     if a not in ratings or b not in ratings:
         return None
 
-    wins = [0, 0]
-    for match in matches:
-        pair = (match.get("p1"), match.get("p2"))
-        outcome = match.get("result")
-        if pair not in ((a, b), (b, a)) or match.get("bye") or match.get("void"):
-            continue
-        if outcome in ("p1_win", "p2_win"):
-            winner = pair[0 if outcome == "p1_win" else 1]
-            wins[0 if winner == a else 1] += 1
+    return matchup_strength([a, b], ratings, weighted_duel_wins(matches))
 
+
+DIRECT_WIN_HALF_LIFE_DAYS = 90
+
+
+def weighted_duel_wins(matches, *, now=None):
+    now = now or datetime.now(timezone.utc)
+    wins = defaultdict(float)
+    for match in matches:
+        a, b = match.get("p1"), match.get("p2")
+        outcome = match.get("result")
+        if (not a or not b or a == b or match.get("team_a") or match.get("placements") or
+                match.get("bye") or match.get("void") or outcome not in ("p1_win", "p2_win")):
+            continue
+        played = datetime.fromisoformat(match["elo_date"])
+        if played.tzinfo is None:
+            played = played.replace(tzinfo=timezone.utc)
+        age_days = max(0, (now - played).total_seconds() / 86400)
+        winner, loser = (a, b) if outcome == "p1_win" else (b, a)
+        wins[winner, loser] += 2 ** (-age_days / DIRECT_WIN_HALF_LIFE_DAYS)
+    return wins
+
+
+def matchup_strength(ids, ratings, wins):
+    a, b = ids
     elo = max(-800, min(800, ratings[a] - ratings[b])) * log(10) / 400
-    return elo + 0.6 * log((wins[0] + 4) / (wins[1] + 4))
+    return elo + 0.6 * log((wins.get((a, b), 0) + 4) / (wins.get((b, a), 0) + 4))
 
 
 def estimate(snapshot, strength):
@@ -206,10 +223,9 @@ def market_open(match):
     return match["status"] == "active" and not any(match.get(flag) for flag in ("result", "void", "bye"))
 
 
-def prematch_prediction(ids, ranking):
-    ratings = [ranking[pid]["rating"] for pid in ids]
-    difference = max(-800, min(800, ratings[0] - ratings[1]))
-    percent = max(1, min(99, round(100 / (1 + exp(-difference * log(10) / 400)))))
+def prematch_prediction(ids, ranking, wins):
+    strength = matchup_strength(ids, {pid: ranking[pid]["rating"] for pid in ids}, wins)
+    percent = max(1, min(99, round(100 / (1 + exp(-strength)))))
     return [percent, 100 - percent]
 
 
@@ -261,6 +277,7 @@ def live_markets(request: Request, response: Response):
                 active[str(key)] = market
         started = {row["match_id"] for row in conn.execute("SELECT match_id FROM live_tournament_markets")}
         scheduled = []
+        wins = weighted_duel_wins(_elo_inputs(conn)[1])
         for row in conn.execute("""
             SELECT m.id, m.tournament_id, m.round_no, m.data_json, t.config_json FROM matches m
             JOIN tournaments t ON t.id=m.tournament_id WHERE t.status='active'
@@ -273,7 +290,7 @@ def live_markets(request: Request, response: Response):
             market_id = tournament_market_id(row["tournament_id"], row["id"])
             if row["id"] in started:
                 continue
-            market = public_market(conn, market_id, ids, prematch_prediction(ids, ranking), viewer)
+            market = public_market(conn, market_id, ids, prematch_prediction(ids, ranking, wins), viewer)
             market["title"] = f'{json.loads(row["config_json"])["name"]} · Turno {row["round_no"]}'
             market["names"] = [ranking[pid]["name"] for pid in ids]
             scheduled.append(market)
@@ -318,7 +335,7 @@ def place_bet(bet: BetRequest, request: Request):
                     if entry and (entry.snapshot.tournament_id, entry.snapshot.match_id) == (tournament_id, match_id):
                         market = market_for_entry(conn, key, entry, player, ranking)
                 else:
-                    market = public_market(conn, bet.market, ids, prematch_prediction(ids, ranking), player)
+                    market = public_market(conn, bet.market, ids, prematch_prediction(ids, ranking, weighted_duel_wins(_elo_inputs(conn)[1])), player)
         elif len(parts) == 2 and parts[0] == "live":
             _, match_id = parts
             tournament_id = None

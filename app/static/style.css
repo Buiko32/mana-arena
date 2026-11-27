@@ -871,6 +871,20 @@ footer{border-color:var(--line);color:var(--muted)}.brand-mini,footer a{color:va
 #live .live-duel .live-side:nth-child(2) .live-score { grid-column: 1; }
 .live-duel .live-total { display: block; padding: .15rem .38rem; color: var(--live-ink); font: 700 clamp(1.05rem, 3.2vw, 2.55rem) Georgia, serif; }
 .live-duel .live-change { inset-inline-end: auto; inset-inline-start: 50%; top: -1rem; }
+.live-duel .live-side[data-change=gain] { --live-count-scale: 1.08; }
+.live-duel .live-side[data-change=loss] { --live-count-scale: .94; }
+.live-duel .live-side[data-change] .live-change {
+  animation-duration: var(--live-count-duration, 550ms);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .live-duel .live-side[data-change] .live-total {
+    animation: live-total-count var(--live-count-duration, 550ms) ease-out;
+  }
+}
+@keyframes live-total-count {
+  0%, 62% { color: var(--live-accent); transform: scale(var(--live-count-scale)); }
+  100% { transform: scale(1); }
+}
 .live-duel-mark { position: absolute; width: clamp(.85rem, 2.75vw, 1.6rem); left: 50%; top: calc(1.25rem + clamp(2.75rem, 12vw, 8rem) / 2); transform: translate(-50%, -50%); }
 .live-duel :is(.live-side-market,.muted) { grid-column: 1 / -1; }
 #live .live-side-market b, #live .live-quote-info b { color: var(--live-accent); }

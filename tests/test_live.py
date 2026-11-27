@@ -137,3 +137,19 @@ def test_scheduled_bet_survives_live_transition_and_settles(client):
     drawn = client.get("/api/public/live-markets").json()
     assert drawn["tickets"][0]["status"] == "refunded"
     assert drawn["viewer"]["balance"] == settled["viewer"]["balance"]
+
+def test_head_to_head_weights_recent_wins_and_ignores_non_duels():
+    from datetime import datetime, timezone
+
+    from app.live import prematch_prediction, weighted_duel_wins
+
+    now = datetime(2026, 11, 27, tzinfo=timezone.utc)
+    recent = {"p1": "a", "p2": "b", "result": "p1_win", "elo_date": "2026-11-27 00:00:00"}
+    old = {**recent, "elo_date": "2026-08-29 00:00:00"}
+    wins = weighted_duel_wins([recent, old, {**recent, "void": True}, {**recent, "result": "draw"},
+                               {**recent, "team_a": ["a"]}, {**recent, "result": "p2_win"}], now=now)
+    assert wins == {("a", "b"): 1.5, ("b", "a"): 1}
+    ratings = {"a": {"rating": 1500}, "b": {"rating": 1500}}
+    assert prematch_prediction(["a", "b"], ratings, {}) == [50, 50]
+    assert prematch_prediction(["a", "b"], ratings, wins) == [51, 49]
+    assert prematch_prediction(["b", "a"], ratings, wins) == [49, 51]

@@ -71,7 +71,7 @@
     const card = element('article', undefined, 'history-match live-detail');
     const heading = gameHeading(game, 'h3');
     card.append(heading, renderSides(game, true));
-    const estimate = element('p', 'Stima basata su vita residua, Elo e scontri diretti.', 'live-estimate muted');
+    const estimate = element('p', 'Stima basata su vita residua, Elo e scontri diretti pesati per recenza.', 'live-estimate muted');
     card.append(estimate, element('div', undefined, 'live-market-host'));
     return card;
   }
@@ -88,22 +88,50 @@
     return sides;
   }
 
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const scoreTimers = new WeakMap();
+
+  function showLife(total, life, count) {
+    clearTimeout(scoreTimers.get(total));
+    const displayed = Number(total.textContent);
+    const distance = Math.abs(life - displayed);
+    // Keep large corrections from leaving the spectator score behind the match.
+    if (!count || reducedMotion.matches || distance > 30 || distance === 0) {
+      total.textContent = life;
+      return 0;
+    }
+
+    const direction = Math.sign(life - displayed);
+    const delay = Math.min(85, Math.floor(850 / distance));
+    let value = displayed;
+    function tick() {
+      if (!total.isConnected) return;
+      value += direction;
+      total.textContent = value;
+      if (value !== life) scoreTimers.set(total, setTimeout(tick, delay));
+    }
+    scoreTimers.set(total, setTimeout(tick, delay));
+    return distance * delay;
+  }
+
   function updateScores(card, game) {
     card.querySelectorAll('.live-side').forEach((row, index) => {
       const {life} = game.sides[index];
       const total = row.querySelector('.live-total');
       const delta = life - Number(total.dataset.life);
-      if (Number.isFinite(delta) && delta !== 0) {
-        const change = row.querySelector('.live-change');
-        change.textContent = delta > 0 ? '+' + delta : '−' + Math.abs(delta);
-        row.removeAttribute('data-change');
-        void change.offsetWidth;
-        row.dataset.change = delta > 0 ? 'gain' : 'loss';
-      }
       if (delta !== 0) {
+        const isUpdate = Number.isFinite(delta);
+        const countTime = showLife(total, life, isUpdate && game.format === 'duel');
         total.dataset.life = life;
-        total.textContent = life;
         total.setAttribute('aria-label', life + ' punti vita');
+        if (isUpdate) {
+          const change = row.querySelector('.live-change');
+          change.textContent = delta > 0 ? '+' + delta : '−' + Math.abs(delta);
+          row.removeAttribute('data-change');
+          row.style.setProperty('--live-count-duration', Math.max(550, countTime + 85) + 'ms');
+          void change.offsetWidth;
+          row.dataset.change = delta > 0 ? 'gain' : 'loss';
+        }
       }
       const odds = row.querySelector('.live-odds');
       if (odds) {
