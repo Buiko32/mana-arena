@@ -2,10 +2,8 @@
 import hashlib
 import json
 import secrets
-from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from math import exp, log
 from threading import Lock
 from time import monotonic
 from typing import Literal
@@ -16,7 +14,8 @@ from pydantic import BaseModel, Field, model_validator
 
 from .access import COOKIE
 from .life import Member
-from .service import _elo_inputs, calculate_global_elo, global_elo_from_db
+from .service import _elo_inputs, global_elo_from_db
+from .duel_odds import duel_strength, historical_evidence, live_adjustment, prediction
 from .live_bets import public_market, settle_mana_bets, tournament_market
 
 router = APIRouter()
@@ -50,57 +49,11 @@ class Snapshot(BaseModel):
         return self
 
 
-def duel_strength(conn, snapshot):
-    if snapshot.format != "duel":
-        return None
-    a, b = [side.members[0].id for side in snapshot.sides]
-    if not a or not b:
-        return None
-
-    players, matches = _elo_inputs(conn)
-    ratings = {row["id"]: row["rating"] for row in calculate_global_elo(players, matches)}
-    if a not in ratings or b not in ratings:
-        return None
-
-    return matchup_strength([a, b], ratings, weighted_duel_wins(matches))
-
-
-DIRECT_WIN_HALF_LIFE_DAYS = 90
-
-
-def weighted_duel_wins(matches, *, now=None):
-    now = now or datetime.now(timezone.utc)
-    wins = defaultdict(float)
-    for match in matches:
-        a, b = match.get("p1"), match.get("p2")
-        outcome = match.get("result")
-        if (not a or not b or a == b or match.get("team_a") or match.get("placements") or
-                match.get("bye") or match.get("void") or outcome not in ("p1_win", "p2_win")):
-            continue
-        played = datetime.fromisoformat(match["elo_date"])
-        if played.tzinfo is None:
-            played = played.replace(tzinfo=timezone.utc)
-        age_days = max(0, (now - played).total_seconds() / 86400)
-        winner, loser = (a, b) if outcome == "p1_win" else (b, a)
-        wins[winner, loser] += 2 ** (-age_days / DIRECT_WIN_HALF_LIFE_DAYS)
-    return wins
-
-
-def matchup_strength(ids, ratings, wins):
-    a, b = ids
-    elo = max(-800, min(800, ratings[a] - ratings[b])) * log(10) / 400
-    return elo + 0.6 * log((wins.get((a, b), 0) + 4) / (wins.get((b, a), 0) + 4))
-
-
 def estimate(snapshot, strength):
     if strength is None:
         return None
     a, b = snapshot.sides
-    # Compare remaining fractions. The floor keeps estimates finite near zero.
-    life_log_odds = log(max(0.01, a.life / a.initial) / max(0.01, b.life / b.initial))
-    log_odds = strength + 1.5 * life_log_odds
-    percent = max(1, min(99, round(100 / (1 + exp(-log_odds)))))
-    return [percent, 100 - percent]
+    return prediction(strength + live_adjustment(a.initial, a.life, b.initial, b.life))
 
 
 @dataclass
@@ -158,7 +111,8 @@ def update_live(game_id: UUID, snapshot: Snapshot, request: Request):
             strength = entry.strength
         elif snapshot.format == "duel" and all(side.members[0].id for side in snapshot.sides):
             with request.app.state.db.transaction() as conn:
-                strength = duel_strength(conn, snapshot)
+                ids = [side.members[0].id for side in snapshot.sides]
+                strength = duel_strength(ids, historical_evidence(*_elo_inputs(conn)))
         else:
             strength = None
         eligible = False
@@ -223,12 +177,6 @@ def market_open(match):
     return match["status"] == "active" and not any(match.get(flag) for flag in ("result", "void", "bye"))
 
 
-def prematch_prediction(ids, ranking, wins):
-    strength = matchup_strength(ids, {pid: ranking[pid]["rating"] for pid in ids}, wins)
-    percent = max(1, min(99, round(100 / (1 + exp(-strength)))))
-    return [percent, 100 - percent]
-
-
 def market_for_entry(conn, key, entry, viewer, ranking):
     if not entry.bettor_eligible:
         return None
@@ -256,6 +204,7 @@ def market_for_entry(conn, key, entry, viewer, ranking):
         market = public_market(conn, f"live:{key}", ids, prediction, viewer)
         if conn.execute("SELECT 1 FROM life_result_links WHERE session_id=?", (str(key),)).fetchone():
             return None
+    market["betting_open"] = all(side.life > 0 for side in snapshot.sides)
     return market
 
 
@@ -277,7 +226,7 @@ def live_markets(request: Request, response: Response):
                 active[str(key)] = market
         started = {row["match_id"] for row in conn.execute("SELECT match_id FROM live_tournament_markets")}
         scheduled = []
-        wins = weighted_duel_wins(_elo_inputs(conn)[1])
+        evidence = historical_evidence(*_elo_inputs(conn))
         for row in conn.execute("""
             SELECT m.id, m.tournament_id, m.round_no, m.data_json, t.config_json FROM matches m
             JOIN tournaments t ON t.id=m.tournament_id WHERE t.status='active'
@@ -290,7 +239,7 @@ def live_markets(request: Request, response: Response):
             market_id = tournament_market_id(row["tournament_id"], row["id"])
             if row["id"] in started:
                 continue
-            market = public_market(conn, market_id, ids, prematch_prediction(ids, ranking, wins), viewer)
+            market = public_market(conn, market_id, ids, prediction(duel_strength(ids, evidence)), viewer)
             market["title"] = f'{json.loads(row["config_json"])["name"]} · Turno {row["round_no"]}'
             market["names"] = [ranking[pid]["name"] for pid in ids]
             scheduled.append(market)
@@ -335,7 +284,7 @@ def place_bet(bet: BetRequest, request: Request):
                     if entry and (entry.snapshot.tournament_id, entry.snapshot.match_id) == (tournament_id, match_id):
                         market = market_for_entry(conn, key, entry, player, ranking)
                 else:
-                    market = public_market(conn, bet.market, ids, prematch_prediction(ids, ranking, weighted_duel_wins(_elo_inputs(conn)[1])), player)
+                    market = public_market(conn, bet.market, ids, prediction(duel_strength(ids, historical_evidence(*_elo_inputs(conn)))), player)
         elif len(parts) == 2 and parts[0] == "live":
             _, match_id = parts
             tournament_id = None
@@ -346,7 +295,7 @@ def place_bet(bet: BetRequest, request: Request):
             entry = live.entries.get(key)
             if entry and entry.snapshot.kind == "friendly":
                 market = market_for_entry(conn, key, entry, player, ranking)
-        if not market:
+        if not market or not market.get("betting_open", True):
             raise HTTPException(409, "Le puntate per questa partita sono chiuse.")
         if market["participant"]:
             raise HTTPException(403, "Non puoi puntare sulla tua partita.")

@@ -71,7 +71,7 @@
     const card = element('article', undefined, 'history-match live-detail');
     const heading = gameHeading(game, 'h3');
     card.append(heading, renderSides(game, true));
-    const estimate = element('p', 'Stima basata su vita residua, Elo e scontri diretti pesati per recenza.', 'live-estimate muted');
+    const estimate = element('p', 'Stima basata su vita residua, Elo, forma e scontri diretti', 'live-estimate muted');
     card.append(estimate, element('div', undefined, 'live-market-host'));
     return card;
   }
@@ -211,6 +211,7 @@
 
   function renderMarket(market, inline = false) {
     const panel = element('div', undefined, 'live-market');
+    const suspended = market.betting_open === false;
     const choices = element('div', undefined, 'live-quote-grid');
     market.players.forEach((id, i) => {
       const row = element('div', undefined, 'live-quote');
@@ -222,7 +223,7 @@
           element('small', market.totals[i] + ' Mana puntati'));
         row.append(info);
       }
-      if (inline && markets.viewer && !market.participant && !market.own) {
+      if (inline && !suspended && markets.viewer && !market.participant && !market.own) {
         const button = element('button', inline ? 'Punta su ' + name : 'Punta', 'button primary');
         button.type = 'button';
         button.disabled = markets.viewer.balance < 5;
@@ -240,7 +241,9 @@
       button.addEventListener('click', () => openBet(market, null, button));
       panel.append(button);
     }
+    if (suspended) panel.append(element('p', 'Puntate sospese · esito in attesa.', 'muted'));
     if (market.own) panel.append(element('h4', 'La tua puntata'), receipt(market.own));
+    else if (suspended) return panel;
     else if (market.participant) panel.append(element('p', 'Stai giocando questa partita.', 'muted'));
     else if (!markets.viewer) panel.append(element('p', 'Accedi al tuo profilo per puntare.', 'muted'));
     else if (markets.viewer.balance < 5) panel.append(element('p', 'Servono almeno 5 Frammenti Mana.', 'muted'));

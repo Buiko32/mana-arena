@@ -105,6 +105,15 @@ def test_scheduled_bet_survives_live_transition_and_settles(client):
     spectator_headers = sign_in(spectator)
     live_market = client.get("/api/public/live-markets").json()["active"][friendly_id]
     bet = {"market": live_market["id"], "selection": second, "amount": 5, "multiplier": live_market["quotes"][0]}
+    sign_in(first)
+    zero_life = [{**sides[0], "life": 0}, sides[1]]
+    assert client.put(friendly_path, json={**friendly, "sides": zero_life}, headers={"X-Mana-Live": "1"}).status_code == 204
+    spectator_headers = sign_in(spectator)
+    assert not client.get("/api/public/live-markets").json()["active"][friendly_id]["betting_open"]
+    assert client.post("/api/player/live-bets", json=bet, headers=spectator_headers).status_code == 409
+    sign_in(first)
+    assert client.put(friendly_path, json=friendly, headers={"X-Mana-Live": "1"}).status_code == 204
+    spectator_headers = sign_in(spectator)
     assert client.post("/api/player/live-bets", json=bet, headers=spectator_headers).status_code == 201
     assert client.post("/api/player/live-bets", json=bet, headers=sign_in(second)).status_code == 403
     assert client.delete(friendly_path + "?cancel=true", headers={"X-Mana-Live": "1"}).status_code == 204
@@ -138,18 +147,34 @@ def test_scheduled_bet_survives_live_transition_and_settles(client):
     assert drawn["tickets"][0]["status"] == "refunded"
     assert drawn["viewer"]["balance"] == settled["viewer"]["balance"]
 
-def test_head_to_head_weights_recent_wins_and_ignores_non_duels():
+def test_conservative_model_softens_sparse_elo_and_bounds_live():
+    from app.duel_odds import live_adjustment, prediction, prematch_strength
+
+    assert prediction(prematch_strength(500, 0, 100, 0, 0, 0)) == [50, 50]
+    sparse = prediction(prematch_strength(500, 3, 100, 0, 0, 0))[0]
+    established = prediction(prematch_strength(500, 100, 100, 0, 0, 0))[0]
+    assert 50 < sparse < established
+    assert live_adjustment(20, 10, 40, 20) == 0
+    assert prediction(live_adjustment(20, 99999, 20, 0)) == [88, 12]
+    assert prediction(live_adjustment(20, 0, 20, 99999)) == [12, 88]
+    assert prediction(-0.0965 + live_adjustment(20, 20, 20, 1)) == [85, 15]
+    assert abs(live_adjustment(20, 4, 20, 1) - 0.8 * __import__("math").log(1.5)) < 1e-12
+
+
+def test_duel_evidence_uses_pre_match_elo_and_decays():
     from datetime import datetime, timezone
 
-    from app.live import prematch_prediction, weighted_duel_wins
+    from app.duel_odds import duel_strength, historical_evidence
 
     now = datetime(2026, 11, 27, tzinfo=timezone.utc)
-    recent = {"p1": "a", "p2": "b", "result": "p1_win", "elo_date": "2026-11-27 00:00:00"}
-    old = {**recent, "elo_date": "2026-08-29 00:00:00"}
-    wins = weighted_duel_wins([recent, old, {**recent, "void": True}, {**recent, "result": "draw"},
-                               {**recent, "team_a": ["a"]}, {**recent, "result": "p2_win"}], now=now)
-    assert wins == {("a", "b"): 1.5, ("b", "a"): 1}
-    ratings = {"a": {"rating": 1500}, "b": {"rating": 1500}}
-    assert prematch_prediction(["a", "b"], ratings, {}) == [50, 50]
-    assert prematch_prediction(["a", "b"], ratings, wins) == [51, 49]
-    assert prematch_prediction(["b", "a"], ratings, wins) == [49, 51]
+    players = [
+        {"id": pid, "name": pid, "active": True, "created_at": "2026-01-01", "inactive_at": None}
+        for pid in ("a", "b")
+    ]
+    match = {"p1": "a", "p2": "b", "result": "p1_win", "elo_date": "2026-11-27 00:00:00"}
+    recent = historical_evidence(players, [match], now=now)
+    old = historical_evidence(players, [{**match, "elo_date": "2026-08-29 00:00:00"}], now=now)
+    assert recent[1]["a"] == 0.5 / 7
+    assert recent[2]["a", "b"] == 0.5 / 9
+    assert old[2]["a", "b"] == 0.25 / 8.5
+    assert duel_strength(["a", "b"], recent) == -duel_strength(["b", "a"], recent)
